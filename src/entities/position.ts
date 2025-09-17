@@ -1,3 +1,4 @@
+import type { Hex } from "viem";
 import { PerpCityContext } from "../context";
 import { scale6Decimals } from "../utils";
 
@@ -9,16 +10,18 @@ export type ClosePositionParams = {
 
 export class Position {
   private readonly context: PerpCityContext;
-  public readonly id: BigInt;
+  private readonly perpId: Hex;
+  public readonly positionId: bigint;
 
-  constructor(context: PerpCityContext, id: BigInt) {
+  constructor(context: PerpCityContext, perpId: Hex, positionId: bigint) {
     this.context = context;
-    this.id = id;
+    this.perpId = perpId;
+    this.positionId = positionId;
   }
 
   async closePosition(params: ClosePositionParams): Promise<Position | null> {
     const contractParams = {
-      positionId: this.id,
+      positionId: this.positionId,
       minAmt0Out: scale6Decimals(params.minAmt0Out),
       minAmt1Out: scale6Decimals(params.minAmt1Out),
       maxAmt1In: scale6Decimals(params.maxAmt1In),
@@ -28,7 +31,7 @@ export class Position {
       address: this.context.perpManagerAddress,
       abi: this.context.perpManagerAbi,
       functionName: 'closePosition',
-      args: [this.id, contractParams],
+      args: [this.perpId, contractParams],
       account: this.context.walletClient.account,
     });
 
@@ -40,6 +43,6 @@ export class Position {
       return null;
     }
     
-    return new Position(this.context, takerPositionId);
+    return new Position(this.context, this.perpId, takerPositionId);
   }
 }

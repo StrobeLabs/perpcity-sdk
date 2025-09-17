@@ -25,8 +25,8 @@ export class PerpManager {
     };
 
     const { result, request } = await this.context.publicClient.simulateContract({
-      address: this.context.addresses.perpManager,
-      abi: this.context.abis.perpManager,
+      address: this.context.perpManagerAddress,
+      abi: this.context.perpManagerAbi,
       functionName: 'createPerp',
       args: [contractParams],
       account: this.context.walletClient.account,

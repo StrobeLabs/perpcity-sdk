@@ -14,11 +14,17 @@ export class PerpManager {
   async createPerp(startingPrice: number, beacon: Address): Promise<`0x${string}`> {
     const sqrtPriceX96: bigint = priceToSqrtPriceX96(startingPrice);
 
+    // The deployed contract expects a struct with two fields
+    const params = {
+      startingSqrtPriceX96: sqrtPriceX96,
+      beacon: beacon,
+    };
+
     const { request } = await this.context.publicClient.simulateContract({
       address: this.context.addresses.perpManager,
       abi: this.context.abis.perpManager,
       functionName: 'createPerp',
-      args: [sqrtPriceX96, beacon],
+      args: [params],
       account: this.context.walletClient.account,
     });
 

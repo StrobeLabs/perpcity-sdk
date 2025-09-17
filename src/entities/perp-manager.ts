@@ -18,16 +18,22 @@ export class PerpManager {
   async createPerp(params: CreatePerpParams): Promise<Perp> {
     const sqrtPriceX96: bigint = priceToSqrtPriceX96(params.startingPrice);
 
+    // The deployed contract expects a struct with two fields
+    const contractParams = {
+      startingSqrtPriceX96: sqrtPriceX96,
+      beacon: params.beacon,
+    };
+
     const { result, request } = await this.context.publicClient.simulateContract({
       address: this.context.addresses.perpManager,
       abi: this.context.abis.perpManager,
       functionName: 'createPerp',
-      args: [sqrtPriceX96, params.beacon],
+      args: [contractParams],
       account: this.context.walletClient.account,
     });
 
     await this.context.walletClient.writeContract(request);
 
-    return new Perp(result[0] as Hex);
+    return new Perp(this.context, result[0] as Hex);
   }
 }

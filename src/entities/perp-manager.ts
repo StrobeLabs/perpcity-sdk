@@ -4,7 +4,7 @@ import { priceToSqrtPriceX96 } from "../utils";
 import type { Address } from "viem";
 
 export class PerpManager {
-  public readonly context: PerpCityContext;
+  private readonly context: PerpCityContext;
   
   constructor(context: PerpCityContext) {
     this.context = context;

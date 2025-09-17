@@ -1,35 +1,39 @@
 import { PerpCityContext } from "../context";
 import { Perp } from "./perp";
 import { priceToSqrtPriceX96 } from "../utils";
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
+
+export type CreatePerpParams = {
+  startingPrice: number;
+  beacon: Address;
+}
 
 export class PerpManager {
-  public readonly context: PerpCityContext;
+  private readonly context: PerpCityContext;
   
   constructor(context: PerpCityContext) {
     this.context = context;
   }
 
-  // TODO: retuen a Promise<Perp> instead of the transaction hash
-  async createPerp(startingPrice: number, beacon: Address): Promise<`0x${string}`> {
-    const sqrtPriceX96: bigint = priceToSqrtPriceX96(startingPrice);
+  async createPerp(params: CreatePerpParams): Promise<Perp> {
+    const sqrtPriceX96: bigint = priceToSqrtPriceX96(params.startingPrice);
 
     // The deployed contract expects a struct with two fields
-    const params = {
+    const contractParams = {
       startingSqrtPriceX96: sqrtPriceX96,
-      beacon: beacon,
+      beacon: params.beacon,
     };
 
-    const { request } = await this.context.publicClient.simulateContract({
+    const { result, request } = await this.context.publicClient.simulateContract({
       address: this.context.addresses.perpManager,
       abi: this.context.abis.perpManager,
       functionName: 'createPerp',
-      args: [params],
+      args: [contractParams],
       account: this.context.walletClient.account,
     });
 
-    const hash: `0x${string}` = await this.context.walletClient.writeContract(request);
+    await this.context.walletClient.writeContract(request);
 
-    return hash;
+    return new Perp(this.context, result[0] as Hex);
   }
 }

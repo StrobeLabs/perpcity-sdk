@@ -5,7 +5,7 @@ import { PerpCollection } from "./perp-collection";
 import type { Address, Hex } from "viem";
 import { gql } from "graphql-request";
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
-import { parse } from 'graphql'
+import { parse } from 'graphql';
 
 export type CreatePerpParams = {
   startingPrice: number;
@@ -44,7 +44,6 @@ export class PerpManager {
   async createPerp(params: CreatePerpParams): Promise<Perp> {
     const sqrtPriceX96: bigint = priceToSqrtPriceX96(params.startingPrice);
 
-    // The deployed contract expects a struct with two fields
     const contractParams = {
       startingSqrtPriceX96: sqrtPriceX96,
       beacon: params.beacon,

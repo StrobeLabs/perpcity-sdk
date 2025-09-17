@@ -1,0 +1,45 @@
+import { PerpCityContext } from "../context";
+import { scale6Decimals } from "../utils";
+
+export type ClosePositionParams = {
+    minAmt0Out: number;
+    minAmt1Out: number;
+    maxAmt1In: number;
+  }
+
+export class Position {
+  private readonly context: PerpCityContext;
+  public readonly id: BigInt;
+
+  constructor(context: PerpCityContext, id: BigInt) {
+    this.context = context;
+    this.id = id;
+  }
+
+  async closePosition(params: ClosePositionParams): Promise<Position | null> {
+    const contractParams = {
+      positionId: this.id,
+      minAmt0Out: scale6Decimals(params.minAmt0Out),
+      minAmt1Out: scale6Decimals(params.minAmt1Out),
+      maxAmt1In: scale6Decimals(params.maxAmt1In),
+    };
+    
+    const { result, request } = await this.context.publicClient.simulateContract({
+      address: this.context.perpManagerAddress,
+      abi: this.context.perpManagerAbi,
+      functionName: 'closePosition',
+      args: [this.id, contractParams],
+      account: this.context.walletClient.account,
+    });
+
+    await this.context.walletClient.writeContract(request);
+
+    const takerPositionId: bigint = result[0];
+
+    if (takerPositionId === 0n) {
+      return null;
+    }
+    
+    return new Position(this.context, takerPositionId);
+  }
+}

@@ -8,3 +8,15 @@ export function priceToSqrtPriceX96(price: number): bigint {
   const scaledSqrtPrice: number = Math.sqrt(price) * DECIMAL_PRECISION_6;
   return BigInt(Math.floor(scaledSqrtPrice)) * Q96 / BigInt(DECIMAL_PRECISION_6);
 }
+
+export function scale6Decimals(amount: number): bigint {
+  if (amount > Number.MAX_SAFE_INTEGER / DECIMAL_PRECISION_6) {
+    throw new Error('Amount too large');
+  }
+
+  return BigInt(Math.floor(amount * DECIMAL_PRECISION_6));
+}
+
+export function scaleX96(amount: number): bigint {
+  return BigInt(scale6Decimals(amount)) * Q96 / BigInt(DECIMAL_PRECISION_6);
+}

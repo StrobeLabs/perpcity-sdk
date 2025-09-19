@@ -25,20 +25,24 @@ const ctx = new PerpCityContext({
 const perpManager = new PerpManager(ctx);
 ```
 
-### PerpManager Actions
+### Example Usage
 
-#### Creating a Perp
+#### Create a Perp
 
 ```typescript
-const perp = await perpManager.createPerp({
-  startingPrice: 12.3,
+await perpManager.createPerp({
+  startingPrice: 50,
   beacon: '0x123...'
 });
 ```
 
-### Perp Actions
+#### Open a Maker Position
 
-
-
-### Position Actions
+```typescript
+await perp.openMakerPosition({
+  marign: 100,
+  priceLower: 45,
+  priceUpper: 55
+});
+```
 

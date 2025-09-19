@@ -1,4 +1,5 @@
 import type { Hex } from "viem";
+import { publicActions } from "viem";
 import { PerpCityContext } from "../context";
 import { scale6Decimals } from "../utils";
 
@@ -9,8 +10,8 @@ export type ClosePositionParams = {
   }
 
 export class Position {
-  private readonly context: PerpCityContext;
-  private readonly perpId: Hex;
+  public readonly context: PerpCityContext;
+  public readonly perpId: Hex;
   public readonly positionId: bigint;
 
   constructor(context: PerpCityContext, perpId: Hex, positionId: bigint) {
@@ -19,30 +20,30 @@ export class Position {
     this.positionId = positionId;
   }
 
-  async closePosition(params: ClosePositionParams): Promise<Position | null> {
-    const contractParams = {
-      positionId: this.positionId,
-      minAmt0Out: scale6Decimals(params.minAmt0Out),
-      minAmt1Out: scale6Decimals(params.minAmt1Out),
-      maxAmt1In: scale6Decimals(params.maxAmt1In),
-    };
+//   async closePosition(params: ClosePositionParams): Promise<Position | null> {
+//     const contractParams = {
+//       positionId: this.positionId,
+//       minAmt0Out: scale6Decimals(params.minAmt0Out),
+//       minAmt1Out: scale6Decimals(params.minAmt1Out),
+//       maxAmt1In: scale6Decimals(params.maxAmt1In),
+//     };
     
-    const { result, request } = await this.context.publicClient.simulateContract({
-      address: this.context.perpManagerAddress,
-      abi: this.context.perpManagerAbi,
-      functionName: 'closePosition',
-      args: [this.perpId, contractParams],
-      account: this.context.walletClient.account,
-    });
+//     const { result, request } = await this.context.walletClient.extend(publicActions).simulateContract({
+//       address: this.context.perpManagerAddress,
+//       abi: this.context.perpManagerAbi,
+//       functionName: 'closePosition',
+//       args: [this.perpId, contractParams],
+//       account: this.context.walletClient.account,
+//     });
 
-    await this.context.walletClient.writeContract(request);
+//     await this.context.walletClient.writeContract(request);
 
-    const takerPositionId: bigint = result[0];
+//     const takerPositionId = result[0];
 
-    if (takerPositionId === 0n) {
-      return null;
-    }
+//     if (takerPositionId === 0n) {
+//       return null;
+//     }
     
-    return new Position(this.context, this.perpId, takerPositionId);
-  }
+//     return new Position(this.context, this.perpId, takerPositionId);
+//   }
 }

@@ -2,7 +2,7 @@
   "name": "@strobelabs/perpcity-sdk",
   "author": "Strobe Labs",
   "description": "TypeScript SDK for interacting with Perp City contracts",
-  "version": "0.1.1",
+  "version": "0.1.5",
   "license": "GPL-3.0",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -11,15 +11,22 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup"
+    "build": "tsup",
+    "example-create-perp": "tsx -r dotenv/config examples/create-perp.ts",
+    "example-maker": "tsx -r dotenv/config examples/maker.ts",
+    "example-taker": "tsx -r dotenv/config examples/taker.ts"
   },
   "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0",
   "devDependencies": {
+    "@types/node": "^24.5.2",
+    "dotenv": "^17.2.2",
     "tsup": "^8.5.0",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },
   "dependencies": {
     "@graphql-typed-document-node/core": "^3.2.0",
+    "@uniswap/v3-sdk": "^3.25.2",
     "graphql": "^16.11.0",
     "graphql-request": "^7.2.0",
     "viem": "^2.37.6"

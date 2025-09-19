@@ -20,3 +20,8 @@ export function scale6Decimals(amount: number): bigint {
 export function scaleX96(amount: number): bigint {
   return BigInt(scale6Decimals(amount)) * Q96 / BigInt(DECIMAL_PRECISION_6);
 }
+
+export function priceToTick(price: number, roundDown: boolean): number {
+  const logSqrtPrice = Math.log(Math.sqrt(price)) / Math.log(1.0001);
+  return roundDown ? Math.floor(logSqrtPrice) : Math.ceil(logSqrtPrice);
+}

@@ -1,12 +1,11 @@
 import { setup } from './setup';
-import { createPerp } from './create-perp';
 import { Perp, Position } from '../dist';
 
 export async function openMakerPosition(perp: Perp) : Promise<Position> {
   const makerPosition = await perp.approveAndOpenMakerPosition({
     margin: 100,
-    priceLower: 49,
-    priceUpper: 51,
+    priceLower: 45,
+    priceUpper: 55,
     maxAmt0In: 1000000,
     maxAmt1In: 1000000,
   });
@@ -20,9 +19,8 @@ export async function openMakerPosition(perp: Perp) : Promise<Position> {
 
 async function main() {
   const perpManager = setup();
-  // const perp = await createPerp(perpManager);
-  const perp = new Perp(perpManager.context, "0x89aac1c615f26033b67e6867dca90348e5e3481fb187f0ba901754fc3548b9cf");
-  const makerPosition = await openMakerPosition(perp);
+  const perp = new Perp(perpManager.context, "0xc60199e01fb787c8b26c769de0accc577474fffcc2ed150ea665a92d83fb2830");
+  await openMakerPosition(perp);
 }
 
 main();

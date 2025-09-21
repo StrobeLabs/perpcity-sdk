@@ -15,8 +15,8 @@ export async function createPerp(perpManager: PerpManager) : Promise<Perp> {
 }
 
 async function main() {
-    const perpManager = setup();
-    const perp = await createPerp(perpManager);
+  const perpManager = setup();
+  await createPerp(perpManager);
 }
 
 main();

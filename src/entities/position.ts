@@ -20,30 +20,24 @@ export class Position {
     this.positionId = positionId;
   }
 
-//   async closePosition(params: ClosePositionParams): Promise<Position | null> {
-//     const contractParams = {
-//       positionId: this.positionId,
-//       minAmt0Out: scale6Decimals(params.minAmt0Out),
-//       minAmt1Out: scale6Decimals(params.minAmt1Out),
-//       maxAmt1In: scale6Decimals(params.maxAmt1In),
-//     };
+  async closePosition(params: ClosePositionParams): Promise<Position | null> {
+    const contractParams = {
+      posId: this.positionId,
+      minAmt0Out: scale6Decimals(params.minAmt0Out),
+      minAmt1Out: scale6Decimals(params.minAmt1Out),
+      maxAmt1In: scale6Decimals(params.maxAmt1In),
+    };
     
-//     const { result, request } = await this.context.walletClient.extend(publicActions).simulateContract({
-//       address: this.context.perpManagerAddress,
-//       abi: this.context.perpManagerAbi,
-//       functionName: 'closePosition',
-//       args: [this.perpId, contractParams],
-//       account: this.context.walletClient.account,
-//     });
+    const { result, request } = await this.context.walletClient.extend(publicActions).simulateContract({
+      address: this.context.perpManagerAddress,
+      abi: this.context.perpManagerAbi,
+      functionName: 'closePosition',
+      args: [this.perpId, contractParams],
+      account: this.context.walletClient.account,
+    });
 
-//     await this.context.walletClient.writeContract(request);
+    await this.context.walletClient.writeContract(request);
 
-//     const takerPositionId = result[0];
-
-//     if (takerPositionId === 0n) {
-//       return null;
-//     }
-    
-//     return new Position(this.context, this.perpId, takerPositionId);
-//   }
+    return result === null ? null : new Position(this.context, this.perpId, result);
+  }
 }

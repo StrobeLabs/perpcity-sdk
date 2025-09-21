@@ -81,7 +81,7 @@ export class Perp {
 
     await this.context.walletClient.writeContract(request);
 
-    return new Position(this.context, this.id, result as bigint);
+    return new Position(this.context, this.id, result);
   }
 
   async openTakerPosition(params: OpenTakerPositionParams): Promise<Position> {

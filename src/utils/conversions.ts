@@ -22,6 +22,6 @@ export function scaleX96(amount: number): bigint {
 }
 
 export function priceToTick(price: number, roundDown: boolean): number {
-  const logSqrtPrice = Math.log(Math.sqrt(price)) / Math.log(1.0001);
-  return roundDown ? Math.floor(logSqrtPrice) : Math.ceil(logSqrtPrice);
+  const logPrice = Math.log(price) / Math.log(1.0001);
+  return roundDown ? Math.floor(logPrice) : Math.ceil(logPrice);
 }

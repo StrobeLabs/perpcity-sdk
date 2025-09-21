@@ -10,23 +10,22 @@ export async function closePosition(position: Position) : Promise<Position | nul
 
   if (result === null) {
     console.log('Taker Position Closed');
-    console.log('Taker Position ID:', this.positionId);
+    console.log('Taker Position ID:', position.positionId);
     console.log
     return null;
   } else {
-      console.log('Maker Position Closed');
-      console.log('Maker Position ID:', this.positionId);
-      console.log('Taker Position Opened');
-      console.log('Taker Position ID: ', result);
-      console.log();
+    console.log('Maker Position Closed');
+    console.log('Maker Position ID:', position.positionId);
+    console.log('Taker Position Opened');
+    console.log('Taker Position ID: ', result);
+    console.log();
+    return result;
   }
-
-  return result;
 }
 
 async function main() {
   const perpManager = setup();
-  const position = new Position(perpManager.context, "0xc60199e01fb787c8b26c769de0accc577474fffcc2ed150ea665a92d83fb2830", 2n);
+  const position = new Position(perpManager.context, "0xa48739b2be87ca2b84fbe9eb6bba0412dc53f501bd887a0a3ed1533ce5696097", 2n);
   await closePosition(position);
 }
   

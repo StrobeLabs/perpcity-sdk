@@ -150,6 +150,22 @@ export const PERP_MANAGER_ABI = [
         "type": "error"
     },
     {
+        "inputs": [
+            {
+                "internalType": "int256",
+                "name": "perpDelta",
+                "type": "int256"
+            },
+            {
+                "internalType": "int256",
+                "name": "usdDelta",
+                "type": "int256"
+            }
+        ],
+        "name": "ZeroSizePosition",
+        "type": "error"
+    },
+    {
         "anonymous": false,
         "inputs": [
             {

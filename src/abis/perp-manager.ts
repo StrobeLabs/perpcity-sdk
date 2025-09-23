@@ -426,7 +426,7 @@ export const PERP_MANAGER_ABI = [
             {
                 "internalType": "int24",
                 "name": "tickB",
-                "type": "int24"
+                "type": "uint24"
             },
             {
                 "internalType": "uint256",
@@ -434,7 +434,7 @@ export const PERP_MANAGER_ABI = [
                 "type": "uint256"
             }
         ],
-        "name": "estimateLiquidityForAount1",
+        "name": "estimateLiquidityForAmount1",
         "outputs": [
             {
                 "internalType": "uint128",

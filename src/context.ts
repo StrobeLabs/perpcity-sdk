@@ -1,29 +1,27 @@
-import type { WalletClient, Abi, Address} from "viem";
-import { publicActions } from "viem";
 import { GraphQLClient } from 'graphql-request'
-
-export type PerpCityContextConfig = {
-  walletClient: WalletClient;
-  goldskyEndpoint: string;
-  perpManagerAddress: Address;
-  perpManagerAbi: Abi;
-  beaconAbi: Abi;
-}
+import { DEPLOYMENTS } from "./deployments";
+import { publicActions } from "viem";
+import { PerpCityContextConfig, PerpCityDeployments } from "./types";
 
 export class PerpCityContext {
-  public readonly walletClient: WalletClient;
-  // below will be hard-coded in addresses.ts, abis.ts, and endpoints.ts once they are frozen
-  // they are currently being rapidly redeployed so can be specified by the sdk consumer for now
+  public readonly walletClient;
   public readonly goldskyClient: GraphQLClient;
-  public readonly perpManagerAddress: Address;
-  public readonly perpManagerAbi: Abi;
-  public readonly beaconAbi: Abi;
 
   constructor(config: PerpCityContextConfig) {
     this.walletClient = config.walletClient.extend(publicActions);
     this.goldskyClient = new GraphQLClient(config.goldskyEndpoint);
-    this.perpManagerAddress = config.perpManagerAddress;
-    this.perpManagerAbi = config.perpManagerAbi;
-    this.beaconAbi = config.beaconAbi;
+  }
+
+  validateChainId(): number {
+    const chainId = this.walletClient.chain?.id;
+
+    if (!chainId) throw new Error(`Chain ID is not set.`);
+    if (!DEPLOYMENTS[chainId]) throw new Error(`Unsupported chainId: ${chainId}.`);
+
+    return chainId;
+  }
+
+  deployments(): PerpCityDeployments {
+    return DEPLOYMENTS[this.validateChainId()];
   }
 }

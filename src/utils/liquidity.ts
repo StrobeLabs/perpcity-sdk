@@ -1,11 +1,11 @@
 import { PerpCityContext } from "../context";
-import { publicActions } from "viem";
+import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 
-export async function estimateLiquidity(context: PerpCityContext, tickLower: bigint, tickUpper: bigint, usdScaled: bigint): Promise<bigint> {
-  return await context.walletClient.extend(publicActions).readContract({
-    address: context.perpManagerAddress,
-    abi: context.perpManagerAbi,
-    functionName: 'estimateLiquidityForAount1',
+export async function estimateLiquidity(context: PerpCityContext, tickLower: number, tickUpper: number, usdScaled: bigint): Promise<bigint> {
+  return await context.walletClient.readContract({
+    address: context.deployments().perpManager,
+    abi: PERP_MANAGER_ABI,
+    functionName: 'estimateLiquidityForAmount1',
     args: [tickLower, tickUpper, usdScaled],
   }) as bigint;
 }

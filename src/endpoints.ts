@@ -1,1 +1,0 @@
-export const GOLDSKY_BASE_SEPOLIA_URL: string = 'https://api.goldsky.com/api/public/project_cmbawn40q70fj01ws4jmsfj7f/subgraphs/perp-city/3fe61683-20250915_170731/gn';

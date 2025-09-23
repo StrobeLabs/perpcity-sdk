@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PerpCityContext, PerpManager, GOLDSKY_BASE_SEPOLIA_URL, PERP_MANAGER_BASE_SEPOLIA_ADDRESS, PERP_MANAGER_ABI, BEACON_ABI } from "../dist";
+import { PerpCityContext, PerpManager, DEPLOYMENTS} from "../dist";
 import { createWalletClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from 'viem/accounts';
@@ -20,10 +20,7 @@ export function setup() : PerpManager {
 
   const ctx = new PerpCityContext({
     walletClient: walletClient,
-    goldskyEndpoint: GOLDSKY_BASE_SEPOLIA_URL,
-    perpManagerAddress: PERP_MANAGER_BASE_SEPOLIA_ADDRESS,
-    perpManagerAbi: PERP_MANAGER_ABI,
-    beaconAbi: BEACON_ABI
+    goldskyEndpoint: DEPLOYMENTS[baseSepolia.id].goldsky,
   });
 
   return new PerpManager(ctx);

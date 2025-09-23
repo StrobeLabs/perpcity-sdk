@@ -1,30 +1,23 @@
 import { PerpCityContext } from "../context";
-import { erc20Abi, publicActions } from "viem";
-import type { Address } from "viem";
+import { erc20Abi } from "viem";
 
-export async function approveUsdc(context: PerpCityContext, amount: bigint) {
-  const usdcAddress = await getUsdcAddress(context);
+const DEFAULT_CONFIRMATIONS = 2;
 
-  const { request } = await context.walletClient.extend(publicActions).simulateContract({
-    address: usdcAddress,
+export async function approveUsdc(context: PerpCityContext, amount: bigint, confirmations: number = DEFAULT_CONFIRMATIONS) {
+  const deployments = context.deployments();
+
+  const { request } = await context.walletClient.simulateContract({
+    address: deployments.usdc,
     abi: erc20Abi,
     functionName: 'approve',
-    args: [context.perpManagerAddress, amount],
+    args: [deployments.perpManager, amount],
     account: context.walletClient.account,
   });
 
   const hash = await context.walletClient.writeContract(request);
 
-  await context.walletClient.extend(publicActions).waitForTransactionReceipt({ 
-    confirmations: 2, 
+  await context.walletClient.waitForTransactionReceipt({ 
+    confirmations: confirmations, 
     hash 
   });
-}
-
-export async function getUsdcAddress(context: PerpCityContext): Promise<Address>{
-  return await context.walletClient.extend(publicActions).readContract({
-    address: context.perpManagerAddress,
-    abi: context.perpManagerAbi,
-    functionName: 'USDC',
-  }) as Address;
 }

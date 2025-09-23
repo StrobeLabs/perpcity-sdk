@@ -1,3 +1,4 @@
+// assume this react file is inside a frontend repo
 // Example component showing how to use the hooks in any component
 import React, { useState } from 'react';
 import { 

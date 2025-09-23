@@ -1,3 +1,4 @@
+// assume this react file is inside a frontend repo
 // app/layout.tsx or pages/_app.tsx
 import { PerpCityProvider } from '@strobelabs/perpcity-sdk';
 import { createWalletClient, http } from "viem";

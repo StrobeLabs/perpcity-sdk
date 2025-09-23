@@ -1,3 +1,4 @@
+// assume this react file is inside a frontend repo
 import React from 'react';
 import { 
   PerpCityProvider, 
@@ -10,7 +11,7 @@ import {
   PERP_MANAGER_BASE_SEPOLIA_ADDRESS,
   PERP_MANAGER_ABI,
   BEACON_ABI
-} from '../dist';
+} from '@strobelabs/perpcity-sdk';
 import { createWalletClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from 'viem/accounts';

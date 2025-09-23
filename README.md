@@ -40,7 +40,7 @@ await perpManager.createPerp({
 
 ```typescript
 await perp.openMakerPosition({
-  marign: 100,
+  margin: 100,
   priceLower: 45,
   priceUpper: 55
 });

@@ -22,7 +22,7 @@ export class PerpManager {
   // READS
 
   async getPerps(): Promise<Perp[]> {
-    const query: TypedDocumentNode<{ perps: { id: Hex }[] }, Record<any, never>> = parse(gql`
+    const query: TypedDocumentNode<{ perps: { id: Hex }[] }, {}> = parse(gql`
       {
         perps {
           id

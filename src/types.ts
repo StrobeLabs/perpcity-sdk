@@ -3,10 +3,11 @@ import type { Address, WalletClient } from "viem";
 export interface PerpCityDeployments {
   perpManager: Address;
   usdc: Address;
-  goldsky: string;
+  goldskyPublic: string;
+  goldskyPrivate: string;
 }
 
 export interface PerpCityContextConfig {
   walletClient: WalletClient;
-  goldskyEndpoint: string;
+  goldskyBearerToken?: string;
 }

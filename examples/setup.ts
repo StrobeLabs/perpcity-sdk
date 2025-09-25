@@ -11,6 +11,9 @@ export function setup() : PerpManager {
   if (!process.env['PRIVATE_KEY']) {
     throw new Error(`Missing required env var: PRIVATE_KEY`);
   }
+  if (!process.env['GOLDSKY_BEARER_TOKEN']) {
+    throw new Error(`Missing required env var: GOLDSKY_BEARER_TOKEN`);
+  }
 
   const walletClient = createWalletClient({
     chain: baseSepolia,
@@ -20,7 +23,7 @@ export function setup() : PerpManager {
 
   const ctx = new PerpCityContext({
     walletClient: walletClient,
-    goldskyEndpoint: DEPLOYMENTS[baseSepolia.id].goldsky,
+    goldskyBearerToken: process.env.GOLDSKY_BEARER_TOKEN,
   });
 
   return new PerpManager(ctx);

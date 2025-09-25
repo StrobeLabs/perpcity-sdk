@@ -1,7 +1,7 @@
 import type { Hex } from "viem";
 import { publicActions } from "viem";
 import { PerpCityContext } from "../context";
-import { scale6Decimals } from "../utils";
+import { scale6Decimals, scaleFrom6Decimals } from "../utils";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 
 export type ClosePositionParams = {
@@ -15,10 +15,9 @@ export type LiveDetails = {
   fundingPayment: number;
   effectiveMargin: number;
   isLiquidatable: boolean;
-  liquidationPrice: number;
 }
 
-export class Position {
+export class OpenPosition {
   public readonly context: PerpCityContext;
   public readonly perpId: Hex;
   public readonly positionId: bigint;
@@ -29,7 +28,7 @@ export class Position {
     this.positionId = positionId;
   }
 
-  async closePosition(params: ClosePositionParams): Promise<Position | null> {
+  async closePosition(params: ClosePositionParams): Promise<OpenPosition | null> {
     const contractParams = {
       posId: this.positionId,
       minAmt0Out: scale6Decimals(params.minAmt0Out),
@@ -47,17 +46,23 @@ export class Position {
 
     await this.context.walletClient.writeContract(request);
 
-    return result === null ? null : new Position(this.context, this.perpId, result);
+    return result === null ? null : new OpenPosition(this.context, this.perpId, result);
   }
 
-  // if open, sc read, is close, goldsky query
   async liveDetails(): Promise<LiveDetails> {
+    const { result, request } = await this.context.walletClient.simulateContract({
+      address: this.context.deployments().perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: 'livePositionDetails',
+      args: [this.perpId, this.positionId],
+      account: this.context.walletClient.account,
+    });
+
     return {
-      pnl: 0, 
-      fundingPayment: 0,
-      effectiveMargin: 0,
-      isLiquidatable: false,
-      liquidationPrice: 0,
+      pnl: scaleFrom6Decimals(Number(result[0])),
+      fundingPayment: scaleFrom6Decimals(Number(result[1])),
+      effectiveMargin: scaleFrom6Decimals(Number(result[2])),
+      isLiquidatable: result[3],
     };
   }
 }

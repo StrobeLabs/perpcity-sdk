@@ -1,7 +1,7 @@
-import { Position } from '../dist';
+import { OpenPosition } from '../dist';
 import { setup } from './setup';
 
-export async function closePosition(position: Position) : Promise<Position | null> {
+export async function closePosition(position: OpenPosition) : Promise<OpenPosition | null> {
   const result = await position.closePosition({
     maxAmt1In: 1000000,
     minAmt0Out: 0,
@@ -17,7 +17,7 @@ export async function closePosition(position: Position) : Promise<Position | nul
     console.log('Maker Position Closed');
     console.log('Maker Position ID:', position.positionId);
     console.log('Taker Position Opened');
-    console.log('Taker Position ID: ', result);
+    console.log('Taker Position ID: ', result.positionId);
     console.log();
     return result;
   }
@@ -25,7 +25,7 @@ export async function closePosition(position: Position) : Promise<Position | nul
 
 async function main() {
   const perpManager = setup();
-  const position = new Position(perpManager.context, "0xa48739b2be87ca2b84fbe9eb6bba0412dc53f501bd887a0a3ed1533ce5696097", 2n);
+  const position = new OpenPosition(perpManager.context, "0x54303321d74c230d38db7044fd45acb97de380e5c7923858cb66d714c4f2a65c", 6n);
   await closePosition(position);
 }
   

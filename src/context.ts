@@ -9,7 +9,23 @@ export class PerpCityContext {
 
   constructor(config: PerpCityContextConfig) {
     this.walletClient = config.walletClient.extend(publicActions);
-    this.goldskyClient = new GraphQLClient(config.goldskyEndpoint);
+
+    const chainId = this.validateChainId();
+    const deployments = DEPLOYMENTS[chainId];
+
+    const headers: Record<string, string> = {};
+    let goldskyEndpoint: string;
+    
+    if (config.goldskyBearerToken) {
+      headers.authorization = `Bearer ${config.goldskyBearerToken}`;
+      goldskyEndpoint = deployments.goldskyPrivate;
+    } else {
+      goldskyEndpoint = deployments.goldskyPublic;
+    }
+    
+    this.goldskyClient = new GraphQLClient(goldskyEndpoint, {
+      headers,
+    });
   }
 
   validateChainId(): number {

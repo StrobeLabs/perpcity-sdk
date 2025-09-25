@@ -210,6 +210,12 @@ export const PERP_MANAGER_ABI = [
                 "internalType": "uint256",
                 "name": "startingSqrtPriceX96",
                 "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "indexPriceX96",
+                "type": "uint256"
             }
         ],
         "name": "PerpCreated",
@@ -232,6 +238,30 @@ export const PERP_MANAGER_ABI = [
             },
             {
                 "indexed": false,
+                "internalType": "address",
+                "name": "holder",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "bool",
+                "name": "wasMaker",
+                "type": "bool"
+            },
+            {
+                "indexed": false,
+                "internalType": "int256",
+                "name": "perpDelta",
+                "type": "int256"
+            },
+            {
+                "indexed": false,
+                "internalType": "int256",
+                "name": "pnl",
+                "type": "int256"
+            },
+            {
+                "indexed": false,
                 "internalType": "bool",
                 "name": "wasLiquidated",
                 "type": "bool"
@@ -241,6 +271,12 @@ export const PERP_MANAGER_ABI = [
                 "internalType": "uint256",
                 "name": "sqrtPriceX96",
                 "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "int256",
+                "name": "fundingPremiumPerSecX96",
+                "type": "int256"
             }
         ],
         "name": "PositionClosed",
@@ -263,21 +299,33 @@ export const PERP_MANAGER_ABI = [
             },
             {
                 "indexed": false,
+                "internalType": "address",
+                "name": "holder",
+                "type": "address"
+            },
+            {
+                "indexed": false,
                 "internalType": "bool",
                 "name": "isMaker",
                 "type": "bool"
             },
             {
                 "indexed": false,
-                "internalType": "uint256",
-                "name": "margin",
-                "type": "uint256"
+                "internalType": "int256",
+                "name": "perpDelta",
+                "type": "int256"
             },
             {
                 "indexed": false,
                 "internalType": "uint256",
                 "name": "sqrtPriceX96",
                 "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "int256",
+                "name": "fundingPremiumPerSecX96",
+                "type": "int256"
             }
         ],
         "name": "PositionOpened",
@@ -426,7 +474,7 @@ export const PERP_MANAGER_ABI = [
             {
                 "internalType": "int24",
                 "name": "tickB",
-                "type": "uint24"
+                "type": "int24"
             },
             {
                 "internalType": "uint256",
@@ -443,6 +491,40 @@ export const PERP_MANAGER_ABI = [
             }
         ],
         "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "PoolId",
+                "name": "perpId",
+                "type": "bytes32"
+            }
+        ],
+        "name": "fees",
+        "outputs": [
+            {
+                "internalType": "uint24",
+                "name": "creatorFee",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "insurnaceFee",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "lpFee",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "liquidationFee",
+                "type": "uint24"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -979,6 +1061,177 @@ export const PERP_MANAGER_ABI = [
                 "internalType": "PoolId",
                 "name": "perpId",
                 "type": "bytes32"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "margin",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint128",
+                        "name": "liquidity",
+                        "type": "uint128"
+                    },
+                    {
+                        "internalType": "int24",
+                        "name": "tickLower",
+                        "type": "int24"
+                    },
+                    {
+                        "internalType": "int24",
+                        "name": "tickUpper",
+                        "type": "int24"
+                    },
+                    {
+                        "internalType": "uint128",
+                        "name": "maxAmt0In",
+                        "type": "uint128"
+                    },
+                    {
+                        "internalType": "uint128",
+                        "name": "maxAmt1In",
+                        "type": "uint128"
+                    }
+                ],
+                "internalType": "struct IPerpManager.OpenMakerPositionParams",
+                "name": "params",
+                "type": "tuple"
+            }
+        ],
+        "name": "quoteMakerPosition",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "success",
+                "type": "bool"
+            },
+            {
+                "internalType": "int256",
+                "name": "perpDelta",
+                "type": "int256"
+            },
+            {
+                "internalType": "int256",
+                "name": "usdDelta",
+                "type": "int256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "creatorFeeAmt",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "insuranceFeeAmt",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "lpFeeAmt",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "PoolId",
+                "name": "perpId",
+                "type": "bytes32"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "bool",
+                        "name": "isLong",
+                        "type": "bool"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "margin",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "levX96",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint128",
+                        "name": "unspecifiedAmountLimit",
+                        "type": "uint128"
+                    }
+                ],
+                "internalType": "struct IPerpManager.OpenTakerPositionParams",
+                "name": "params",
+                "type": "tuple"
+            }
+        ],
+        "name": "quoteTakerPosition",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "success",
+                "type": "bool"
+            },
+            {
+                "internalType": "int256",
+                "name": "perpDelta",
+                "type": "int256"
+            },
+            {
+                "internalType": "int256",
+                "name": "usdDelta",
+                "type": "int256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "creatorFeeAmt",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "insuranceFeeAmt",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "lpFeeAmt",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "PoolId",
+                "name": "perpId",
+                "type": "bytes32"
+            }
+        ],
+        "name": "sqrtPriceX96",
+        "outputs": [
+            {
+                "internalType": "uint160",
+                "name": "sqrtPrice",
+                "type": "uint160"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "PoolId",
+                "name": "perpId",
+                "type": "bytes32"
             }
         ],
         "name": "tickSpacing",
@@ -987,6 +1240,55 @@ export const PERP_MANAGER_ABI = [
                 "internalType": "int24",
                 "name": "",
                 "type": "int24"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "PoolId",
+                "name": "perpId",
+                "type": "bytes32"
+            }
+        ],
+        "name": "tradingBounds",
+        "outputs": [
+            {
+                "internalType": "uint24",
+                "name": "minOpeningMargin",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "minMakerMarginRatio",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "maxMakerMarginRatio",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "makerLiquidationMarginRatio",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "minTakerMarginRatio",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "maxTakerMarginRatio",
+                "type": "uint24"
+            },
+            {
+                "internalType": "uint24",
+                "name": "takerLiquidationMarginRatio",
+                "type": "uint24"
             }
         ],
         "stateMutability": "view",

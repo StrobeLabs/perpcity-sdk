@@ -15,7 +15,8 @@
     "example-create-perp": "tsx -r dotenv/config examples/create-perp.ts",
     "example-maker": "tsx -r dotenv/config examples/maker.ts",
     "example-taker": "tsx -r dotenv/config examples/taker.ts",
-    "example-close": "tsx -r dotenv/config examples/close.ts"
+    "example-close": "tsx -r dotenv/config examples/close.ts",
+    "example-view": "tsx -r dotenv/config examples/view.ts"
   },
   "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0",
   "devDependencies": {

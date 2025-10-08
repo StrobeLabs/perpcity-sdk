@@ -42,6 +42,8 @@ export class User {
         ) {
           perp { id }
           inContractPosId
+          isLong
+          isMaker
         }
       }
     `);

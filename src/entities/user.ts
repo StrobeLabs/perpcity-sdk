@@ -35,7 +35,7 @@ export class User {
   }
 
   async openPositions(): Promise<OpenPosition[]> {
-    const query: TypedDocumentNode<{ openPositions: { perp: { id: Hex }, inContractPosId: bigint }[] }, {holder: Address}> = parse(gql`
+    const query: TypedDocumentNode<{ openPositions: { perp: { id: Hex }, inContractPosId: bigint, isLong: boolean, isMaker: boolean }[] }, {holder: Address}> = parse(gql`
       query ($holder: Bytes!) {
         openPositions(
           where: { holder: $holder }
@@ -50,7 +50,7 @@ export class User {
 
     const response = await this.context.goldskyClient.request(query, { holder: this.walletAddress });
     
-    return response.openPositions.map((position) => (new OpenPosition(this.context, position.perp.id, position.inContractPosId)));
+    return response.openPositions.map((position) => (new OpenPosition(this.context, position.perp.id, position.inContractPosId, position.isLong, position.isMaker)));
   }
 
   async closedPositions(): Promise<ClosedPosition[]> {

@@ -21,12 +21,16 @@ export class OpenPosition {
   public readonly context: PerpCityContext;
   public readonly perpId: Hex;
   public readonly positionId: bigint;
+  public readonly isLong?: boolean;
+  public readonly isMaker?: boolean;
 
-  constructor(context: PerpCityContext, perpId: Hex, positionId: bigint) {
+  constructor(context: PerpCityContext, perpId: Hex, positionId: bigint, isLong?: boolean, isMaker?: boolean) {
     this.context = context;
     this.perpId = perpId;
     this.positionId = positionId;
-  }
+    this.isLong = isLong;
+    this.isMaker = isMaker;
+    }
 
   async closePosition(params: ClosePositionParams): Promise<OpenPosition | null> {
     const contractParams = {

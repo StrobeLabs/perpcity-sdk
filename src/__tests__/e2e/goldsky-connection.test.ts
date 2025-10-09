@@ -5,8 +5,9 @@ import { TypedDocumentNode } from '@graphql-typed-document-node/core';
 
 describe('Goldsky API Connection Tests', () => {
   let goldskyClient: GraphQLClient;
+  let testPerpId: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     if (!process.env.GOLDSKY_BEARER_TOKEN) {
       throw new Error('GOLDSKY_BEARER_TOKEN is required for e2e tests');
     }
@@ -20,6 +21,29 @@ describe('Goldsky API Connection Tests', () => {
         authorization: `Bearer ${process.env.GOLDSKY_BEARER_TOKEN}`,
       },
     });
+
+    // Fetch a real perp ID for testing, or use env var if provided
+    if (process.env.GOLDSKY_PERP_ID) {
+      testPerpId = process.env.GOLDSKY_PERP_ID;
+      console.log(`Using GOLDSKY_PERP_ID from environment: ${testPerpId}`);
+    } else {
+      // Fetch the first available perp from Goldsky
+      const perpsQuery: TypedDocumentNode<{
+        perps: { id: string }[];
+      }> = parse(`
+        query {
+          perps(first: 1) {
+            id
+          }
+        }
+      `);
+      const perpsResponse = await goldskyClient.request(perpsQuery);
+      if (perpsResponse.perps.length === 0) {
+        throw new Error('No perps found in Goldsky and GOLDSKY_PERP_ID not set - cannot run e2e tests');
+      }
+      testPerpId = perpsResponse.perps[0].id;
+      console.log(`Fetched real perp ID from Goldsky: ${testPerpId}`);
+    }
   });
 
   it('should connect to Goldsky API and fetch perp data', async () => {
@@ -147,7 +171,7 @@ describe('Goldsky API Connection Tests', () => {
     `);
 
     const perpResponse = await goldskyClient.request(perpQuery, { 
-      perpId: '0x7a6f376ed26ed212e84ab8b3bec9df5b9c8d1ca543f0527c48675131a4bf9bae' 
+      perpId: testPerpId 
     });
 
     const realBeaconId = perpResponse.perp.beacon.id;

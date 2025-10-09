@@ -1,22 +1,14 @@
 import { PerpCityContext } from "../context";
-import { Perp } from "../entities/perp";
 import { priceToSqrtPriceX96 } from "../utils";
 import type { Address, Hex } from "viem";
 import { gql } from "graphql-request";
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { parse } from 'graphql';
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
-
-export type CreatePerpParams = {
-  startingPrice: number;
-  beacon: Address;
-}
-
-// Re-export the PerpManager class from entities for convenience
-export { PerpManager } from "../entities/perp-manager";
+import { CreatePerpParams } from "../types/entity-data";
 
 // Functional alternatives for PerpManager methods
-export async function getPerps(context: PerpCityContext): Promise<Perp[]> {
+export async function getPerps(context: PerpCityContext): Promise<Hex[]> {
   const query: TypedDocumentNode<{ perps: { id: Hex }[] }, {}> = parse(gql`
     {
       perps {
@@ -27,12 +19,10 @@ export async function getPerps(context: PerpCityContext): Promise<Perp[]> {
 
   const response = await context.goldskyClient.request(query);
   
-  return response.perps.map((perpData: { id: Hex }) => 
-    new Perp(context, perpData.id as Hex)
-  );
+  return response.perps.map((perpData: { id: Hex }) => perpData.id as Hex);
 }
 
-export async function createPerp(context: PerpCityContext, params: CreatePerpParams): Promise<Perp> {
+export async function createPerp(context: PerpCityContext, params: CreatePerpParams): Promise<Hex> {
   const sqrtPriceX96 = priceToSqrtPriceX96(params.startingPrice);
 
   const contractParams = {
@@ -50,5 +40,5 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
 
   await context.walletClient.writeContract(request);
 
-  return new Perp(context, result as Hex);
+  return result as Hex;
 }

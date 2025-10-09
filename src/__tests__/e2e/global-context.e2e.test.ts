@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createWalletClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { GlobalPerpCityContext } from '../../context/global-context';
 import { PerpCityContext } from '../../context';
 import { 
   getPerpMark, 
@@ -20,23 +19,39 @@ import {
   getUserUnrealizedPnl 
 } from '../../functions/user';
 
-describe('GlobalPerpCityContext E2E Tests', () => {
-  let globalContext: GlobalPerpCityContext;
+describe('PerpCityContext Batch Fetching E2E Tests', () => {
+  let context: PerpCityContext;
   let testPerpId: string;
 
   beforeAll(() => {
+    if (!process.env.GOLDSKY_BEARER_TOKEN) {
+      throw new Error('GOLDSKY_BEARER_TOKEN is required for e2e tests');
+    }
+    if (!process.env.GOLDSKY_ENDPOINT) {
+      throw new Error('GOLDSKY_ENDPOINT is required for e2e tests');
+    }
+    if (!process.env.PERP_MANAGER_ADDRESS) {
+      throw new Error('PERP_MANAGER_ADDRESS is required for e2e tests');
+    }
+    if (!process.env.USDC_ADDRESS) {
+      throw new Error('USDC_ADDRESS is required for e2e tests');
+    }
+
     // Create a mock wallet client for testing (no private key needed)
     const walletClient = createWalletClient({
       chain: baseSepolia,
       transport: http(),
     });
 
-    const context = new PerpCityContext({
+    context = new PerpCityContext({
       walletClient,
       goldskyBearerToken: process.env.GOLDSKY_BEARER_TOKEN,
+      goldskyEndpoint: process.env.GOLDSKY_ENDPOINT,
+      deployments: {
+        perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
+        usdc: process.env.USDC_ADDRESS as `0x${string}`,
+      },
     });
-
-    globalContext = new GlobalPerpCityContext(context);
     
     // Use a known perp ID for testing on Base Sepolia
     testPerpId = '0x1234567890123456789012345678901234567890123456789012345678901234';
@@ -44,7 +59,7 @@ describe('GlobalPerpCityContext E2E Tests', () => {
 
   describe('getPerpData', () => {
     it('should fetch real perp data from Goldsky', async () => {
-      const perpData = await globalContext.getPerpData(testPerpId);
+      const perpData = await context.getPerpData(testPerpId);
 
       // Verify basic structure
       expect(perpData).toBeDefined();
@@ -109,26 +124,27 @@ describe('GlobalPerpCityContext E2E Tests', () => {
       }
     }, 15000);
 
-    it('should handle multiple perp data requests efficiently', async () => {
+    it('should handle multiple perp data requests efficiently with true batching', async () => {
       const perpIds = [
         testPerpId,
-        '0x7a6f376ed26ed212e84ab8b3bec9df5b9c8d1ca543f0527c48675131a4bf9bae', // Same ID to test caching
+        '0x7a6f376ed26ed212e84ab8b3bec9df5b9c8d1ca543f0527c48675131a4bf9bae',
       ];
 
       const startTime = Date.now();
-      const perpDataList = await globalContext.getMultiplePerpData(perpIds);
+      const perpDataMap = await context.getMultiplePerpData(perpIds);
       const endTime = Date.now();
 
-      expect(perpDataList).toHaveLength(2);
-      expect(perpDataList[0].id).toBe(testPerpId);
-      expect(perpDataList[1].id).toBe(testPerpId);
+      expect(perpDataMap.size).toBe(2);
+      expect(perpDataMap.get(testPerpId)).toBeDefined();
+      expect(perpDataMap.get(perpIds[1])).toBeDefined();
 
       // Should be reasonably fast (less than 10 seconds for 2 perps)
       expect(endTime - startTime).toBeLessThan(10000);
 
-      // Verify data consistency
-      expect(perpDataList[0].mark).toBe(perpDataList[1].mark);
-      expect(perpDataList[0].index).toBe(perpDataList[1].index);
+      // Verify data is valid
+      const firstPerpData = perpDataMap.get(testPerpId)!;
+      expect(firstPerpData.mark).toBeGreaterThan(0);
+      expect(firstPerpData.index).toBeGreaterThan(0);
     }, 15000);
   });
 
@@ -149,7 +165,7 @@ describe('GlobalPerpCityContext E2E Tests', () => {
       const startTime = Date.now();
       
       // Fetch perp data (simulates what would be multiple API calls in old API)
-      const perpData = await globalContext.getPerpData(testPerpId);
+      const perpData = await context.getPerpData(testPerpId);
       
       // Extract multiple pieces of data (these are now pure functions, no API calls)
       const mark = getPerpMark(perpData);

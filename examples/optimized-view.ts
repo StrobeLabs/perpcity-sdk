@@ -1,5 +1,4 @@
 import { setup } from './setup';
-import { GlobalPerpCityContext } from '../src/context/global-context';
 import { 
   getPerpMark, 
   getPerpIndex, 
@@ -12,25 +11,25 @@ import {
   getPerpIndexTimeSeries,
   getPerpOpenInterestTimeSeries,
   getPerpFundingRateTimeSeries
-} from '../src/functions/perp-functions';
+} from '../src/functions/perp';
 import { 
   getUserUsdcBalance, 
   getUserOpenPositions, 
   getUserClosedPositions,
   getUserRealizedPnl,
   getUserUnrealizedPnl 
-} from '../src/functions/user-functions';
+} from '../src/functions/user';
 import { 
   getPositionPnl, 
   getPositionFundingPayment,
   getPositionIsLiquidatable,
   getPositionLiveDetails
-} from '../src/functions/position-functions';
+} from '../src/functions/position';
 
 // Example of how to use the new optimized API with caller-managed caching
 export async function optimizedView(): Promise<void> {
   const perpManager = setup();
-  const globalContext = new GlobalPerpCityContext(perpManager.context);
+  const context = perpManager.context;
   
   // Example: Simple TTL cache implementation (caller responsibility)
   const cache = new Map<string, { data: any; timestamp: number }>();
@@ -49,14 +48,13 @@ export async function optimizedView(): Promise<void> {
   }
 
   // Fetch all perps data in one batch call
-  const perps = await perpManager.getPerps();
-  const perpIds = perps.map(perp => perp.id);
+  const perpIds = await perpManager.getPerps();
   
   console.log("Fetching perp data...");
-  const perpDataList = await globalContext.getMultiplePerpData(perpIds);
+  const perpDataMap = await context.getMultiplePerpData(perpIds);
   
   console.log("Perps data:");
-  for (const perpData of perpDataList) {
+  for (const [perpId, perpData] of perpDataMap) {
     console.log("id:", perpData.id);
     console.log("mark:", getPerpMark(perpData));
     console.log("index:", getPerpIndex(perpData));
@@ -74,7 +72,9 @@ export async function optimizedView(): Promise<void> {
 
   // Fetch user data with caching
   console.log("Fetching user data...");
-  const userData = await getCached('user-data', () => globalContext.getUserData());
+  const userAddress = context.walletClient.account?.address;
+  if (!userAddress) throw new Error('No wallet address');
+  const userData = await getCached('user-data', () => context.getUserData(userAddress));
   
   console.log("usdcBalance:", getUserUsdcBalance(userData));
   console.log("realizedPnl:", getUserRealizedPnl(userData));
@@ -103,48 +103,46 @@ export async function optimizedView(): Promise<void> {
   }
 }
 
-// Example showing the performance difference
+// Example showing the performance improvement with batching
 export async function performanceComparison(): Promise<void> {
   const perpManager = setup();
-  const globalContext = new GlobalPerpCityContext(perpManager.context);
-  const perpId = "0x7a6f376ed26ed212e84ab8b3bec9df5b9c8d1ca543f0527c48675131a4bf9bae";
+  const context = perpManager.context;
+  const perpId = "0x7a6f376ed26ed212e84ab8b3bec9df5b9c8d1ca543f0527c48675131a4bf9bae" as `0x${string}`;
   
   console.log("=== Performance Comparison ===");
   
-  // Old way (multiple API calls)
-  console.log("Old way (multiple API calls):");
-  const startOld = Date.now();
-  const perp = new (await import('../entities/perp')).Perp(perpManager.context, perpId);
-  const [mark, index, beacon, openInterest, bounds, fees] = await Promise.all([
-    perp.mark(),
-    perp.index(),
-    perp.beacon(),
-    perp.openInterest(),
-    perp.bounds(),
-    perp.fees(),
-  ]);
-  const endOld = Date.now();
-  console.log(`Time: ${endOld - startOld}ms`);
-  console.log(`API calls: ~6 separate calls`);
+  // Single perp fetch (2 Goldsky requests)
+  console.log("Single perp fetch:");
+  const startSingle = Date.now();
+  const perpData = await context.getPerpData(perpId);
+  const mark = getPerpMark(perpData);
+  const index = getPerpIndex(perpData);
+  const beacon = getPerpBeacon(perpData);
+  const openInterest = getPerpOpenInterest(perpData);
+  const bounds = getPerpBounds(perpData);
+  const fees = getPerpFees(perpData);
+  const endSingle = Date.now();
+  console.log(`Time: ${endSingle - startSingle}ms`);
+  console.log(`Goldsky API calls: 2 (perp + beacon)`);
   
-  // New way (single batch call)
-  console.log("\nNew way (single batch call):");
-  const startNew = Date.now();
-  const perpData = await globalContext.getPerpData(perpId);
-  const newMark = getPerpMark(perpData);
-  const newIndex = getPerpIndex(perpData);
-  const newBeacon = getPerpBeacon(perpData);
-  const newOpenInterest = getPerpOpenInterest(perpData);
-  const newBounds = getPerpBounds(perpData);
-  const newFees = getPerpFees(perpData);
-  const endNew = Date.now();
-  console.log(`Time: ${endNew - startNew}ms`);
-  console.log(`API calls: 1 batch call`);
+  // Multiple perp batch fetch (still only 2 Goldsky requests!)
+  console.log("\nBatch fetch (10 perps):");
+  const startBatch = Date.now();
+  const perpIds = Array(10).fill(perpId); // Simulate 10 perps
+  const perpDataMap = await context.getMultiplePerpData(perpIds);
+  const batchPerpData = perpDataMap.get(perpId)!;
+  const batchMark = getPerpMark(batchPerpData);
+  const batchIndex = getPerpIndex(batchPerpData);
+  const batchBeacon = getPerpBeacon(batchPerpData);
+  const endBatch = Date.now();
+  console.log(`Time: ${endBatch - startBatch}ms`);
+  console.log(`Goldsky API calls: 2 (same as single perp!)`);
+  console.log(`Efficiency: 10 perps fetched with same # of requests as 1 perp`);
   
   console.log("\nResults match:", 
-    mark === newMark && 
-    index === newIndex && 
-    beacon === newBeacon
+    mark === batchMark && 
+    index === batchIndex && 
+    beacon === batchBeacon
   );
 }
 

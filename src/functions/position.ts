@@ -3,8 +3,7 @@ import { publicActions } from "viem";
 import { PerpCityContext } from "../context";
 import { scale6Decimals, scaleFrom6Decimals } from "../utils";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
-import { OpenPositionData } from "../types/entity-data";
-import { LiveDetails, ClosePositionParams } from "../entities/openPosition";
+import { OpenPositionData, LiveDetails, ClosePositionParams } from "../types/entity-data";
 
 // Pure functions that operate on OpenPositionData
 export function getPositionPerpId(positionData: OpenPositionData): Hex {

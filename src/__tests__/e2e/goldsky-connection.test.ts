@@ -10,9 +10,12 @@ describe('Goldsky API Connection Tests', () => {
     if (!process.env.GOLDSKY_BEARER_TOKEN) {
       throw new Error('GOLDSKY_BEARER_TOKEN is required for e2e tests');
     }
+    if (!process.env.GOLDSKY_ENDPOINT) {
+      throw new Error('GOLDSKY_ENDPOINT is required for e2e tests');
+    }
 
-    // Create a direct GraphQL client to test the connection using the correct endpoint
-    goldskyClient = new GraphQLClient('https://api.goldsky.com/api/private/project_cmbawn40q70fj01ws4jmsfj7f/subgraphs/perp-city/36ac28e6-20250925_150813/gn', {
+    // Create a direct GraphQL client to test the connection
+    goldskyClient = new GraphQLClient(process.env.GOLDSKY_ENDPOINT, {
       headers: {
         authorization: `Bearer ${process.env.GOLDSKY_BEARER_TOKEN}`,
       },

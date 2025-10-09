@@ -3,19 +3,7 @@ import { publicActions } from "viem";
 import { PerpCityContext } from "../context";
 import { scale6Decimals, scaleFrom6Decimals } from "../utils";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
-
-export type ClosePositionParams = {
-  minAmt0Out: number;
-  minAmt1Out: number;
-  maxAmt1In: number;
-}
-
-export type LiveDetails = {
-  pnl: number;
-  fundingPayment: number;
-  effectiveMargin: number;
-  isLiquidatable: boolean;
-}
+import { ClosePositionParams, LiveDetails } from "../types/entity-data";
 
 export class OpenPosition {
   public readonly context: PerpCityContext;

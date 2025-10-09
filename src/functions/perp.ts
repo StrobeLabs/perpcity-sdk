@@ -1,10 +1,7 @@
 import { Hex } from "viem";
-import { GlobalPerpCityContext } from "../context/global-context";
+import { PerpCityContext } from "../context";
 import { PerpData } from "../types/entity-data";
-import { OpenPosition } from "../entities/openPosition";
-
-// Re-export the Perp class from entities for convenience
-export { Perp } from "../entities/perp";
+import { OpenPosition } from "./open-position";
 
 // Pure functions that operate on PerpData
 export function getPerpMark(perpData: PerpData): number {
@@ -62,7 +59,7 @@ export function getPerpTickSpacing(perpData: PerpData): number {
 // Functions that require context for read operations
 
 export async function getAllMakerPositions(
-  context: GlobalPerpCityContext,
+  context: PerpCityContext,
   perpId: Hex
 ): Promise<OpenPosition[]> {
   const query = `
@@ -76,15 +73,15 @@ export async function getAllMakerPositions(
     }
   `;
 
-  const response = await context.context.goldskyClient.request(query, { perpId });
+  const response: any = await context.goldskyClient.request(query, { perpId });
   
   return response.openPositions.map((position: any) => 
-    new OpenPosition(context.context, position.perp.id, position.inContractPosId)
+    new OpenPosition(context, position.perp.id, position.inContractPosId)
   );
 }
 
 export async function getAllTakerPositions(
-  context: GlobalPerpCityContext,
+  context: PerpCityContext,
   perpId: Hex
 ): Promise<OpenPosition[]> {
   const query = `
@@ -98,15 +95,15 @@ export async function getAllTakerPositions(
     }
   `;
 
-  const response = await context.context.goldskyClient.request(query, { perpId });
+  const response: any = await context.goldskyClient.request(query, { perpId });
   
   return response.openPositions.map((position: any) => 
-    new OpenPosition(context.context, position.perp.id, position.inContractPosId)
+    new OpenPosition(context, position.perp.id, position.inContractPosId)
   );
 }
 
 export async function getTotalOpenMakerPnl(
-  context: GlobalPerpCityContext,
+  context: PerpCityContext,
   perpId: Hex
 ): Promise<number> {
   const positions = await getAllMakerPositions(context, perpId);
@@ -115,7 +112,7 @@ export async function getTotalOpenMakerPnl(
 }
 
 export async function getTotalOpenTakerPnl(
-  context: GlobalPerpCityContext,
+  context: PerpCityContext,
   perpId: Hex
 ): Promise<number> {
   const positions = await getAllTakerPositions(context, perpId);

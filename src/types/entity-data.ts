@@ -1,5 +1,52 @@
 import type { Address, Hex } from "viem";
-import { OpenInterest, TimeSeries, Bounds, Fees, LiveDetails, ClosedPosition } from "../entities";
+
+export type OpenInterest = {
+  takerLongNotional: number,
+  takerShortNotional: number,
+}
+
+export type TimeSeries<T extends number | OpenInterest> = {
+  timestamp: number,
+  value: T,
+}
+
+export type Bounds = {
+  minMargin: number,
+  minTakerLeverage: number,
+  maxTakerLeverage: number,
+}
+
+export type Fees = {
+  creatorFee: number,
+  insuranceFee: number,
+  lpFee: number,
+  liquidationFee: number,
+}
+
+export type LiveDetails = {
+  pnl: number;
+  fundingPayment: number;
+  effectiveMargin: number;
+  isLiquidatable: boolean;
+}
+
+export type ClosedPosition = {
+  perpId: Hex;
+  wasMaker: boolean;
+  wasLong: boolean;
+  pnlAtClose: number;
+}
+
+export type ClosePositionParams = {
+  minAmt0Out: number;
+  minAmt1Out: number;
+  maxAmt1In: number;
+}
+
+export type CreatePerpParams = {
+  startingPrice: number;
+  beacon: Address;
+}
 
 export type PerpData = {
   id: Hex;

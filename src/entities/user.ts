@@ -6,13 +6,7 @@ import { PerpCityContext } from "../context";
 import { TypedDocumentNode } from "@graphql-typed-document-node/core";
 import { parse } from "graphql";
 import { gql } from "graphql-request";
-
-export type ClosedPosition = {
-  perpId: Hex;
-  wasMaker: boolean;
-  wasLong: boolean;
-  pnlAtClose: number;
-}
+import { ClosedPosition } from "../types/entity-data";
 
 export class User {
   public readonly context: PerpCityContext;

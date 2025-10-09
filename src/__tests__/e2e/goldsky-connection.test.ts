@@ -28,15 +28,15 @@ describe('Goldsky API Connection Tests', () => {
       console.log(`Using GOLDSKY_PERP_ID from environment: ${testPerpId}`);
     } else {
       // Fetch the first available perp from Goldsky
-      const perpsQuery: TypedDocumentNode<{
-        perps: { id: string }[];
-      }> = parse(`
+      const perpsQuery = parse(`
         query {
           perps(first: 1) {
             id
           }
         }
-      `);
+      `) as TypedDocumentNode<{
+        perps: { id: string }[];
+      }>;
       const perpsResponse = await goldskyClient.request(perpsQuery);
       if (perpsResponse.perps.length === 0) {
         throw new Error('No perps found in Goldsky and GOLDSKY_PERP_ID not set - cannot run e2e tests');
@@ -48,17 +48,17 @@ describe('Goldsky API Connection Tests', () => {
 
   it('should connect to Goldsky API and fetch perp data', async () => {
     // First, let's try to get any existing perps
-    const perpsQuery: TypedDocumentNode<{
-      perps: {
-        id: string;
-      }[];
-    }> = parse(`
+    const perpsQuery = parse(`
       query {
         perps(first: 1) {
           id
         }
       }
-    `);
+    `) as TypedDocumentNode<{
+      perps: {
+        id: string;
+      }[];
+    }>;
 
     const perpsResponse = await goldskyClient.request(perpsQuery);
     
@@ -69,18 +69,7 @@ describe('Goldsky API Connection Tests', () => {
 
     const testPerpId = perpsResponse.perps[0].id;
     
-    const query: TypedDocumentNode<{
-      perp: {
-        beacon: { id: string };
-      };
-      perpSnapshots: {
-        timestamp: BigInt;
-        markPrice: string;
-        takerLongNotional: string;
-        takerShortNotional: string;
-        fundingRate: string;
-      }[];
-    }, { perpId: string }> = parse(`
+    const query = parse(`
       query ($perpId: Bytes!) {
         perp(id: $perpId) {
           beacon { id }
@@ -98,7 +87,18 @@ describe('Goldsky API Connection Tests', () => {
           fundingRate
         }
       }
-    `);
+    `) as TypedDocumentNode<{
+      perp: {
+        beacon: { id: string };
+      };
+      perpSnapshots: {
+        timestamp: BigInt;
+        markPrice: string;
+        takerLongNotional: string;
+        takerShortNotional: string;
+        fundingRate: string;
+      }[];
+    }, { perpId: string }>;
 
     const response = await goldskyClient.request(query, { perpId: testPerpId });
 
@@ -138,12 +138,7 @@ describe('Goldsky API Connection Tests', () => {
   it('should fetch beacon data', async () => {
     const testBeaconId = '0x1234567890123456789012345678901234567890'; // This will be updated with real beacon ID
     
-    const query: TypedDocumentNode<{
-      beaconSnapshots: {
-        timestamp: BigInt;
-        indexPrice: string;
-      }[];
-    }, { beaconAddr: string }> = parse(`
+    const query = parse(`
       query ($beaconAddr: Bytes!) {
         beaconSnapshots(
           first: 5
@@ -155,20 +150,25 @@ describe('Goldsky API Connection Tests', () => {
           indexPrice
         }
       }
-    `);
+    `) as TypedDocumentNode<{
+      beaconSnapshots: {
+        timestamp: BigInt;
+        indexPrice: string;
+      }[];
+    }, { beaconAddr: string }>;
 
     // First get a real beacon ID from a perp
-    const perpQuery: TypedDocumentNode<{
-      perp: {
-        beacon: { id: string };
-      };
-    }, { perpId: string }> = parse(`
+    const perpQuery = parse(`
       query ($perpId: Bytes!) {
         perp(id: $perpId) {
           beacon { id }
         }
       }
-    `);
+    `) as TypedDocumentNode<{
+      perp: {
+        beacon: { id: string };
+      };
+    }, { perpId: string }>;
 
     const perpResponse = await goldskyClient.request(perpQuery, { 
       perpId: testPerpId 

@@ -538,7 +538,8 @@ export class PerpCityContext {
   }
 
   private async fetchPositionLiveDetailsFromContract(perpId: Hex, positionId: bigint): Promise<LiveDetails> {
-    const { result } = await this.walletClient.simulateContract({
+    const publicClient = this.walletClient.extend(publicActions);
+    const result = await publicClient.simulateContract({
       address: this.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: 'livePositionDetails',
@@ -546,11 +547,14 @@ export class PerpCityContext {
       account: this.walletClient.account,
     });
 
+    // Use formatUnits to safely convert bigint to decimal, then parse to number
+    // The result.result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
+    const values = result.result;
     return {
-      pnl: scaleFrom6Decimals(Number(result[0])),
-      fundingPayment: scaleFrom6Decimals(Number(result[1])),
-      effectiveMargin: scaleFrom6Decimals(Number(result[2])),
-      isLiquidatable: result[3] as boolean,
+      pnl: Number(formatUnits(values[0] as bigint, 6)),
+      fundingPayment: Number(formatUnits(values[1] as bigint, 6)),
+      effectiveMargin: Number(formatUnits(values[2] as bigint, 6)),
+      isLiquidatable: values[3] as boolean,
     };
   }
 

@@ -380,25 +380,25 @@ export class PerpCityContext {
       // Process time series data
       const markTimeSeries: TimeSeries<number>[] = snapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.markPrice),
+        value: Number(formatUnits(BigInt(snapshot.markPrice), 6)),
       }));
 
       const indexTimeSeries: TimeSeries<number>[] = beaconSnapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.indexPrice),
+        value: Number(formatUnits(BigInt(snapshot.indexPrice), 6)),
       }));
 
       const openInterestTimeSeries: TimeSeries<OpenInterest>[] = snapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
         value: {
-          takerLongNotional: Number(snapshot.takerLongNotional),
-          takerShortNotional: Number(snapshot.takerShortNotional),
+          takerLongNotional: Number(formatUnits(BigInt(snapshot.takerLongNotional), 6)),
+          takerShortNotional: Number(formatUnits(BigInt(snapshot.takerShortNotional), 6)),
         },
       }));
 
       const fundingRateTimeSeries: TimeSeries<number>[] = snapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.fundingRate),
+        value: Number(formatUnits(BigInt(snapshot.fundingRate), 6)),
       }));
 
       // Get latest values
@@ -409,16 +409,16 @@ export class PerpCityContext {
         id: perpId,
         tickSpacing: contractData.tickSpacing,
         mark: sqrtPriceX96ToPrice(contractData.sqrtPriceX96),
-        index: Number(latestBeaconSnapshot.indexPrice),
+        index: Number(formatUnits(BigInt(latestBeaconSnapshot.indexPrice), 6)),
         beacon: beaconId,
         lastIndexUpdate: Number(latestBeaconSnapshot.timestamp),
         openInterest: {
-          takerLongNotional: Number(latestSnapshot.takerLongNotional),
-          takerShortNotional: Number(latestSnapshot.takerShortNotional),
+          takerLongNotional: Number(formatUnits(BigInt(latestSnapshot.takerLongNotional), 6)),
+          takerShortNotional: Number(formatUnits(BigInt(latestSnapshot.takerShortNotional), 6)),
         },
         markTimeSeries,
         indexTimeSeries,
-        fundingRate: Number(latestSnapshot.fundingRate),
+        fundingRate: Number(formatUnits(BigInt(latestSnapshot.fundingRate), 6)),
         bounds: contractData.bounds,
         fees: contractData.fees,
         openInterestTimeSeries,
@@ -560,7 +560,7 @@ export class PerpCityContext {
   private async fetchPositionLiveDetailsFromContract(perpId: Hex, positionId: bigint): Promise<LiveDetails> {
     return withErrorHandling(async () => {
       const publicClient = this.walletClient.extend(publicActions);
-      const result = await publicClient.simulateContract({
+      const { result } = await publicClient.simulateContract({
         address: this.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
         functionName: 'livePositionDetails',
@@ -569,13 +569,12 @@ export class PerpCityContext {
       });
 
       // Use formatUnits to safely convert bigint to decimal, then parse to number
-      // The result.result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
-      const values = result.result;
+      // The result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
       return {
-        pnl: Number(formatUnits(values[0] as bigint, 6)),
-        fundingPayment: Number(formatUnits(values[1] as bigint, 6)),
-        effectiveMargin: Number(formatUnits(values[2] as bigint, 6)),
-        isLiquidatable: values[3] as boolean,
+        pnl: Number(formatUnits(result[0], 6)),
+        fundingPayment: Number(formatUnits(result[1], 6)),
+        effectiveMargin: Number(formatUnits(result[2], 6)),
+        isLiquidatable: result[3],
       };
     }, `fetchPositionLiveDetailsFromContract for position ${positionId}`);
   }

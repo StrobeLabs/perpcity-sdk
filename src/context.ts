@@ -109,25 +109,25 @@ export class PerpCityContext {
     // Process time series data
     const markTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
       timestamp: Number(snapshot.timestamp),
-      value: Number(snapshot.markPrice),
+      value: Number(formatUnits(BigInt(snapshot.markPrice), 6)),
     }));
 
     const indexTimeSeries: TimeSeries<number>[] = (beaconResponse as any).beaconSnapshots.map((snapshot: any) => ({
       timestamp: Number(snapshot.timestamp),
-      value: Number(snapshot.indexPrice),
+      value: Number(formatUnits(BigInt(snapshot.indexPrice), 6)),
     }));
 
     const openInterestTimeSeries: TimeSeries<OpenInterest>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
       timestamp: Number(snapshot.timestamp),
       value: {
-        takerLongNotional: Number(snapshot.takerLongNotional),
-        takerShortNotional: Number(snapshot.takerShortNotional),
+        takerLongNotional: Number(formatUnits(BigInt(snapshot.takerLongNotional), 6)),
+        takerShortNotional: Number(formatUnits(BigInt(snapshot.takerShortNotional), 6)),
       },
     }));
 
     const fundingRateTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
       timestamp: Number(snapshot.timestamp),
-      value: Number(snapshot.fundingRate),
+      value: Number(formatUnits(BigInt(snapshot.fundingRate), 6)),
     }));
 
     // Get latest values (safe after guard check)
@@ -138,16 +138,16 @@ export class PerpCityContext {
       id: perpId,
       tickSpacing: contractData.tickSpacing,
       mark: sqrtPriceX96ToPrice(contractData.sqrtPriceX96),
-      index: Number(latestBeaconSnapshot.indexPrice),
+      index: Number(formatUnits(BigInt(latestBeaconSnapshot.indexPrice), 6)),
       beacon: perpResponse.perp.beacon.id as Address,
       lastIndexUpdate: Number(latestBeaconSnapshot.timestamp),
       openInterest: {
-        takerLongNotional: Number(latestSnapshot.takerLongNotional),
-        takerShortNotional: Number(latestSnapshot.takerShortNotional),
+        takerLongNotional: Number(formatUnits(BigInt(latestSnapshot.takerLongNotional), 6)),
+        takerShortNotional: Number(formatUnits(BigInt(latestSnapshot.takerShortNotional), 6)),
       },
       markTimeSeries,
       indexTimeSeries,
-      fundingRate: Number(latestSnapshot.fundingRate),
+      fundingRate: Number(formatUnits(BigInt(latestSnapshot.fundingRate), 6)),
       bounds: contractData.bounds,
       fees: contractData.fees,
       openInterestTimeSeries,

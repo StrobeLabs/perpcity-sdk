@@ -108,33 +108,36 @@ const perpId = await createPerp(context, {
 const allPerps = await getPerps(context);
 ```
 
-### Open Positions
+### Manage Positions
 
 ```typescript
-import { OpenPosition } from '@strobelabs/perpcity-sdk';
+import { OpenPosition, getAllTakerPositions, getAllMakerPositions } from '@strobelabs/perpcity-sdk';
 
-// Open a taker position (long or short)
-const position = await perp.openTakerPosition({
-  isLong: true,
-  margin: 1000,      // USDC
-  leverage: 10,
+// Get all taker positions for a perp
+const takerPositions = await getAllTakerPositions(context, perpId);
+for (const position of takerPositions) {
+  const liveDetails = await position.liveDetails();
+  console.log('Position PnL:', liveDetails.pnl);
+  console.log('Funding Payment:', liveDetails.fundingPayment);
+  console.log('Is Liquidatable:', liveDetails.isLiquidatable);
+}
+
+// Get all maker positions for a perp
+const makerPositions = await getAllMakerPositions(context, perpId);
+
+// Close a position
+const closedPosition = await takerPositions[0].closePosition({
+  margin: 0,  // Full close
   unspecifiedAmountLimit: 1000000
 });
 
-// Open a maker position (provide liquidity)
-const makerPosition = await perp.openMakerPosition({
-  margin: 5000,
-  priceLower: 2900,
-  priceUpper: 3100,
-  maxAmt0In: 1000000,
-  maxAmt1In: 1000000
-});
-
-// Check position details
-const liveDetails = await position.liveDetails();
-console.log(liveDetails.pnl);
-console.log(liveDetails.fundingPayment);
-console.log(liveDetails.isLiquidatable);
+// Note: To open new positions, call the PerpManager contract directly using viem:
+// const txHash = await context.walletClient.writeContract({
+//   address: context.deployments().perpManager,
+//   abi: PERP_MANAGER_ABI,
+//   functionName: 'openTakerPosition',
+//   args: [perpId, isLong, margin, leverage, unspecifiedAmountLimit]
+// });
 ```
 
 ### Close Positions

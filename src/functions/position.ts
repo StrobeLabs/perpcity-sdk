@@ -1,4 +1,4 @@
-import { Hex, formatUnits } from "viem";
+import { Hex, formatUnits, decodeEventLog } from "viem";
 import { publicActions } from "viem";
 import { PerpCityContext } from "../context";
 import { scale6Decimals, scaleFrom6Decimals } from "../utils";
@@ -66,6 +66,12 @@ export async function closePosition(
       account: context.walletClient.account,
     });
 
+    // Check simulation result before executing transaction
+    // If result is null or 0, this is a full close - return early without executing
+    if (result === null || result === 0n) {
+      return null;
+    }
+
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for transaction confirmation
@@ -77,15 +83,40 @@ export async function closePosition(
       throw new Error(`Transaction reverted. Hash: ${txHash}`);
     }
 
-    if (result === null) {
-      return null;
+    // Extract actual positionId from transaction receipt logs
+    // For partial closes, a PositionOpened event is emitted with the new position ID
+    let newPositionId: bigint | null = null;
+
+    for (const log of receipt.logs) {
+      try {
+        const decoded = decodeEventLog({
+          abi: PERP_MANAGER_ABI,
+          data: log.data,
+          topics: log.topics,
+          eventName: 'PositionOpened',
+        });
+
+        // Match the perpId and extract the new position ID
+        if (decoded.args.perpId === perpId) {
+          newPositionId = decoded.args.posId as bigint;
+          break;
+        }
+      } catch (e) {
+        // Skip logs that aren't PositionOpened events
+        continue;
+      }
     }
 
-    // Return the updated position data
+    // If no PositionOpened event found, something went wrong
+    if (!newPositionId) {
+      throw new Error(`PositionOpened event not found in transaction receipt for partial close. Hash: ${txHash}`);
+    }
+
+    // Return the updated position data with actual on-chain position ID
     return {
       perpId,
-      positionId: result,
-      liveDetails: await getPositionLiveDetailsFromContract(context, perpId, result),
+      positionId: newPositionId,
+      liveDetails: await getPositionLiveDetailsFromContract(context, perpId, newPositionId),
     };
   }, `closePosition for position ${positionId}`);
 }

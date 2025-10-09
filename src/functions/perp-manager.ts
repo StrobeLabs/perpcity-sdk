@@ -2,6 +2,7 @@ import { PerpCityContext } from "../context";
 import { priceToSqrtPriceX96 } from "../utils";
 import { withErrorHandling, GraphQLError } from "../utils/errors";
 import type { Address, Hex } from "viem";
+import { publicActions } from "viem";
 import { gql } from "graphql-request";
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { parse } from 'graphql';
@@ -19,12 +20,8 @@ export async function getPerps(context: PerpCityContext): Promise<Hex[]> {
       }
     `)
 
-    try {
-      const response = await context.goldskyClient.request(query);
-      return response.perps.map((perpData: { id: Hex }) => perpData.id as Hex);
-    } catch (error) {
-      throw new GraphQLError(`Failed to fetch perps: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error : undefined);
-    }
+    const response = await context.goldskyClient.request(query);
+    return response.perps.map((perpData: { id: Hex }) => perpData.id as Hex);
   }, "getPerps");
 }
 
@@ -45,16 +42,19 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
       account: context.walletClient.account,
     });
 
+    // Execute the transaction
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for transaction confirmation
-    const publicClient = context.walletClient.extend((client: any) => ({
-      waitForTransactionReceipt: (args: any) => client.request({
-        method: 'eth_getTransactionReceipt',
-        params: [args.hash],
-      }),
-    }));
+    const publicClient = context.walletClient.extend(publicActions);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
+    // Check if transaction was successful
+    if (receipt.status === 'reverted') {
+      throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    }
+
+    // Return the perp ID from the simulation result (pool ID)
     return result as Hex;
   }, "createPerp");
 }

@@ -96,20 +96,21 @@ export async function getPositionLiveDetailsFromContract(
   positionId: bigint
 ): Promise<LiveDetails> {
   return withErrorHandling(async () => {
-    const { result } = await context.walletClient.simulateContract({
+    // livePositionDetails is marked nonpayable in ABI but can be called read-only
+    const result = (await context.walletClient.readContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'livePositionDetails',
+      functionName: 'livePositionDetails' as any,
       args: [perpId, positionId],
-      account: context.walletClient.account,
-    });
+    }) as unknown) as readonly [bigint, bigint, bigint, boolean, bigint];
 
     // Use formatUnits to safely convert bigint to decimal string, then parse to number
+    // The result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
     return {
-      pnl: Number(formatUnits(result[0] as bigint, 6)),
-      fundingPayment: Number(formatUnits(result[1] as bigint, 6)),
-      effectiveMargin: Number(formatUnits(result[2] as bigint, 6)),
-      isLiquidatable: result[3] as boolean,
+      pnl: Number(formatUnits(result[0], 6)),
+      fundingPayment: Number(formatUnits(result[1], 6)),
+      effectiveMargin: Number(formatUnits(result[2], 6)),
+      isLiquidatable: result[3],
     };
   }, `getPositionLiveDetailsFromContract for position ${positionId}`);
 }

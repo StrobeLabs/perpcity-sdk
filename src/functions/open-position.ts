@@ -51,59 +51,73 @@ export class OpenPosition {
         throw new Error(`Transaction reverted. Hash: ${txHash}`);
       }
 
-      // Parse the transaction logs to extract the position closed event
-      // The closePosition function returns a new position ID (for partial closes) or null (for full closes)
+      // Extract the new position ID from transaction events
+      // For partial closes, a new PositionOpened event is emitted with the new position ID
+      // For full closes, only PositionClosed is emitted
       let newPositionId: bigint | null = null;
+      let positionWasClosed = false;
 
-      // Decode PositionClosed event from logs
       for (const log of receipt.logs) {
         try {
-          // Try to decode as PositionClosed event
-          const decoded = decodeEventLog({
+          // Check for PositionClosed event
+          const closedDecoded = decodeEventLog({
             abi: PERP_MANAGER_ABI,
             data: log.data,
             topics: log.topics,
             eventName: 'PositionClosed',
           });
 
-          // Check if this is our position by matching perpId and posId
-          if (decoded.args.perpId === this.perpId && decoded.args.posId === this.positionId) {
-            // Position was fully closed, there's no new position ID
-            newPositionId = null;
-            break;
+          if (closedDecoded.args.perpId === this.perpId && closedDecoded.args.posId === this.positionId) {
+            positionWasClosed = true;
           }
         } catch (e) {
-          // Skip logs that aren't the event we're looking for
-          continue;
+          // Not a PositionClosed event, try PositionOpened
+          try {
+            const openedDecoded = decodeEventLog({
+              abi: PERP_MANAGER_ABI,
+              data: log.data,
+              topics: log.topics,
+              eventName: 'PositionOpened',
+            });
+
+            // For partial closes, a new position is opened with a new ID
+            if (openedDecoded.args.perpId === this.perpId) {
+              newPositionId = openedDecoded.args.posId;
+            }
+          } catch (e2) {
+            // Skip logs that aren't relevant events
+            continue;
+          }
         }
       }
 
-      // If position was fully closed, return null
-      if (newPositionId === null || newPositionId === 0n) {
+      // If no new position was opened, this was a full close
+      if (!newPositionId || newPositionId === 0n) {
         return null;
       }
 
-      // Return new OpenPosition with the remaining position
+      // Return new OpenPosition with the new position from partial close
       return new OpenPosition(this.context, this.perpId, newPositionId, this.isLong, this.isMaker);
     }, `closePosition for ${this.isMaker ? 'maker' : 'taker'} position ${this.positionId}`);
   }
 
   async liveDetails(): Promise<LiveDetails> {
     return withErrorHandling(async () => {
-      const { result } = await this.context.walletClient.simulateContract({
+      // livePositionDetails is marked nonpayable in ABI but can be called read-only
+      const result = (await this.context.walletClient.readContract({
         address: this.context.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
-        functionName: 'livePositionDetails',
+        functionName: 'livePositionDetails' as any,
         args: [this.perpId, this.positionId],
-        account: this.context.walletClient.account,
-      });
+      }) as unknown) as readonly [bigint, bigint, bigint, boolean, bigint];
 
-      // Use formatUnits to safely convert bigint to decimal string, then parse to number
+      // Use formatUnits to safely convert bigint to decimal, then parse to number
+      // The result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
       return {
-        pnl: Number(formatUnits(result[0] as bigint, 6)),
-        fundingPayment: Number(formatUnits(result[1] as bigint, 6)),
-        effectiveMargin: Number(formatUnits(result[2] as bigint, 6)),
-        isLiquidatable: result[3] as boolean,
+        pnl: Number(formatUnits(result[0], 6)),
+        fundingPayment: Number(formatUnits(result[1], 6)),
+        effectiveMargin: Number(formatUnits(result[2], 6)),
+        isLiquidatable: result[3],
       };
     }, `liveDetails for position ${this.positionId}`);
   }

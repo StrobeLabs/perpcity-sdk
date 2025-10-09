@@ -559,14 +559,13 @@ export class PerpCityContext {
 
   private async fetchPositionLiveDetailsFromContract(perpId: Hex, positionId: bigint): Promise<LiveDetails> {
     return withErrorHandling(async () => {
-      const publicClient = this.walletClient.extend(publicActions);
-      const { result } = await publicClient.simulateContract({
+      // livePositionDetails is marked nonpayable in ABI but can be called read-only
+      const result = (await this.walletClient.readContract({
         address: this.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
-        functionName: 'livePositionDetails',
+        functionName: 'livePositionDetails' as any,
         args: [perpId, positionId],
-        account: this.walletClient.account,
-      });
+      }) as unknown) as readonly [bigint, bigint, bigint, boolean, bigint];
 
       // Use formatUnits to safely convert bigint to decimal, then parse to number
       // The result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]

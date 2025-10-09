@@ -82,33 +82,88 @@ describe('parseContractError', () => {
     expect(result.message).toBe('String error');
   });
 
-  it('should create ContractError with proper formatting', () => {
-    const error = new ContractError(
-      'Price impact too high. Current price: 1000, Min acceptable: 900, Max acceptable: 1100',
-      'PriceImpactTooHigh',
-      [1000n, 900n, 1100n]
-    );
-    expect(error.message).toContain('Price impact too high');
-    expect(error.errorName).toBe('PriceImpactTooHigh');
+  it('should parse ContractFunctionRevertedError for PriceImpactTooHigh', () => {
+    // Create a mock ContractFunctionRevertedError instance
+    const mockRevertError = new ContractFunctionRevertedError({
+      abi: [],
+      functionName: 'test',
+    } as any);
+    // Manually set the data property
+    (mockRevertError as any).data = {
+      errorName: 'PriceImpactTooHigh',
+      args: [1000n, 900n, 1100n],
+    };
+
+    // Create a proper BaseError instance
+    const mockError = new BaseError('Contract execution reverted', {
+      cause: mockRevertError,
+    });
+    // Override walk to return our mock revert error
+    (mockError as any).walk = (fn: (err: any) => any) => {
+      if (fn(mockRevertError)) return mockRevertError;
+      return null;
+    };
+
+    const result = parseContractError(mockError);
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe('PriceImpactTooHigh');
+    expect((result as ContractError).args).toEqual([1000n, 900n, 1100n]);
+    expect(result.message).toContain('Price impact too high');
+    expect(result.message).toContain('1000');
+    expect(result.message).toContain('900');
+    expect(result.message).toContain('1100');
   });
 
-  it('should create ContractError for InvalidLevX96', () => {
-    const error = new ContractError(
-      'Invalid leverage: 15. Maximum allowed: 10',
-      'InvalidLevX96',
-      [15n, 10n]
-    );
-    expect(error.message).toContain('Invalid leverage');
-    expect(error.errorName).toBe('InvalidLevX96');
+  it('should parse ContractFunctionRevertedError for InvalidLevX96', () => {
+    const mockRevertError = new ContractFunctionRevertedError({
+      abi: [],
+      functionName: 'test',
+    } as any);
+    (mockRevertError as any).data = {
+      errorName: 'InvalidLevX96',
+      args: [15n, 10n],
+    };
+
+    const mockError = new BaseError('Contract execution reverted', {
+      cause: mockRevertError,
+    });
+    (mockError as any).walk = (fn: (err: any) => any) => {
+      if (fn(mockRevertError)) return mockRevertError;
+      return null;
+    };
+
+    const result = parseContractError(mockError);
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe('InvalidLevX96');
+    expect((result as ContractError).args).toEqual([15n, 10n]);
+    expect(result.message).toContain('Invalid leverage');
+    expect(result.message).toContain('15');
+    expect(result.message).toContain('10');
   });
 
-  it('should create ContractError for SwapReverted', () => {
-    const error = new ContractError(
-      'Swap failed. This may be due to insufficient liquidity or slippage tolerance.',
-      'SwapReverted',
-      []
-    );
-    expect(error.message).toContain('Swap failed');
-    expect(error.errorName).toBe('SwapReverted');
+  it('should parse ContractFunctionRevertedError for SwapReverted', () => {
+    const mockRevertError = new ContractFunctionRevertedError({
+      abi: [],
+      functionName: 'test',
+    } as any);
+    (mockRevertError as any).data = {
+      errorName: 'SwapReverted',
+      args: [],
+    };
+
+    const mockError = new BaseError('Contract execution reverted', {
+      cause: mockRevertError,
+    });
+    (mockError as any).walk = (fn: (err: any) => any) => {
+      if (fn(mockRevertError)) return mockRevertError;
+      return null;
+    };
+
+    const result = parseContractError(mockError);
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe('SwapReverted');
+    expect((result as ContractError).args).toEqual([]);
+    expect(result.message).toContain('Swap failed');
+    expect(result.message).toContain('insufficient liquidity or slippage');
   });
 });

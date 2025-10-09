@@ -18,7 +18,7 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:all": "npm run test:unit && npm run test:integration",
-    "ci": "npm run build && npm run test:unit",
+    "ci": "npm run build && npm run test:unit && pnpm exec tsc --noEmit",
     "example-create-perp": "tsx -r dotenv/config examples/create-perp.ts",
     "example-maker": "tsx -r dotenv/config examples/maker.ts",
     "example-taker": "tsx -r dotenv/config examples/taker.ts",

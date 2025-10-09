@@ -98,6 +98,14 @@ export class PerpCityContext {
       this.fetchPerpContractData(perpId),
     ]);
 
+    // Guard against empty snapshots for new perps
+    if (perpResponse.perpSnapshots.length === 0) {
+      throw new Error(`No perpSnapshots found for perp ${perpId}. This perp may be newly created with no trading activity yet.`);
+    }
+    if ((beaconResponse as any).beaconSnapshots.length === 0) {
+      throw new Error(`No beaconSnapshots found for perp ${perpId} beacon ${perpResponse.perp.beacon.id}. The beacon may not have any price updates yet.`);
+    }
+
     // Process time series data
     const markTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
       timestamp: Number(snapshot.timestamp),
@@ -122,7 +130,7 @@ export class PerpCityContext {
       value: Number(snapshot.fundingRate),
     }));
 
-    // Get latest values
+    // Get latest values (safe after guard check)
     const latestSnapshot = perpResponse.perpSnapshots[perpResponse.perpSnapshots.length - 1];
     const latestBeaconSnapshot = (beaconResponse as any).beaconSnapshots[(beaconResponse as any).beaconSnapshots.length - 1];
     
@@ -188,7 +196,7 @@ export class PerpCityContext {
     const fees = feesRaw as unknown as readonly [bigint, bigint, bigint, bigint];
 
     return {
-      tickSpacing: tickSpacing as number,
+      tickSpacing: Number(tickSpacing),
       sqrtPriceX96: sqrtPriceX96 as bigint,
       bounds: {
         minMargin: scaleFrom6Decimals(Number(bounds[0])),
@@ -475,14 +483,19 @@ export class PerpCityContext {
 
     const positionsWithDetails = await Promise.all(
       response.openPositions.map(async (position: any) => {
+        // Normalize inContractPosId to bigint (GraphQL returns it as a string)
+        const positionId = typeof position.inContractPosId === 'bigint' 
+          ? position.inContractPosId 
+          : BigInt(position.inContractPosId);
+        
         const liveDetails = await this.fetchPositionLiveDetailsFromContract(
           position.perp.id,
-          position.inContractPosId
+          positionId
         );
 
         return {
           perpId: position.perp.id as Hex,
-          positionId: position.inContractPosId as bigint,
+          positionId,
           isLong: position.isLong as boolean,
           isMaker: position.isMaker as boolean,
           liveDetails,

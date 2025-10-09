@@ -88,13 +88,15 @@ describe('Goldsky API Connection Tests', () => {
     
     if (response.perpSnapshots.length > 0) {
       const snapshot = response.perpSnapshots[0];
-      expect(typeof snapshot.timestamp).toBe('bigint');
+      // Goldsky returns BigInt fields as strings, not actual bigints
+      expect(typeof snapshot.timestamp).toBe('string');
       expect(typeof snapshot.markPrice).toBe('string');
       expect(typeof snapshot.takerLongNotional).toBe('string');
       expect(typeof snapshot.takerShortNotional).toBe('string');
       expect(typeof snapshot.fundingRate).toBe('string');
       
-      // Verify the values are reasonable
+      // Verify the values are reasonable after coercion
+      expect(Number(snapshot.timestamp)).toBeGreaterThan(0);
       expect(Number(snapshot.markPrice)).toBeGreaterThan(0);
       expect(Number(snapshot.takerLongNotional)).toBeGreaterThanOrEqual(0);
       expect(Number(snapshot.takerShortNotional)).toBeGreaterThanOrEqual(0);
@@ -157,8 +159,10 @@ describe('Goldsky API Connection Tests', () => {
     
     if (response.beaconSnapshots.length > 0) {
       const snapshot = response.beaconSnapshots[0];
-      expect(typeof snapshot.timestamp).toBe('bigint');
+      // Goldsky returns BigInt fields as strings, not actual bigints
+      expect(typeof snapshot.timestamp).toBe('string');
       expect(typeof snapshot.indexPrice).toBe('string');
+      expect(Number(snapshot.timestamp)).toBeGreaterThan(0);
       expect(Number(snapshot.indexPrice)).toBeGreaterThan(0);
     }
 

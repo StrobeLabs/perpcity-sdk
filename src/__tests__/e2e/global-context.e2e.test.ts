@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { createWalletClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
 import { PerpCityContext } from '../../context';
+import { getPerps } from '../../functions/perp-manager';
 import { 
   getPerpMark, 
   getPerpIndex, 
@@ -21,9 +22,9 @@ import {
 
 describe('PerpCityContext Batch Fetching E2E Tests', () => {
   let context: PerpCityContext;
-  let testPerpId: string;
+  let testPerpId: `0x${string}`;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     if (!process.env.GOLDSKY_BEARER_TOKEN) {
       throw new Error('GOLDSKY_BEARER_TOKEN is required for e2e tests');
     }
@@ -53,8 +54,13 @@ describe('PerpCityContext Batch Fetching E2E Tests', () => {
       },
     });
     
-    // Use a known perp ID for testing on Base Sepolia
-    testPerpId = '0x1234567890123456789012345678901234567890123456789012345678901234';
+    // Fetch a real perp ID from Goldsky at runtime
+    const perpIds = await getPerps(context);
+    if (perpIds.length === 0) {
+      throw new Error('No perps found in Goldsky - cannot run e2e tests. Create at least one perp first.');
+    }
+    testPerpId = perpIds[0];
+    console.log(`Using real perp ID for e2e tests: ${testPerpId}`);
   });
 
   describe('getPerpData', () => {
@@ -125,9 +131,9 @@ describe('PerpCityContext Batch Fetching E2E Tests', () => {
     }, 15000);
 
     it('should handle multiple perp data requests efficiently with true batching', async () => {
-      const perpIds = [
+      const perpIds: `0x${string}`[] = [
         testPerpId,
-        '0x7a6f376ed26ed212e84ab8b3bec9df5b9c8d1ca543f0527c48675131a4bf9bae',
+        '0x7a6f376ed26ed212e84ab8b3bec9df5b9c8d1ca543f0527c48675131a4bf9bae' as `0x${string}`,
       ];
 
       const startTime = Date.now();

@@ -6,6 +6,7 @@ import { parse } from "graphql";
 import { Address, Hex } from "viem";
 import { PerpData, UserData, OpenPositionData, LiveDetails, ClosedPosition, OpenInterest, TimeSeries, Bounds, Fees } from "./types/entity-data";
 import { scaleFrom6Decimals, sqrtPriceX96ToPrice, marginRatioToLeverage } from "./utils";
+import { withErrorHandling, GraphQLError, RPCError } from "./utils/errors";
 import { PERP_MANAGER_ABI } from "./abis/perp-manager";
 import { erc20Abi } from "viem";
 
@@ -36,127 +37,144 @@ export class PerpCityContext {
   // Optimized batch data fetching methods
 
   private async fetchPerpData(perpId: Hex): Promise<PerpData> {
-    // Batch all perp-related queries into a single GraphQL request
-    const perpQuery: TypedDocumentNode<{
-      perp: {
-        beacon: { id: Hex };
+    return withErrorHandling(async () => {
+      // Batch all perp-related queries into a single GraphQL request
+      const perpQuery: TypedDocumentNode<{
+        perp: {
+          beacon: { id: Hex };
+        };
+        perpSnapshots: {
+          timestamp: BigInt;
+          markPrice: string;
+          takerLongNotional: string;
+          takerShortNotional: string;
+          fundingRate: string;
+        }[];
+      }, { perpId: Hex }> = parse(`
+        query ($perpId: Bytes!) {
+          perp(id: $perpId) {
+            beacon { id }
+          }
+          perpSnapshots(
+            orderBy: timestamp
+            orderDirection: asc
+            where: { perp: $perpId }
+          ) {
+            timestamp
+            markPrice
+            takerLongNotional
+            takerShortNotional
+            fundingRate
+          }
+        }
+      `);
+
+      const beaconQuery: TypedDocumentNode<{
+        beaconSnapshots: {
+          timestamp: BigInt;
+          indexPrice: string;
+        }[];
+      }, { beaconAddr: Address }> = parse(`
+        query ($beaconAddr: Bytes!) {
+          beaconSnapshots(
+            orderBy: timestamp
+            orderDirection: asc
+            where: { beacon: $beaconAddr }
+          ) {
+            timestamp
+            indexPrice
+          }
+        }
+      `);
+
+      let perpResponse: any;
+      try {
+        // Execute first query to get beacon address
+        perpResponse = await this.goldskyClient.request(perpQuery, { perpId });
+      } catch (error) {
+        throw new GraphQLError(`Failed to fetch perp data for ${perpId}: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error : undefined);
+      }
+
+      if (!perpResponse.perp || !perpResponse.perp.beacon) {
+        throw new GraphQLError(`Perp ${perpId} not found or has no beacon`);
+      }
+
+      let beaconResponse: any;
+      let contractData: Awaited<ReturnType<typeof this.fetchPerpContractData>>;
+
+      try {
+        // Execute remaining queries in parallel
+        [beaconResponse, contractData] = await Promise.all([
+          this.goldskyClient.request(beaconQuery, { beaconAddr: perpResponse.perp.beacon.id }),
+          this.fetchPerpContractData(perpId),
+        ]);
+      } catch (error) {
+        if (error instanceof GraphQLError || error instanceof RPCError) {
+          throw error;
+        }
+        throw new GraphQLError(`Failed to fetch beacon or contract data: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error : undefined);
+      }
+
+      // Guard against empty snapshots for new perps
+      if (perpResponse.perpSnapshots.length === 0) {
+        throw new GraphQLError(`No perpSnapshots found for perp ${perpId}. This perp may be newly created with no trading activity yet.`);
+      }
+      if ((beaconResponse as any).beaconSnapshots.length === 0) {
+        throw new GraphQLError(`No beaconSnapshots found for perp ${perpId} beacon ${perpResponse.perp.beacon.id}. The beacon may not have any price updates yet.`);
+      }
+
+      // Process time series data
+      const markTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
+        timestamp: Number(snapshot.timestamp),
+        value: Number(formatUnits(BigInt(snapshot.markPrice), 6)),
+      }));
+
+      const indexTimeSeries: TimeSeries<number>[] = (beaconResponse as any).beaconSnapshots.map((snapshot: any) => ({
+        timestamp: Number(snapshot.timestamp),
+        value: Number(formatUnits(BigInt(snapshot.indexPrice), 6)),
+      }));
+
+      const openInterestTimeSeries: TimeSeries<OpenInterest>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
+        timestamp: Number(snapshot.timestamp),
+        value: {
+          takerLongNotional: Number(formatUnits(BigInt(snapshot.takerLongNotional), 6)),
+          takerShortNotional: Number(formatUnits(BigInt(snapshot.takerShortNotional), 6)),
+        },
+      }));
+
+      const fundingRateTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
+        timestamp: Number(snapshot.timestamp),
+        value: Number(formatUnits(BigInt(snapshot.fundingRate), 6)),
+      }));
+
+      // Get latest values (safe after guard check)
+      const latestSnapshot = perpResponse.perpSnapshots[perpResponse.perpSnapshots.length - 1];
+      const latestBeaconSnapshot = (beaconResponse as any).beaconSnapshots[(beaconResponse as any).beaconSnapshots.length - 1];
+
+      const perpData: PerpData = {
+        id: perpId,
+        tickSpacing: contractData.tickSpacing,
+        mark: sqrtPriceX96ToPrice(contractData.sqrtPriceX96),
+        index: Number(formatUnits(BigInt(latestBeaconSnapshot.indexPrice), 6)),
+        beacon: perpResponse.perp.beacon.id as Address,
+        lastIndexUpdate: Number(latestBeaconSnapshot.timestamp),
+        openInterest: {
+          takerLongNotional: Number(formatUnits(BigInt(latestSnapshot.takerLongNotional), 6)),
+          takerShortNotional: Number(formatUnits(BigInt(latestSnapshot.takerShortNotional), 6)),
+        },
+        markTimeSeries,
+        indexTimeSeries,
+        fundingRate: Number(formatUnits(BigInt(latestSnapshot.fundingRate), 6)),
+        bounds: contractData.bounds,
+        fees: contractData.fees,
+        openInterestTimeSeries,
+        fundingRateTimeSeries,
+        totalOpenMakerPnl: 0, // These will be calculated by functions
+        totalOpenTakerPnl: 0, // These will be calculated by functions
       };
-      perpSnapshots: {
-        timestamp: BigInt;
-        markPrice: string;
-        takerLongNotional: string;
-        takerShortNotional: string;
-        fundingRate: string;
-      }[];
-    }, { perpId: Hex }> = parse(`
-      query ($perpId: Bytes!) {
-        perp(id: $perpId) {
-          beacon { id }
-        }
-        perpSnapshots(
-          orderBy: timestamp
-          orderDirection: asc
-          where: { perp: $perpId }
-        ) {
-          timestamp
-          markPrice
-          takerLongNotional
-          takerShortNotional
-          fundingRate
-        }
-      }
-    `);
 
-    const beaconQuery: TypedDocumentNode<{
-      beaconSnapshots: {
-        timestamp: BigInt;
-        indexPrice: string;
-      }[];
-    }, { beaconAddr: Address }> = parse(`
-      query ($beaconAddr: Bytes!) {
-        beaconSnapshots(
-          orderBy: timestamp
-          orderDirection: asc
-          where: { beacon: $beaconAddr }
-        ) {
-          timestamp
-          indexPrice
-        }
-      }
-    `);
-
-    // Execute first query to get beacon address
-    const perpResponse: any = await this.goldskyClient.request(perpQuery, { perpId });
-    
-    if (!perpResponse.perp || !perpResponse.perp.beacon) {
-      throw new Error(`Perp ${perpId} not found or has no beacon`);
-    }
-    
-    // Execute remaining queries in parallel
-    const [beaconResponse, contractData] = await Promise.all([
-      this.goldskyClient.request(beaconQuery, { beaconAddr: perpResponse.perp.beacon.id }),
-      this.fetchPerpContractData(perpId),
-    ]);
-
-    // Guard against empty snapshots for new perps
-    if (perpResponse.perpSnapshots.length === 0) {
-      throw new Error(`No perpSnapshots found for perp ${perpId}. This perp may be newly created with no trading activity yet.`);
-    }
-    if ((beaconResponse as any).beaconSnapshots.length === 0) {
-      throw new Error(`No beaconSnapshots found for perp ${perpId} beacon ${perpResponse.perp.beacon.id}. The beacon may not have any price updates yet.`);
-    }
-
-    // Process time series data
-    const markTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
-      timestamp: Number(snapshot.timestamp),
-      value: Number(formatUnits(BigInt(snapshot.markPrice), 6)),
-    }));
-
-    const indexTimeSeries: TimeSeries<number>[] = (beaconResponse as any).beaconSnapshots.map((snapshot: any) => ({
-      timestamp: Number(snapshot.timestamp),
-      value: Number(formatUnits(BigInt(snapshot.indexPrice), 6)),
-    }));
-
-    const openInterestTimeSeries: TimeSeries<OpenInterest>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
-      timestamp: Number(snapshot.timestamp),
-      value: {
-        takerLongNotional: Number(formatUnits(BigInt(snapshot.takerLongNotional), 6)),
-        takerShortNotional: Number(formatUnits(BigInt(snapshot.takerShortNotional), 6)),
-      },
-    }));
-
-    const fundingRateTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
-      timestamp: Number(snapshot.timestamp),
-      value: Number(formatUnits(BigInt(snapshot.fundingRate), 6)),
-    }));
-
-    // Get latest values (safe after guard check)
-    const latestSnapshot = perpResponse.perpSnapshots[perpResponse.perpSnapshots.length - 1];
-    const latestBeaconSnapshot = (beaconResponse as any).beaconSnapshots[(beaconResponse as any).beaconSnapshots.length - 1];
-    
-    const perpData: PerpData = {
-      id: perpId,
-      tickSpacing: contractData.tickSpacing,
-      mark: sqrtPriceX96ToPrice(contractData.sqrtPriceX96),
-      index: Number(formatUnits(BigInt(latestBeaconSnapshot.indexPrice), 6)),
-      beacon: perpResponse.perp.beacon.id as Address,
-      lastIndexUpdate: Number(latestBeaconSnapshot.timestamp),
-      openInterest: {
-        takerLongNotional: Number(formatUnits(BigInt(latestSnapshot.takerLongNotional), 6)),
-        takerShortNotional: Number(formatUnits(BigInt(latestSnapshot.takerShortNotional), 6)),
-      },
-      markTimeSeries,
-      indexTimeSeries,
-      fundingRate: Number(formatUnits(BigInt(latestSnapshot.fundingRate), 6)),
-      bounds: contractData.bounds,
-      fees: contractData.fees,
-      openInterestTimeSeries,
-      fundingRateTimeSeries,
-      totalOpenMakerPnl: 0, // These will be calculated by functions
-      totalOpenTakerPnl: 0, // These will be calculated by functions
-    };
-
-    return perpData;
+      return perpData;
+    }, `fetchPerpData for perp ${perpId}`);
   }
 
   private async fetchPerpContractData(perpId: Hex): Promise<{
@@ -165,51 +183,53 @@ export class PerpCityContext {
     bounds: Bounds;
     fees: Fees;
   }> {
-    const [tickSpacing, sqrtPriceX96, boundsRaw, feesRaw] = await Promise.all([
-      this.walletClient.readContract({
-        address: this.deployments().perpManager,
-        abi: PERP_MANAGER_ABI,
-        functionName: 'tickSpacing',
-        args: [perpId]
-      }),
-      this.walletClient.readContract({
-        address: this.deployments().perpManager,
-        abi: PERP_MANAGER_ABI,
-        functionName: 'sqrtPriceX96',
-        args: [perpId]
-      }),
-      this.walletClient.readContract({
-        address: this.deployments().perpManager,
-        abi: PERP_MANAGER_ABI,
-        functionName: 'tradingBounds',
-        args: [perpId]
-      }),
-      this.walletClient.readContract({
-        address: this.deployments().perpManager,
-        abi: PERP_MANAGER_ABI,
-        functionName: 'fees',
-        args: [perpId]
-      }),
-    ]);
+    return withErrorHandling(async () => {
+      const [tickSpacing, sqrtPriceX96, boundsRaw, feesRaw] = await Promise.all([
+        this.walletClient.readContract({
+          address: this.deployments().perpManager,
+          abi: PERP_MANAGER_ABI,
+          functionName: 'tickSpacing',
+          args: [perpId]
+        }),
+        this.walletClient.readContract({
+          address: this.deployments().perpManager,
+          abi: PERP_MANAGER_ABI,
+          functionName: 'sqrtPriceX96',
+          args: [perpId]
+        }),
+        this.walletClient.readContract({
+          address: this.deployments().perpManager,
+          abi: PERP_MANAGER_ABI,
+          functionName: 'tradingBounds',
+          args: [perpId]
+        }),
+        this.walletClient.readContract({
+          address: this.deployments().perpManager,
+          abi: PERP_MANAGER_ABI,
+          functionName: 'fees',
+          args: [perpId]
+        }),
+      ]);
 
-    const bounds = boundsRaw as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint];
-    const fees = feesRaw as unknown as readonly [bigint, bigint, bigint, bigint];
+      const bounds = boundsRaw as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint];
+      const fees = feesRaw as unknown as readonly [bigint, bigint, bigint, bigint];
 
-    return {
-      tickSpacing: Number(tickSpacing),
-      sqrtPriceX96: sqrtPriceX96 as bigint,
-      bounds: {
-        minMargin: Number(formatUnits(bounds[0], 6)),
-        minTakerLeverage: marginRatioToLeverage(Number(formatUnits(bounds[4], 6))),
-        maxTakerLeverage: marginRatioToLeverage(Number(formatUnits(bounds[5], 6))),
-      },
-      fees: {
-        creatorFee: Number(formatUnits(fees[0], 6)),
-        insuranceFee: Number(formatUnits(fees[1], 6)),
-        lpFee: Number(formatUnits(fees[2], 6)),
-        liquidationFee: Number(formatUnits(fees[3], 6)),
-      },
-    };
+      return {
+        tickSpacing: Number(tickSpacing),
+        sqrtPriceX96: sqrtPriceX96 as bigint,
+        bounds: {
+          minMargin: Number(formatUnits(bounds[0], 6)),
+          minTakerLeverage: marginRatioToLeverage(Number(formatUnits(bounds[4], 6))),
+          maxTakerLeverage: marginRatioToLeverage(Number(formatUnits(bounds[5], 6))),
+        },
+        fees: {
+          creatorFee: Number(formatUnits(fees[0], 6)),
+          insuranceFee: Number(formatUnits(fees[1], 6)),
+          lpFee: Number(formatUnits(fees[2], 6)),
+          liquidationFee: Number(formatUnits(fees[3], 6)),
+        },
+      };
+    }, `fetchPerpContractData for perp ${perpId}`);
   }
 
   /**
@@ -538,24 +558,26 @@ export class PerpCityContext {
   }
 
   private async fetchPositionLiveDetailsFromContract(perpId: Hex, positionId: bigint): Promise<LiveDetails> {
-    const publicClient = this.walletClient.extend(publicActions);
-    const result = await publicClient.simulateContract({
-      address: this.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: 'livePositionDetails',
-      args: [perpId, positionId],
-      account: this.walletClient.account,
-    });
+    return withErrorHandling(async () => {
+      const publicClient = this.walletClient.extend(publicActions);
+      const result = await publicClient.simulateContract({
+        address: this.deployments().perpManager,
+        abi: PERP_MANAGER_ABI,
+        functionName: 'livePositionDetails',
+        args: [perpId, positionId],
+        account: this.walletClient.account,
+      });
 
-    // Use formatUnits to safely convert bigint to decimal, then parse to number
-    // The result.result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
-    const values = result.result;
-    return {
-      pnl: Number(formatUnits(values[0] as bigint, 6)),
-      fundingPayment: Number(formatUnits(values[1] as bigint, 6)),
-      effectiveMargin: Number(formatUnits(values[2] as bigint, 6)),
-      isLiquidatable: values[3] as boolean,
-    };
+      // Use formatUnits to safely convert bigint to decimal, then parse to number
+      // The result.result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
+      const values = result.result;
+      return {
+        pnl: Number(formatUnits(values[0] as bigint, 6)),
+        fundingPayment: Number(formatUnits(values[1] as bigint, 6)),
+        effectiveMargin: Number(formatUnits(values[2] as bigint, 6)),
+        isLiquidatable: values[3] as boolean,
+      };
+    }, `fetchPositionLiveDetailsFromContract for position ${positionId}`);
   }
 
   /**

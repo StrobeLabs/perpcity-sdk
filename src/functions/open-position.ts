@@ -31,7 +31,8 @@ export class OpenPosition {
       };
 
       // Simulate the transaction first - this will catch contract errors early
-      const { request } = await this.context.walletClient.extend(publicActions).simulateContract({
+      // and get the return value (new position ID for partial closes, or null for full closes)
+      const { result, request } = await this.context.walletClient.extend(publicActions).simulateContract({
         address: this.context.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
         functionName: 'closePosition',
@@ -51,15 +52,14 @@ export class OpenPosition {
         throw new Error(`Transaction reverted. Hash: ${txHash}`);
       }
 
-      // Extract the new position ID from transaction events
-      // For partial closes, a new PositionOpened event is emitted with the new position ID
-      // For full closes, only PositionClosed is emitted
-      let newPositionId: bigint | null = null;
-      let positionWasClosed = false;
+      // Initialize newPositionId from simulation result
+      // The contract returns the new position ID for partial closes, or 0 for full closes
+      let newPositionId: bigint | null = result && result !== 0n ? result : null;
 
+      // Scan transaction events to confirm if this was a full close
+      // If PositionClosed event is found for this perpId/posId, it's a full close
       for (const log of receipt.logs) {
         try {
-          // Check for PositionClosed event
           const closedDecoded = decodeEventLog({
             abi: PERP_MANAGER_ABI,
             data: log.data,
@@ -67,32 +67,19 @@ export class OpenPosition {
             eventName: 'PositionClosed',
           });
 
+          // If this position was fully closed, set newPositionId to null
           if (closedDecoded.args.perpId === this.perpId && closedDecoded.args.posId === this.positionId) {
-            positionWasClosed = true;
+            newPositionId = null;
+            break;
           }
         } catch (e) {
-          // Not a PositionClosed event, try PositionOpened
-          try {
-            const openedDecoded = decodeEventLog({
-              abi: PERP_MANAGER_ABI,
-              data: log.data,
-              topics: log.topics,
-              eventName: 'PositionOpened',
-            });
-
-            // For partial closes, a new position is opened with a new ID
-            if (openedDecoded.args.perpId === this.perpId) {
-              newPositionId = openedDecoded.args.posId;
-            }
-          } catch (e2) {
-            // Skip logs that aren't relevant events
-            continue;
-          }
+          // Not a PositionClosed event, skip
+          continue;
         }
       }
 
-      // If no new position was opened, this was a full close
-      if (!newPositionId || newPositionId === 0n) {
+      // If no new position ID, this was a full close
+      if (!newPositionId) {
         return null;
       }
 

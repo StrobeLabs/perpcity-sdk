@@ -166,4 +166,44 @@ describe('parseContractError', () => {
     expect(result.message).toContain('Swap failed');
     expect(result.message).toContain('insufficient liquidity or slippage');
   });
+
+  it('should parse BaseError with "User rejected the request" as TransactionRejectedError', () => {
+    const mockError = new BaseError('User rejected the request');
+    (mockError as any).walk = () => null;
+
+    const result = parseContractError(mockError);
+    expect(result).toBeInstanceOf(TransactionRejectedError);
+    expect(result.message).toContain('User rejected the request');
+  });
+
+  it('should parse BaseError with code 4001 as TransactionRejectedError', () => {
+    const mockError = new BaseError('Transaction was rejected');
+    (mockError as any).code = 4001;
+    (mockError as any).walk = () => null;
+
+    const result = parseContractError(mockError);
+    expect(result).toBeInstanceOf(TransactionRejectedError);
+  });
+
+  it('should parse BaseError with "insufficient funds" as InsufficientFundsError', () => {
+    const mockError = new BaseError('insufficient funds for gas * price + value');
+    (mockError as any).walk = () => null;
+
+    const result = parseContractError(mockError);
+    expect(result).toBeInstanceOf(InsufficientFundsError);
+    expect(result.message).toContain('insufficient funds');
+  });
+
+  it('should parse BaseError without ContractFunctionRevertedError as PerpCityError', () => {
+    const mockError = new BaseError('Generic RPC error', {
+      details: 'Connection timeout',
+    });
+    (mockError as any).shortMessage = 'RPC request failed';
+    (mockError as any).walk = () => null;
+
+    const result = parseContractError(mockError);
+    expect(result).toBeInstanceOf(PerpCityError);
+    expect(result).not.toBeInstanceOf(ContractError);
+    expect(result.message).toBe('RPC request failed');
+  });
 });

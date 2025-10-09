@@ -553,7 +553,7 @@ export class PerpCityContext {
       perpId: position.perp.id as Hex,
       wasMaker: position.wasMaker as boolean,
       wasLong: position.wasLong as boolean,
-      pnlAtClose: Number(position.pnlAtClose),
+      pnlAtClose: Number(formatUnits(BigInt(position.pnlAtClose), 6)),
     }));
   }
 
@@ -614,11 +614,19 @@ export class PerpCityContext {
 
     const position = (positionResponse as any).openPositions[0];
 
+    // Handle missing position data - GraphQL may return empty array if position doesn't exist
+    if (!position) {
+      throw new Error(
+        `Position not found in GraphQL: perpId=${perpId}, positionId=${positionId}. ` +
+        `The position may not exist or may have been closed.`
+      );
+    }
+
     return {
       perpId,
       positionId,
-      isLong: position?.isLong,
-      isMaker: position?.isMaker,
+      isLong: position.isLong,
+      isMaker: position.isMaker,
       liveDetails,
     };
   }

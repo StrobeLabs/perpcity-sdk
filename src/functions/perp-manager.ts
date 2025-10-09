@@ -2,7 +2,7 @@ import { PerpCityContext } from "../context";
 import { priceToSqrtPriceX96 } from "../utils";
 import { withErrorHandling, GraphQLError } from "../utils/errors";
 import type { Address, Hex } from "viem";
-import { publicActions } from "viem";
+import { publicActions, decodeEventLog } from "viem";
 import { gql } from "graphql-request";
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 import { parse } from 'graphql';
@@ -34,7 +34,7 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
       beacon: params.beacon,
     };
 
-    const { result, request } = await context.walletClient.simulateContract({
+    const { request } = await context.walletClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: 'createPerp',
@@ -54,7 +54,24 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
       throw new Error(`Transaction reverted. Hash: ${txHash}`);
     }
 
-    // Return the perp ID from the simulation result (pool ID)
-    return result as Hex;
+    // Extract perpId from PerpCreated event
+    for (const log of receipt.logs) {
+      try {
+        const decoded = decodeEventLog({
+          abi: PERP_MANAGER_ABI,
+          data: log.data,
+          topics: log.topics,
+          eventName: 'PerpCreated',
+        });
+
+        // Return the perpId from the event
+        return decoded.args.perpId as Hex;
+      } catch (e) {
+        // Skip logs that aren't PerpCreated event
+        continue;
+      }
+    }
+
+    throw new Error('PerpCreated event not found in transaction receipt');
   }, "createPerp");
 }

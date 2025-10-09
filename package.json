@@ -12,22 +12,30 @@
   ],
   "scripts": {
     "build": "tsup",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "example-create-perp": "tsx -r dotenv/config examples/create-perp.ts",
     "example-maker": "tsx -r dotenv/config examples/maker.ts",
     "example-taker": "tsx -r dotenv/config examples/taker.ts",
     "example-close": "tsx -r dotenv/config examples/close.ts",
-    "example-view": "tsx -r dotenv/config examples/view.ts"
+    "example-view": "tsx -r dotenv/config examples/view.ts",
+    "example-optimized": "tsx -r dotenv/config examples/optimized-view.ts"
   },
   "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0",
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "@vitest/ui": "^3.2.4",
     "dotenv": "^17.2.2",
     "tsup": "^8.5.0",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@graphql-typed-document-node/core": "^3.2.0",
+    "@isaacs/ttlcache": "^1.4.1",
     "@uniswap/v3-sdk": "^3.25.2",
     "graphql": "^16.11.0",
     "graphql-request": "^7.2.0",

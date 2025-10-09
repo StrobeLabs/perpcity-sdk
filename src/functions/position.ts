@@ -1,4 +1,4 @@
-import { Hex } from "viem";
+import { Hex, formatUnits } from "viem";
 import { publicActions } from "viem";
 import { PerpCityContext } from "../context";
 import { scale6Decimals, scaleFrom6Decimals } from "../utils";
@@ -91,10 +91,11 @@ export async function getPositionLiveDetailsFromContract(
     account: context.walletClient.account,
   });
 
+  // Use formatUnits to safely convert bigint to decimal string, then parse to number
   return {
-    pnl: scaleFrom6Decimals(Number(result[0])),
-    fundingPayment: scaleFrom6Decimals(Number(result[1])),
-    effectiveMargin: scaleFrom6Decimals(Number(result[2])),
-    isLiquidatable: result[3],
+    pnl: Number(formatUnits(result[0] as bigint, 6)),
+    fundingPayment: Number(formatUnits(result[1] as bigint, 6)),
+    effectiveMargin: Number(formatUnits(result[2] as bigint, 6)),
+    isLiquidatable: result[3] as boolean,
   };
 }

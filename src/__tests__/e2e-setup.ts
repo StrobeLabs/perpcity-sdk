@@ -9,4 +9,7 @@ beforeAll(() => {
   if (!process.env.GOLDSKY_BEARER_TOKEN) {
     throw new Error('GOLDSKY_BEARER_TOKEN is required for e2e tests. Please set it in .env.local');
   }
+  if (!process.env.GOLDSKY_ENDPOINT) {
+    throw new Error('GOLDSKY_ENDPOINT is required for e2e tests. Please set it in .env.local');
+  }
 });

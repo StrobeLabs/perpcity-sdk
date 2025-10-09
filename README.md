@@ -152,7 +152,7 @@ const closedPosition = await position.closePosition({
 
 ```typescript
 // Fetch comprehensive user data
-const userData = await globalContext.getUserData(userAddress);
+const userData = await context.getUserData(userAddress);
 
 console.log(userData.usdcBalance);
 console.log(userData.openPositions);

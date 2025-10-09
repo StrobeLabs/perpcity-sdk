@@ -1,5 +1,5 @@
 import { GraphQLClient } from 'graphql-request'
-import { publicActions } from "viem";
+import { publicActions, formatUnits } from "viem";
 import { PerpCityContextConfig, PerpCityDeployments } from "./types";
 import { TypedDocumentNode } from "@graphql-typed-document-node/core";
 import { parse } from "graphql";
@@ -192,22 +192,22 @@ export class PerpCityContext {
       }),
     ]);
 
-    const bounds = boundsRaw as unknown as readonly [bigint, bigint, bigint];
+    const bounds = boundsRaw as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint];
     const fees = feesRaw as unknown as readonly [bigint, bigint, bigint, bigint];
 
     return {
       tickSpacing: Number(tickSpacing),
       sqrtPriceX96: sqrtPriceX96 as bigint,
       bounds: {
-        minMargin: scaleFrom6Decimals(Number(bounds[0])),
-        minTakerLeverage: marginRatioToLeverage(scaleFrom6Decimals(Number(bounds[1]))),
-        maxTakerLeverage: marginRatioToLeverage(scaleFrom6Decimals(Number(bounds[2]))),
+        minMargin: Number(formatUnits(bounds[0], 6)),
+        minTakerLeverage: marginRatioToLeverage(Number(formatUnits(bounds[4], 6))),
+        maxTakerLeverage: marginRatioToLeverage(Number(formatUnits(bounds[5], 6))),
       },
       fees: {
-        creatorFee: scaleFrom6Decimals(Number(fees[0])),
-        insuranceFee: scaleFrom6Decimals(Number(fees[1])),
-        lpFee: scaleFrom6Decimals(Number(fees[2])),
-        liquidationFee: scaleFrom6Decimals(Number(fees[3])),
+        creatorFee: Number(formatUnits(fees[0], 6)),
+        insuranceFee: Number(formatUnits(fees[1], 6)),
+        lpFee: Number(formatUnits(fees[2], 6)),
+        liquidationFee: Number(formatUnits(fees[3], 6)),
       },
     };
   }
@@ -450,7 +450,7 @@ export class PerpCityContext {
 
     return {
       walletAddress: userAddress,
-      usdcBalance: scaleFrom6Decimals(Number(usdcBalance)),
+      usdcBalance: Number(formatUnits(usdcBalance, 6)),
       openPositions: openPositionsData,
       closedPositions: closedPositionsData,
       realizedPnl,
@@ -571,7 +571,7 @@ export class PerpCityContext {
         isLong: boolean;
         isMaker: boolean;
       }[];
-    }, { perpId: Hex; posId: bigint }> = parse(`
+    }, { perpId: Hex; posId: string }> = parse(`
       query ($perpId: Bytes!, $posId: BigInt!) {
         openPositions(
           where: { perp: $perpId, inContractPosId: $posId }
@@ -584,7 +584,7 @@ export class PerpCityContext {
     `);
 
     const [positionResponse, liveDetails] = await Promise.all([
-      this.goldskyClient.request(query, { perpId, posId: positionId }),
+      this.goldskyClient.request(query, { perpId, posId: positionId.toString() }),
       this.fetchPositionLiveDetailsFromContract(perpId, positionId),
     ]);
 

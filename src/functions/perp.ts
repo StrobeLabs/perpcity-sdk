@@ -69,6 +69,8 @@ export async function getAllMakerPositions(
       ) {
         perp { id }
         inContractPosId
+        isLong
+        isMaker
       }
     }
   `;
@@ -76,7 +78,13 @@ export async function getAllMakerPositions(
   const response: any = await context.goldskyClient.request(query, { perpId });
   
   return response.openPositions.map((position: any) => 
-    new OpenPosition(context, position.perp.id, position.inContractPosId)
+    new OpenPosition(
+      context, 
+      position.perp.id, 
+      BigInt(position.inContractPosId),
+      position.isLong,
+      position.isMaker
+    )
   );
 }
 
@@ -91,6 +99,8 @@ export async function getAllTakerPositions(
       ) {
         perp { id }
         inContractPosId
+        isLong
+        isMaker
       }
     }
   `;
@@ -98,7 +108,13 @@ export async function getAllTakerPositions(
   const response: any = await context.goldskyClient.request(query, { perpId });
   
   return response.openPositions.map((position: any) => 
-    new OpenPosition(context, position.perp.id, position.inContractPosId)
+    new OpenPosition(
+      context, 
+      position.perp.id, 
+      BigInt(position.inContractPosId),
+      position.isLong,
+      position.isMaker
+    )
   );
 }
 

@@ -66,12 +66,6 @@ export async function closePosition(
       account: context.walletClient.account,
     });
 
-    // Check simulation result before executing transaction
-    // If result is null or 0, this is a full close - return early without executing
-    if (result === null || result === 0n) {
-      return null;
-    }
-
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for transaction confirmation
@@ -85,6 +79,7 @@ export async function closePosition(
 
     // Extract actual positionId from transaction receipt logs
     // For partial closes, a PositionOpened event is emitted with the new position ID
+    // For full closes, no PositionOpened event will be present
     let newPositionId: bigint | null = null;
 
     for (const log of receipt.logs) {
@@ -107,9 +102,9 @@ export async function closePosition(
       }
     }
 
-    // If no PositionOpened event found, something went wrong
+    // If no PositionOpened event found, this was a full close - return null
     if (!newPositionId) {
-      throw new Error(`PositionOpened event not found in transaction receipt for partial close. Hash: ${txHash}`);
+      return null;
     }
 
     // Return the updated position data with actual on-chain position ID

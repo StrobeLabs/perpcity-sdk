@@ -126,25 +126,25 @@ export class PerpCityContext {
       // Process time series data
       const markTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(formatUnits(BigInt(snapshot.markPrice), 6)),
+        value: Number(snapshot.markPrice),
       }));
 
       const indexTimeSeries: TimeSeries<number>[] = (beaconResponse as any).beaconSnapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(formatUnits(BigInt(snapshot.indexPrice), 6)),
+        value: Number(snapshot.indexPrice),
       }));
 
       const openInterestTimeSeries: TimeSeries<OpenInterest>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
         value: {
-          takerLongNotional: Number(formatUnits(BigInt(snapshot.takerLongNotional), 6)),
-          takerShortNotional: Number(formatUnits(BigInt(snapshot.takerShortNotional), 6)),
+          takerLongNotional: Number(snapshot.takerLongNotional),
+          takerShortNotional: Number(snapshot.takerShortNotional),
         },
       }));
 
       const fundingRateTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(formatUnits(BigInt(snapshot.fundingRate), 6)),
+        value: Number(snapshot.fundingRate),
       }));
 
       // Get latest values (safe after guard check)
@@ -155,16 +155,16 @@ export class PerpCityContext {
         id: perpId,
         tickSpacing: contractData.tickSpacing,
         mark: sqrtPriceX96ToPrice(contractData.sqrtPriceX96),
-        index: Number(formatUnits(BigInt(latestBeaconSnapshot.indexPrice), 6)),
+        index: Number(latestBeaconSnapshot.indexPrice),
         beacon: perpResponse.perp.beacon.id as Address,
         lastIndexUpdate: Number(latestBeaconSnapshot.timestamp),
         openInterest: {
-          takerLongNotional: Number(formatUnits(BigInt(latestSnapshot.takerLongNotional), 6)),
-          takerShortNotional: Number(formatUnits(BigInt(latestSnapshot.takerShortNotional), 6)),
+          takerLongNotional: Number(latestSnapshot.takerLongNotional),
+          takerShortNotional: Number(latestSnapshot.takerShortNotional),
         },
         markTimeSeries,
         indexTimeSeries,
-        fundingRate: Number(formatUnits(BigInt(latestSnapshot.fundingRate), 6)),
+        fundingRate: Number(latestSnapshot.fundingRate),
         bounds: contractData.bounds,
         fees: contractData.fees,
         openInterestTimeSeries,
@@ -380,25 +380,25 @@ export class PerpCityContext {
       // Process time series data
       const markTimeSeries: TimeSeries<number>[] = snapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(formatUnits(BigInt(snapshot.markPrice), 6)),
+        value: Number(snapshot.markPrice),
       }));
 
       const indexTimeSeries: TimeSeries<number>[] = beaconSnapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(formatUnits(BigInt(snapshot.indexPrice), 6)),
+        value: Number(snapshot.indexPrice),
       }));
 
       const openInterestTimeSeries: TimeSeries<OpenInterest>[] = snapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
         value: {
-          takerLongNotional: Number(formatUnits(BigInt(snapshot.takerLongNotional), 6)),
-          takerShortNotional: Number(formatUnits(BigInt(snapshot.takerShortNotional), 6)),
+          takerLongNotional: Number(snapshot.takerLongNotional),
+          takerShortNotional: Number(snapshot.takerShortNotional),
         },
       }));
 
       const fundingRateTimeSeries: TimeSeries<number>[] = snapshots.map((snapshot: any) => ({
         timestamp: Number(snapshot.timestamp),
-        value: Number(formatUnits(BigInt(snapshot.fundingRate), 6)),
+        value: Number(snapshot.fundingRate),
       }));
 
       // Get latest values
@@ -409,16 +409,16 @@ export class PerpCityContext {
         id: perpId,
         tickSpacing: contractData.tickSpacing,
         mark: sqrtPriceX96ToPrice(contractData.sqrtPriceX96),
-        index: Number(formatUnits(BigInt(latestBeaconSnapshot.indexPrice), 6)),
+        index: Number(latestBeaconSnapshot.indexPrice),
         beacon: beaconId,
         lastIndexUpdate: Number(latestBeaconSnapshot.timestamp),
         openInterest: {
-          takerLongNotional: Number(formatUnits(BigInt(latestSnapshot.takerLongNotional), 6)),
-          takerShortNotional: Number(formatUnits(BigInt(latestSnapshot.takerShortNotional), 6)),
+          takerLongNotional: Number(latestSnapshot.takerLongNotional),
+          takerShortNotional: Number(latestSnapshot.takerShortNotional),
         },
         markTimeSeries,
         indexTimeSeries,
-        fundingRate: Number(formatUnits(BigInt(latestSnapshot.fundingRate), 6)),
+        fundingRate: Number(latestSnapshot.fundingRate),
         bounds: contractData.bounds,
         fees: contractData.fees,
         openInterestTimeSeries,
@@ -553,7 +553,7 @@ export class PerpCityContext {
       perpId: position.perp.id as Hex,
       wasMaker: position.wasMaker as boolean,
       wasLong: position.wasLong as boolean,
-      pnlAtClose: Number(formatUnits(BigInt(position.pnlAtClose), 6)),
+      pnlAtClose: Number(position.pnlAtClose),
     }));
   }
 

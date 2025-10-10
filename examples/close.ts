@@ -24,9 +24,10 @@ export async function closePosition(position: OpenPosition) : Promise<OpenPositi
 }
 
 async function main() {
-  const perpManager = setup();
-  const position = new OpenPosition(perpManager.context, "0x54303321d74c230d38db7044fd45acb97de380e5c7923858cb66d714c4f2a65c", 6n);
+  const { context, perpId } = setup();
+  // Example: closing position with ID 6
+  const position = new OpenPosition(context, perpId, 6n);
   await closePosition(position);
 }
-  
+
 main();

@@ -1,59 +1,50 @@
 import { setup } from './setup';
-import { Perp, OpenPosition } from '../dist';
+import { openTakerPosition } from '../src/functions/perp-manager';
+import { OpenPosition } from '../src/functions/open-position';
+import type { Hex } from 'viem';
 
-export async function openTakerLongPosition(perp: Perp) : Promise<OpenPosition> {
-  const params = {
+export async function openTakerLongPosition(context: any, perpId: Hex): Promise<OpenPosition> {
+  console.log('Opening taker long position...');
+
+  const longPosition = await openTakerPosition(context, perpId, {
     isLong: true,
     margin: 25,
     leverage: 1,
-    unspecifiedAmountLimit: 0
-  };
-
-  const results = await perp.simulateTaker(params);
-  if (!results.success) {
-    throw new Error('Failed to simulate taker position');
-  }
-  console.log('Taker Long Position Simulated');
-  console.log(results);
-
-  const takerPosition = await perp.approveAndOpenTakerPosition(params);
+    unspecifiedAmountLimit: 0,
+  });
 
   console.log('Taker Long Position Opened');
-  console.log('Taker Long Position ID:', takerPosition.positionId);
+  console.log('Position ID:', longPosition.positionId.toString());
   console.log();
 
-  return takerPosition;
+  return longPosition;
 }
 
-export async function openTakerShortPosition(perp: Perp) : Promise<OpenPosition> {
-  const params = {
+export async function openTakerShortPosition(context: any, perpId: Hex): Promise<OpenPosition> {
+  console.log('Opening taker short position...');
+
+  const shortPosition = await openTakerPosition(context, perpId, {
     isLong: false,
     margin: 25,
     leverage: 1,
-    unspecifiedAmountLimit: 1000000
-  };
-  
-  const results = await perp.simulateTaker(params);
-  if (!results.success) {
-    throw new Error('Failed to simulate taker position');
-  }
-  console.log('Taker Long Position Simulated');
-  console.log(results);
-
-  const takerPosition = await perp.approveAndOpenTakerPosition(params);
+    unspecifiedAmountLimit: 1000000,
+  });
 
   console.log('Taker Short Position Opened');
-  console.log('Taker Short Position ID:', takerPosition.positionId);
+  console.log('Position ID:', shortPosition.positionId.toString());
   console.log();
 
-  return takerPosition;
+  return shortPosition;
 }
 
 async function main() {
-  const perpManager = setup();
-  const perp = new Perp(perpManager.context, "0x7a6f376ed26ed212e84ab8b3bec9df5b9c8d1ca543f0527c48675131a4bf9bae");
-  await openTakerLongPosition(perp);
-  await openTakerShortPosition(perp);
+  const { context, perpId } = setup();
+
+  // Open long position
+  await openTakerLongPosition(context, perpId);
+
+  // Open short position
+  await openTakerShortPosition(context, perpId);
 }
 
 main();

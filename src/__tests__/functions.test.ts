@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { 
-  getPerpMark, 
-  getPerpIndex, 
-  getPerpBeacon, 
+import {
+  getPerpMark,
+  getPerpIndex,
+  getPerpBeacon,
   getPerpOpenInterest,
   getPerpBounds,
   getPerpFees,
@@ -13,17 +13,18 @@ import {
   getPerpFundingRateTimeSeries,
   getPerpTickSpacing
 } from '../functions/perp';
-import { 
-  getUserUsdcBalance, 
-  getUserOpenPositions, 
+import {
+  getUserUsdcBalance,
+  getUserOpenPositions,
   getUserRealizedPnl,
-  getUserUnrealizedPnl 
+  getUserUnrealizedPnl
 } from '../functions/user';
-import { 
-  getPositionPnl, 
+import {
+  getPositionPnl,
   getPositionFundingPayment,
-  getPositionIsLiquidatable 
+  getPositionIsLiquidatable
 } from '../functions/position';
+import { openTakerPosition, openMakerPosition } from '../functions/perp-manager';
 import { PerpData, UserData, OpenPositionData } from '../types/entity-data';
 
 describe('Perp Functions', () => {
@@ -193,5 +194,23 @@ describe('Position Functions', () => {
 
   it('should extract liquidation status', () => {
     expect(getPositionIsLiquidatable(mockPositionData)).toBe(false);
+  });
+});
+
+describe('Position Opening Functions', () => {
+  it('openTakerPosition should be a function', () => {
+    expect(typeof openTakerPosition).toBe('function');
+  });
+
+  it('openMakerPosition should be a function', () => {
+    expect(typeof openMakerPosition).toBe('function');
+  });
+
+  it('openTakerPosition should have correct signature', () => {
+    expect(openTakerPosition.length).toBe(3); // context, perpId, params
+  });
+
+  it('openMakerPosition should have correct signature', () => {
+    expect(openMakerPosition.length).toBe(3); // context, perpId, params
   });
 });

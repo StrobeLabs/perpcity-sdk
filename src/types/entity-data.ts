@@ -43,6 +43,22 @@ export type ClosePositionParams = {
   maxAmt1In: number;
 }
 
+export type OpenTakerPositionParams = {
+  isLong: boolean;          // true = long, false = short
+  margin: number;           // USDC amount in human units (e.g., 100 = $100)
+  leverage: number;         // Leverage multiplier (e.g., 2 = 2x)
+  unspecifiedAmountLimit: number; // Slippage protection
+}
+
+export type OpenMakerPositionParams = {
+  margin: number;           // USDC margin in human units
+  priceLower: number;       // Lower price bound
+  priceUpper: number;       // Upper price bound
+  liquidity: bigint;        // Liquidity amount (calculated externally)
+  maxAmt0In: number;        // Max perp tokens
+  maxAmt1In: number;        // Max USDC
+}
+
 export type CreatePerpParams = {
   startingPrice: number;
   beacon: Address;

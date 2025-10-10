@@ -1,10 +1,11 @@
 import 'dotenv/config';
-import { PerpCityContext, PerpManager } from "../dist";
+import { PerpCityContext } from "../dist";
 import { createWalletClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from 'viem/accounts';
+import type { Hex } from 'viem';
 
-export function setup() : PerpManager {
+export function setup(): { context: PerpCityContext; perpId: Hex } {
   if (!process.env['RPC_URL']) {
     throw new Error(`Missing required env var: RPC_URL`);
   }
@@ -23,6 +24,9 @@ export function setup() : PerpManager {
   if (!process.env['USDC_ADDRESS']) {
     throw new Error(`Missing required env var: USDC_ADDRESS`);
   }
+  if (!process.env['PERP_ID']) {
+    throw new Error(`Missing required env var: PERP_ID`);
+  }
 
   const walletClient = createWalletClient({
     chain: baseSepolia,
@@ -30,7 +34,7 @@ export function setup() : PerpManager {
     account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
   })
 
-  const ctx = new PerpCityContext({
+  const context = new PerpCityContext({
     walletClient: walletClient,
     goldskyBearerToken: process.env.GOLDSKY_BEARER_TOKEN,
     goldskyEndpoint: process.env.GOLDSKY_ENDPOINT,
@@ -40,5 +44,8 @@ export function setup() : PerpManager {
     },
   });
 
-  return new PerpManager(ctx);
+  return {
+    context,
+    perpId: process.env.PERP_ID as Hex,
+  };
 }

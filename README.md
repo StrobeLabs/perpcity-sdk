@@ -58,6 +58,84 @@ const context = new PerpCityContext({
 });
 ```
 
+## Usage with Wagmi (React + Privy)
+
+The SDK is fully compatible with [wagmi](https://wagmi.sh) and works seamlessly with [Privy](https://privy.io) wallets.
+
+### Setup
+
+```tsx
+import { WagmiProvider, createConfig, http } from 'wagmi';
+import { PrivyProvider } from '@privy-io/react-auth';
+import { baseSepolia } from 'wagmi/chains';
+
+// Configure wagmi
+const wagmiConfig = createConfig({
+  chains: [baseSepolia],
+  transports: {
+    [baseSepolia.id]: http(),
+  },
+});
+
+// Wrap your app
+<PrivyProvider appId="your-privy-app-id">
+  <WagmiProvider config={wagmiConfig}>
+    <App />
+  </WagmiProvider>
+</PrivyProvider>
+```
+
+### Use SDK with Wagmi
+
+```tsx
+import { useWalletClient, useChainId } from 'wagmi';
+import { useMemo } from 'react';
+import { PerpCityContext, openTakerPosition } from '@strobelabs/perpcity-sdk';
+import { GraphQLClient } from 'graphql-request';
+
+function usePerpCity() {
+  const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
+
+  return useMemo(() => {
+    if (!walletClient) return null;
+
+    // Wagmi's WalletClient is viem-compatible - works directly with SDK!
+    return new PerpCityContext({
+      walletClient,
+      goldskyBearerToken: process.env.GOLDSKY_BEARER_TOKEN,
+      goldskyEndpoint: process.env.GOLDSKY_ENDPOINT,
+      deployments: {
+        perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
+        usdc: process.env.USDC_ADDRESS as `0x${string}`,
+      },
+    });
+  }, [walletClient, chainId]);
+}
+
+// In your component
+function TradingComponent({ perpId }) {
+  const context = usePerpCity();
+
+  const handleOpenLong = async () => {
+    if (!context) return;
+
+    const position = await openTakerPosition(context, perpId, {
+      isLong: true,
+      margin: 100,    // $100 USDC
+      leverage: 2,    // 2x leverage
+      unspecifiedAmountLimit: 0,
+    });
+
+    console.log('Position opened:', position.positionId);
+  };
+
+  return <button onClick={handleOpenLong}>Open Long 2x</button>;
+}
+```
+
+See `examples/wagmi-integration.ts` for complete example with React components.
+
 ## Features
 
 ### Optimized Data Fetching

@@ -3,7 +3,7 @@
   "author": "Strobe Labs",
   "description": "TypeScript SDK for interacting with Perp City contracts",
   "version": "0.2.1",
-  "license": "GPL-3.0",
+  "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

@@ -1,9 +1,10 @@
 import { setup } from './setup';
 import { openTakerPosition } from '../src/functions/perp-manager';
 import { OpenPosition } from '../src/functions/open-position';
+import { PerpCityContext } from '../src/context';
 import type { Hex } from 'viem';
 
-export async function openTakerLongPosition(context: any, perpId: Hex): Promise<OpenPosition> {
+export async function openTakerLongPosition(context: PerpCityContext, perpId: Hex): Promise<OpenPosition> {
   console.log('Opening taker long position...');
 
   const longPosition = await openTakerPosition(context, perpId, {
@@ -20,7 +21,7 @@ export async function openTakerLongPosition(context: any, perpId: Hex): Promise<
   return longPosition;
 }
 
-export async function openTakerShortPosition(context: any, perpId: Hex): Promise<OpenPosition> {
+export async function openTakerShortPosition(context: PerpCityContext, perpId: Hex): Promise<OpenPosition> {
   console.log('Opening taker short position...');
 
   const shortPosition = await openTakerPosition(context, perpId, {

@@ -32,8 +32,12 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
     const sqrtPriceX96 = priceToSqrtPriceX96(params.startingPrice);
 
     const contractParams = {
-      startingSqrtPriceX96: sqrtPriceX96,
       beacon: params.beacon,
+      fees: params.fees,
+      marginRatios: params.marginRatios,
+      lockupPeriod: params.lockupPeriod,
+      sqrtPriceImpactLimit: params.sqrtPriceImpactLimit,
+      startingSqrtPriceX96: sqrtPriceX96,
     };
 
     const { request } = await context.walletClient.simulateContract({
@@ -93,19 +97,20 @@ export async function openTakerPosition(
     // Convert leverage to X96 format: leverage * 2^96
     const levX96 = scaleToX96(params.leverage);
 
-    // Prepare contract parameters
+    // Prepare contract parameters - deployed contract requires holder address
     const contractParams = {
+      holder: context.walletClient.account!.address,
       isLong: params.isLong,
       margin: marginScaled,
       levX96,
       unspecifiedAmountLimit: scale6Decimals(params.unspecifiedAmountLimit),
     };
 
-    // Simulate transaction
+    // Simulate transaction - deployed contract uses openTakerPos
     const { request } = await context.walletClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'openTakerPosition',
+      functionName: 'openTakerPos' as any,
       args: [perpId, contractParams],
       account: context.walletClient.account,
     });
@@ -178,8 +183,9 @@ export async function openMakerPosition(
     const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
     const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
 
-    // Prepare contract parameters
+    // Prepare contract parameters - deployed contract requires holder address
     const contractParams = {
+      holder: context.walletClient.account!.address,
       margin: marginScaled,
       liquidity: params.liquidity,
       tickLower: alignedTickLower,
@@ -188,11 +194,11 @@ export async function openMakerPosition(
       maxAmt1In: scale6Decimals(params.maxAmt1In),
     };
 
-    // Simulate transaction
+    // Simulate transaction - deployed contract uses openMakerPos
     const { request } = await context.walletClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'openMakerPosition',
+      functionName: 'openMakerPos' as any,
       args: [perpId, contractParams],
       account: context.walletClient.account,
     });

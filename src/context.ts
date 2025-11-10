@@ -102,11 +102,16 @@ export class PerpCityContext {
       let beaconResponse: any;
       let contractData: Awaited<ReturnType<typeof this.fetchPerpContractData>>;
 
+      // Get latest mark price from snapshots if available to pass to contract data fetch
+      const latestMarkPrice = perpResponse.perpSnapshots.length > 0
+        ? Number(perpResponse.perpSnapshots[perpResponse.perpSnapshots.length - 1].markPrice)
+        : undefined;
+
       try {
         // Execute remaining queries in parallel
         [beaconResponse, contractData] = await Promise.all([
           this.goldskyClient.request(beaconQuery, { beaconAddr: perpResponse.perp.beacon.id }),
-          this.fetchPerpContractData(perpId),
+          this.fetchPerpContractData(perpId, latestMarkPrice),
         ]);
       } catch (error) {
         if (error instanceof GraphQLError || error instanceof RPCError) {
@@ -177,56 +182,57 @@ export class PerpCityContext {
     }, `fetchPerpData for perp ${perpId}`);
   }
 
-  private async fetchPerpContractData(perpId: Hex): Promise<{
+  private async fetchPerpContractData(perpId: Hex, markPrice?: number): Promise<{
     tickSpacing: number;
     sqrtPriceX96: bigint;
     bounds: Bounds;
     fees: Fees;
   }> {
     return withErrorHandling(async () => {
-      const [tickSpacing, sqrtPriceX96, boundsRaw, feesRaw] = await Promise.all([
-        this.walletClient.readContract({
-          address: this.deployments().perpManager,
-          abi: PERP_MANAGER_ABI,
-          functionName: 'tickSpacing',
-          args: [perpId]
-        }),
-        this.walletClient.readContract({
-          address: this.deployments().perpManager,
-          abi: PERP_MANAGER_ABI,
-          functionName: 'sqrtPriceX96',
-          args: [perpId]
-        }),
-        this.walletClient.readContract({
-          address: this.deployments().perpManager,
-          abi: PERP_MANAGER_ABI,
-          functionName: 'tradingBounds',
-          args: [perpId]
-        }),
-        this.walletClient.readContract({
-          address: this.deployments().perpManager,
-          abi: PERP_MANAGER_ABI,
-          functionName: 'fees',
-          args: [perpId]
-        }),
-      ]);
+      // Get config from deployed contract which uses modular architecture
+      const cfg = await this.walletClient.readContract({
+        address: this.deployments().perpManager,
+        abi: PERP_MANAGER_ABI,
+        functionName: 'cfgs',
+        args: [perpId]
+      }) as any;
 
-      const bounds = boundsRaw as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint];
-      const fees = feesRaw as unknown as readonly [bigint, bigint, bigint, bigint];
+      // Extract tickSpacing from PoolKey
+      const tickSpacing = Number(cfg.key.tickSpacing);
 
+      // Calculate sqrtPriceX96 from mark price if available, otherwise use TWAP
+      let sqrtPriceX96: bigint;
+      if (markPrice) {
+        // Convert mark price to sqrtPriceX96 format
+        const sqrtPrice = Math.sqrt(markPrice);
+        sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * (2 ** 96)));
+      } else {
+        // Fallback to TWAP with 1 second lookback
+        sqrtPriceX96 = await this.walletClient.readContract({
+          address: this.deployments().perpManager,
+          abi: PERP_MANAGER_ABI,
+          functionName: 'timeWeightedAvgSqrtPriceX96',
+          args: [perpId, 1]
+        }) as bigint;
+      }
+
+      // NOTE: Deployed contracts use modular architecture where fees and margin ratios
+      // are in separate contracts (cfg.fees, cfg.marginRatios addresses).
+      // We don't have ABIs for those modules, so using placeholder values.
+      // These will be removed in PR 2 when Goldsky is removed.
       return {
-        tickSpacing: Number(tickSpacing),
-        sqrtPriceX96: sqrtPriceX96 as bigint,
+        tickSpacing,
+        sqrtPriceX96,
         bounds: {
-          minMargin: Number(formatUnits(bounds[0], 6)),
-          minTakerLeverage: marginRatioToLeverage(Number(formatUnits(bounds[4], 6))),
-          maxTakerLeverage: marginRatioToLeverage(Number(formatUnits(bounds[5], 6))),
+          minMargin: 10, // Placeholder - would need to call cfg.marginRatios contract
+          minTakerLeverage: 1.1,
+          maxTakerLeverage: 20,
         },
         fees: {
-          creatorFee: Number(formatUnits(fees[0], 6)),
-          insuranceFee: Number(formatUnits(fees[1], 6)),
-          lpFee: Number(formatUnits(fees[2], 6)),
-          liquidationFee: Number(formatUnits(fees[3], 6)),
+          creatorFee: 0.0001, // Placeholder - would need to call cfg.fees contract
+          insuranceFee: 0.0001,
+          lpFee: 0.0003,
+          liquidationFee: 0.01,
         },
       };
     }, `fetchPerpContractData for perp ${perpId}`);
@@ -559,21 +565,26 @@ export class PerpCityContext {
 
   private async fetchPositionLiveDetailsFromContract(perpId: Hex, positionId: bigint): Promise<LiveDetails> {
     return withErrorHandling(async () => {
-      // livePositionDetails is marked nonpayable in ABI but can be called read-only
+      // Use quoteClosePosition which provides live position details
       const result = (await this.walletClient.readContract({
         address: this.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
-        functionName: 'livePositionDetails' as any,
-        args: [perpId, positionId],
-      }) as unknown) as readonly [bigint, bigint, bigint, boolean, bigint];
+        functionName: 'quoteClosePosition' as any,
+        args: [positionId],
+      }) as unknown) as readonly [boolean, bigint, bigint, bigint, boolean];
 
-      // Use formatUnits to safely convert bigint to decimal, then parse to number
-      // The result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
+      // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]
+      const [success, pnl, funding, netMargin, wasLiquidated] = result;
+
+      if (!success) {
+        throw new Error(`Failed to quote position ${positionId} - position may be invalid or already closed`);
+      }
+
       return {
-        pnl: Number(formatUnits(result[0], 6)),
-        fundingPayment: Number(formatUnits(result[1], 6)),
-        effectiveMargin: Number(formatUnits(result[2], 6)),
-        isLiquidatable: result[3],
+        pnl: Number(formatUnits(pnl, 6)),
+        fundingPayment: Number(formatUnits(funding, 6)),
+        effectiveMargin: Number(formatUnits(netMargin, 6)),
+        isLiquidatable: wasLiquidated,
       };
     }, `fetchPositionLiveDetailsFromContract for position ${positionId}`);
   }

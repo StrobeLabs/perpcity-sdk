@@ -62,7 +62,7 @@ export async function closePosition(
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: 'closePosition',
-      args: [perpId, contractParams],
+      args: [contractParams],
       account: context.walletClient.account,
     });
 
@@ -122,21 +122,26 @@ export async function getPositionLiveDetailsFromContract(
   positionId: bigint
 ): Promise<LiveDetails> {
   return withErrorHandling(async () => {
-    // livePositionDetails is marked nonpayable in ABI but can be called read-only
+    // Use quoteClosePosition which provides live position details
     const result = (await context.walletClient.readContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'livePositionDetails' as any,
-      args: [perpId, positionId],
-    }) as unknown) as readonly [bigint, bigint, bigint, boolean, bigint];
+      functionName: 'quoteClosePosition' as any,
+      args: [positionId],
+    }) as unknown) as readonly [boolean, bigint, bigint, bigint, boolean];
 
-    // Use formatUnits to safely convert bigint to decimal string, then parse to number
-    // The result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
+    // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]
+    const [success, pnl, funding, netMargin, wasLiquidated] = result;
+
+    if (!success) {
+      throw new Error(`Failed to quote position ${positionId} - position may be invalid or already closed`);
+    }
+
     return {
-      pnl: Number(formatUnits(result[0], 6)),
-      fundingPayment: Number(formatUnits(result[1], 6)),
-      effectiveMargin: Number(formatUnits(result[2], 6)),
-      isLiquidatable: result[3],
+      pnl: Number(formatUnits(pnl, 6)),
+      fundingPayment: Number(formatUnits(funding, 6)),
+      effectiveMargin: Number(formatUnits(netMargin, 6)),
+      isLiquidatable: wasLiquidated,
     };
   }, `getPositionLiveDetailsFromContract for position ${positionId}`);
 }

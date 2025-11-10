@@ -31,12 +31,11 @@ export class OpenPosition {
       };
 
       // Simulate the transaction first - this will catch contract errors early
-      // and get the return value (new position ID for partial closes, or null for full closes)
-      const { result, request } = await this.context.walletClient.extend(publicActions).simulateContract({
+      const { request } = await this.context.walletClient.extend(publicActions).simulateContract({
         address: this.context.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
         functionName: 'closePosition',
-        args: [this.perpId, contractParams],
+        args: [contractParams],
         account: this.context.walletClient.account,
       });
 
@@ -52,29 +51,46 @@ export class OpenPosition {
         throw new Error(`Transaction reverted. Hash: ${txHash}`);
       }
 
-      // Initialize newPositionId from simulation result
-      // The contract returns the new position ID for partial closes, or 0 for full closes
-      let newPositionId: bigint | null = result && result !== 0n ? result : null;
+      // Scan transaction events to determine if this was a partial or full close
+      // For partial closes, a PositionOpened event is emitted with the new position ID
+      // For full closes, a PositionClosed event is emitted
+      let newPositionId: bigint | null = null;
+      let wasFullyClosed = false;
 
-      // Scan transaction events to confirm if this was a full close
-      // If PositionClosed event is found for this perpId/posId, it's a full close
       for (const log of receipt.logs) {
         try {
-          const closedDecoded = decodeEventLog({
+          // Check for PositionOpened event (partial close)
+          const openedDecoded = decodeEventLog({
             abi: PERP_MANAGER_ABI,
             data: log.data,
             topics: log.topics,
-            eventName: 'PositionClosed',
+            eventName: 'PositionOpened',
           });
 
-          // If this position was fully closed, set newPositionId to null
-          if (closedDecoded.args.perpId === this.perpId && closedDecoded.args.posId === this.positionId) {
-            newPositionId = null;
+          // Match the perpId and extract the new position ID
+          if (openedDecoded.args.perpId === this.perpId) {
+            newPositionId = openedDecoded.args.posId as bigint;
             break;
           }
         } catch (e) {
-          // Not a PositionClosed event, skip
-          continue;
+          // Not a PositionOpened event, try PositionClosed
+          try {
+            const closedDecoded = decodeEventLog({
+              abi: PERP_MANAGER_ABI,
+              data: log.data,
+              topics: log.topics,
+              eventName: 'PositionClosed',
+            });
+
+            // If this position was fully closed, mark it
+            if (closedDecoded.args.perpId === this.perpId && closedDecoded.args.posId === this.positionId) {
+              wasFullyClosed = true;
+              break;
+            }
+          } catch (e2) {
+            // Neither event, skip
+            continue;
+          }
         }
       }
 
@@ -90,21 +106,26 @@ export class OpenPosition {
 
   async liveDetails(): Promise<LiveDetails> {
     return withErrorHandling(async () => {
-      // livePositionDetails is marked nonpayable in ABI but can be called read-only
+      // Use quoteClosePosition which provides live position details
       const result = (await this.context.walletClient.readContract({
         address: this.context.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
-        functionName: 'livePositionDetails' as any,
-        args: [this.perpId, this.positionId],
-      }) as unknown) as readonly [bigint, bigint, bigint, boolean, bigint];
+        functionName: 'quoteClosePosition' as any,
+        args: [this.positionId],
+      }) as unknown) as readonly [boolean, bigint, bigint, bigint, boolean];
 
-      // Use formatUnits to safely convert bigint to decimal, then parse to number
-      // The result is a tuple: [pnl, fundingPayment, effectiveMargin, isLiquidatable, newPriceX96]
+      // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]
+      const [success, pnl, funding, netMargin, wasLiquidated] = result;
+
+      if (!success) {
+        throw new Error(`Failed to quote position ${this.positionId} - position may be invalid or already closed`);
+      }
+
       return {
-        pnl: Number(formatUnits(result[0], 6)),
-        fundingPayment: Number(formatUnits(result[1], 6)),
-        effectiveMargin: Number(formatUnits(result[2], 6)),
-        isLiquidatable: result[3],
+        pnl: Number(formatUnits(pnl, 6)),
+        fundingPayment: Number(formatUnits(funding, 6)),
+        effectiveMargin: Number(formatUnits(netMargin, 6)),
+        isLiquidatable: wasLiquidated,
       };
     }, `liveDetails for position ${this.positionId}`);
   }

@@ -62,6 +62,10 @@ export type OpenMakerPositionParams = {
 export type CreatePerpParams = {
   startingPrice: number;
   beacon: Address;
+  fees: Address;              // Address of fees module contract
+  marginRatios: Address;       // Address of margin ratios module contract
+  lockupPeriod: Address;       // Address of lockup period module contract
+  sqrtPriceImpactLimit: Address; // Address of sqrt price impact limit module contract
 }
 
 export type PerpData = {

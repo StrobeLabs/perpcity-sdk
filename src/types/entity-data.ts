@@ -62,6 +62,11 @@ export type OpenMakerPositionParams = {
 export type CreatePerpParams = {
   startingPrice: number;
   beacon: Address;
+  // Module addresses - optional, will fall back to deployment config if not provided
+  fees?: Address;
+  marginRatios?: Address;
+  lockupPeriod?: Address;
+  sqrtPriceImpactLimit?: Address;
 }
 
 export type PerpData = {
@@ -103,4 +108,21 @@ export type OpenPositionData = {
 export type CacheConfig = {
   ttl: number; // Time to live in milliseconds
   maxSize: number; // Maximum cache size
+}
+
+export type PerpConfig = {
+  key: {
+    currency0: Address;
+    currency1: Address;
+    fee: number;
+    tickSpacing: number;
+    hooks: Address;
+  };
+  creator: Address;
+  vault: Address;
+  beacon: Address;
+  fees: Address;
+  marginRatios: Address;
+  lockupPeriod: Address;
+  sqrtPriceImpactLimit: Address;
 }

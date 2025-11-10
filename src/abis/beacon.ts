@@ -1,4 +1,5 @@
-export const BEACON_ABI = [
+export const BEACON_ABI = 
+[
     {
         "inputs": [
             {

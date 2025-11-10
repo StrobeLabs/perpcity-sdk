@@ -28,6 +28,13 @@ GOLDSKY_BEARER_TOKEN=your_token_here
 # Contract addresses
 PERP_MANAGER_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
 USDC_ADDRESS=0xC1a5D4E99BB224713dd179eA9CA2Fa6600706210
+
+# Optional: Module addresses (used as defaults when creating new perps)
+# These can also be fetched dynamically from existing perp configs
+FEES_MODULE_ADDRESS=0x...
+MARGIN_RATIOS_MODULE_ADDRESS=0x...
+LOCKUP_PERIOD_MODULE_ADDRESS=0x...
+SQRT_PRICE_IMPACT_LIMIT_MODULE_ADDRESS=0x...
 ```
 
 ## Quick Start
@@ -54,6 +61,11 @@ const context = new PerpCityContext({
   deployments: {
     perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
     usdc: process.env.USDC_ADDRESS as `0x${string}`,
+    // Optional: Module addresses for creating new perps
+    feesModule: process.env.FEES_MODULE_ADDRESS as `0x${string}`,
+    marginRatiosModule: process.env.MARGIN_RATIOS_MODULE_ADDRESS as `0x${string}`,
+    lockupPeriodModule: process.env.LOCKUP_PERIOD_MODULE_ADDRESS as `0x${string}`,
+    sqrtPriceImpactLimitModule: process.env.SQRT_PRICE_IMPACT_LIMIT_MODULE_ADDRESS as `0x${string}`,
   },
 });
 ```
@@ -108,6 +120,11 @@ function usePerpCity() {
       deployments: {
         perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
         usdc: process.env.USDC_ADDRESS as `0x${string}`,
+        // Optional: Module addresses for creating new perps
+        feesModule: process.env.FEES_MODULE_ADDRESS as `0x${string}`,
+        marginRatiosModule: process.env.MARGIN_RATIOS_MODULE_ADDRESS as `0x${string}`,
+        lockupPeriodModule: process.env.LOCKUP_PERIOD_MODULE_ADDRESS as `0x${string}`,
+        sqrtPriceImpactLimitModule: process.env.SQRT_PRICE_IMPACT_LIMIT_MODULE_ADDRESS as `0x${string}`,
       },
     });
   }, [walletClient, chainId]);
@@ -137,6 +154,17 @@ function TradingComponent({ perpId }) {
 See `examples/wagmi-integration.ts` for complete example with React components.
 
 ## Features
+
+### Config Caching
+The SDK automatically caches perp configurations (including module addresses) to minimize redundant contract calls:
+
+```typescript
+// First call fetches from contract
+const config1 = await context.getPerpConfig(perpId);
+
+// Subsequent calls use cache
+const config2 = await context.getPerpConfig(perpId); // Instant!
+```
 
 ### Optimized Data Fetching
 The SDK batches multiple GraphQL queries into single requests, dramatically improving performance:
@@ -177,13 +205,24 @@ const fundingRate = getPerpFundingRate(perpData);
 import { createPerp, getPerps } from '@strobelabs/perpcity-sdk';
 
 // Create a new perpetual market
+// Module addresses will use deployment config defaults if not specified
 const perpId = await createPerp(context, {
   startingPrice: 3000,
-  beacon: '0x...' // Beacon address for price oracle
+  beacon: '0x...', // Beacon address for price oracle
+  // Optional: Override module addresses for this perp
+  // fees: '0x...',
+  // marginRatios: '0x...',
+  // lockupPeriod: '0x...',
+  // sqrtPriceImpactLimit: '0x...',
 });
 
 // Get all perps
 const allPerps = await getPerps(context);
+
+// Get cached config for a perp (includes module addresses)
+const config = await context.getPerpConfig(perpId);
+console.log(config.fees); // Fees module address
+console.log(config.marginRatios); // Margin ratios module address
 ```
 
 ### Manage Positions
@@ -247,7 +286,11 @@ console.log(userData.unrealizedPnl);
 ### Core Classes
 
 #### `PerpCityContext`
-Base context for all SDK operations.
+Base context for all SDK operations. Includes:
+- `getPerpConfig(perpId)` - Fetch and cache perp configuration (module addresses, pool settings)
+- `getPerpData(perpId)` - Fetch comprehensive perp data
+- `getUserData(userAddress)` - Fetch user data
+- `deployments()` - Get deployment addresses
 
 #### `GlobalPerpCityContext`
 Optimized context that batches GraphQL queries for better performance.

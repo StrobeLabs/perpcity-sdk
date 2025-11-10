@@ -4,7 +4,7 @@ import { PerpCityContextConfig, PerpCityDeployments } from "./types";
 import { TypedDocumentNode } from "@graphql-typed-document-node/core";
 import { parse } from "graphql";
 import { Address, Hex } from "viem";
-import { PerpData, UserData, OpenPositionData, LiveDetails, ClosedPosition, OpenInterest, TimeSeries, Bounds, Fees } from "./types/entity-data";
+import { PerpData, UserData, OpenPositionData, LiveDetails, ClosedPosition, OpenInterest, TimeSeries, Bounds, Fees, PerpConfig } from "./types/entity-data";
 import { scaleFrom6Decimals, sqrtPriceX96ToPrice, marginRatioToLeverage } from "./utils";
 import { withErrorHandling, GraphQLError, RPCError } from "./utils/errors";
 import { PERP_MANAGER_ABI } from "./abis/perp-manager";
@@ -14,8 +14,10 @@ export class PerpCityContext {
   public readonly walletClient;
   public readonly goldskyClient: GraphQLClient;
   private readonly _deployments: PerpCityDeployments;
+  private readonly configCache: Map<Hex, PerpConfig>;
 
   constructor(config: PerpCityContextConfig) {
+    this.configCache = new Map();
     this.walletClient = config.walletClient.extend(publicActions);
     this._deployments = config.deployments;
 
@@ -182,6 +184,31 @@ export class PerpCityContext {
     }, `fetchPerpData for perp ${perpId}`);
   }
 
+  /**
+   * Fetches and caches the config for a perpId
+   * The config includes module addresses (fees, marginRatios, etc.) and pool settings
+   */
+  async getPerpConfig(perpId: Hex): Promise<PerpConfig> {
+    // Check cache first
+    const cached = this.configCache.get(perpId);
+    if (cached) {
+      return cached;
+    }
+
+    // Fetch from contract
+    const cfg = await this.walletClient.readContract({
+      address: this.deployments().perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: 'cfgs',
+      args: [perpId]
+    }) as any;
+
+    // Store in cache
+    this.configCache.set(perpId, cfg);
+
+    return cfg;
+  }
+
   private async fetchPerpContractData(perpId: Hex, markPrice?: number): Promise<{
     tickSpacing: number;
     sqrtPriceX96: bigint;
@@ -189,13 +216,8 @@ export class PerpCityContext {
     fees: Fees;
   }> {
     return withErrorHandling(async () => {
-      // Get config from deployed contract which uses modular architecture
-      const cfg = await this.walletClient.readContract({
-        address: this.deployments().perpManager,
-        abi: PERP_MANAGER_ABI,
-        functionName: 'cfgs',
-        args: [perpId]
-      }) as any;
+      // Get config from cache or fetch if not cached
+      const cfg = await this.getPerpConfig(perpId);
 
       // Extract tickSpacing from PoolKey
       const tickSpacing = Number(cfg.key.tickSpacing);
@@ -570,7 +592,12 @@ export class PerpCityContext {
         address: this.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
         functionName: 'quoteClosePosition' as any,
-        args: [positionId],
+        args: [perpId, {
+          posId: positionId,
+          minAmt0Out: 0n,
+          minAmt1Out: 0n,
+          maxAmt1In: 2n ** 128n - 1n, // max uint128 for permissive limit
+        }] as any,
       }) as unknown) as readonly [boolean, bigint, bigint, bigint, boolean];
 
       // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]

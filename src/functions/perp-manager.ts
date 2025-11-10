@@ -30,13 +30,24 @@ export async function getPerps(context: PerpCityContext): Promise<Hex[]> {
 export async function createPerp(context: PerpCityContext, params: CreatePerpParams): Promise<Hex> {
   return withErrorHandling(async () => {
     const sqrtPriceX96 = priceToSqrtPriceX96(params.startingPrice);
+    const deployments = context.deployments();
+
+    // Use params if provided, otherwise fall back to deployment config
+    const fees = params.fees ?? deployments.feesModule;
+    const marginRatios = params.marginRatios ?? deployments.marginRatiosModule;
+    const lockupPeriod = params.lockupPeriod ?? deployments.lockupPeriodModule;
+    const sqrtPriceImpactLimit = params.sqrtPriceImpactLimit ?? deployments.sqrtPriceImpactLimitModule;
+
+    if (!fees || !marginRatios || !lockupPeriod || !sqrtPriceImpactLimit) {
+      throw new Error('Module addresses must be provided either in params or deployment config');
+    }
 
     const contractParams = {
       beacon: params.beacon,
-      fees: params.fees,
-      marginRatios: params.marginRatios,
-      lockupPeriod: params.lockupPeriod,
-      sqrtPriceImpactLimit: params.sqrtPriceImpactLimit,
+      fees,
+      marginRatios,
+      lockupPeriod,
+      sqrtPriceImpactLimit,
       startingSqrtPriceX96: sqrtPriceX96,
     };
 

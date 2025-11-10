@@ -592,12 +592,7 @@ export class PerpCityContext {
         address: this.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
         functionName: 'quoteClosePosition' as any,
-        args: [perpId, {
-          posId: positionId,
-          minAmt0Out: 0n,
-          minAmt1Out: 0n,
-          maxAmt1In: 2n ** 128n - 1n, // max uint128 for permissive limit
-        }] as any,
+        args: [positionId],
       }) as unknown) as readonly [boolean, bigint, bigint, bigint, boolean];
 
       // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]

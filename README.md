@@ -19,12 +19,6 @@ RPC_URL=https://sepolia.base.org
 # Your private key (only for write operations)
 PRIVATE_KEY=0x...
 
-# Goldsky GraphQL API endpoint
-GOLDSKY_ENDPOINT=https://api.goldsky.com/api/private/project_xxx/subgraphs/perp-city/xxx/gn
-
-# Goldsky bearer token
-GOLDSKY_BEARER_TOKEN=your_token_here
-
 # Contract addresses
 PERP_MANAGER_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
 USDC_ADDRESS=0xC1a5D4E99BB224713dd179eA9CA2Fa6600706210
@@ -56,8 +50,6 @@ const walletClient = createWalletClient({
 // Initialize context with configuration
 const context = new PerpCityContext({
   walletClient,
-  goldskyBearerToken: process.env.GOLDSKY_BEARER_TOKEN,
-  goldskyEndpoint: process.env.GOLDSKY_ENDPOINT,
   deployments: {
     perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
     usdc: process.env.USDC_ADDRESS as `0x${string}`,
@@ -103,7 +95,6 @@ const wagmiConfig = createConfig({
 import { useWalletClient, useChainId } from 'wagmi';
 import { useMemo } from 'react';
 import { PerpCityContext, openTakerPosition } from '@strobelabs/perpcity-sdk';
-import { GraphQLClient } from 'graphql-request';
 
 function usePerpCity() {
   const { data: walletClient } = useWalletClient();
@@ -115,8 +106,6 @@ function usePerpCity() {
     // Wagmi's WalletClient is viem-compatible - works directly with SDK!
     return new PerpCityContext({
       walletClient,
-      goldskyBearerToken: process.env.GOLDSKY_BEARER_TOKEN,
-      goldskyEndpoint: process.env.GOLDSKY_ENDPOINT,
       deployments: {
         perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
         usdc: process.env.USDC_ADDRESS as `0x${string}`,
@@ -166,43 +155,44 @@ const config1 = await context.getPerpConfig(perpId);
 const config2 = await context.getPerpConfig(perpId); // Instant!
 ```
 
-### Optimized Data Fetching
-The SDK batches multiple GraphQL queries into single requests, dramatically improving performance:
+### Contract-Only Data Fetching
+The SDK fetches all data directly from blockchain contracts, providing real-time, trustless data:
 
 ```typescript
-// Fetch perp data with all related information in one call
+// Fetch perp data with live information from contracts
 const perpData = await context.getPerpData(perpId);
 
-console.log(perpData.mark);              // Current mark price
-console.log(perpData.index);             // Current index price
-console.log(perpData.fundingRate);       // Current funding rate
-console.log(perpData.openInterest);      // Open interest
-console.log(perpData.markTimeSeries);    // Historical mark prices
-console.log(perpData.indexTimeSeries);   // Historical index prices
+console.log(perpData.mark);       // Current mark price from contract
+console.log(perpData.beacon);     // Oracle beacon address
+console.log(perpData.tickSpacing);// Tick spacing
+console.log(perpData.bounds);     // Margin and leverage bounds
+console.log(perpData.fees);       // Fee structure
 ```
 
 ### Functional API
 Pure functions for data extraction:
 
 ```typescript
-import { 
-  getPerpMark, 
-  getPerpIndex, 
-  getPerpFundingRate,
+import {
+  getPerpMark,
+  getPerpBeacon,
   getPerpBounds,
-  getPerpFees
+  getPerpFees,
+  getPerpTickSpacing
 } from '@strobelabs/perpcity-sdk';
 
 // Use functional API for clean, composable code
 const mark = getPerpMark(perpData);
-const index = getPerpIndex(perpData);
-const fundingRate = getPerpFundingRate(perpData);
+const beacon = getPerpBeacon(perpData);
+const bounds = getPerpBounds(perpData);
+const fees = getPerpFees(perpData);
+const tickSpacing = getPerpTickSpacing(perpData);
 ```
 
 ### Create and Manage Perps
 
 ```typescript
-import { createPerp, getPerps } from '@strobelabs/perpcity-sdk';
+import { createPerp } from '@strobelabs/perpcity-sdk';
 
 // Create a new perpetual market
 // Module addresses will use deployment config defaults if not specified
@@ -216,45 +206,52 @@ const perpId = await createPerp(context, {
   // sqrtPriceImpactLimit: '0x...',
 });
 
-// Get all perps
-const allPerps = await getPerps(context);
-
 // Get cached config for a perp (includes module addresses)
 const config = await context.getPerpConfig(perpId);
 console.log(config.fees); // Fees module address
 console.log(config.marginRatios); // Margin ratios module address
+
+// Note: Perp discovery must be done externally (e.g., from events, databases, etc.)
+// The SDK focuses on interacting with known perp IDs
 ```
 
 ### Manage Positions
 
 ```typescript
-import { OpenPosition, getAllTakerPositions, getAllMakerPositions } from '@strobelabs/perpcity-sdk';
+import { openTakerPosition, openMakerPosition } from '@strobelabs/perpcity-sdk';
 
-// Get all taker positions for a perp
-const takerPositions = await getAllTakerPositions(context, perpId);
-for (const position of takerPositions) {
-  const liveDetails = await position.liveDetails();
-  console.log('Position PnL:', liveDetails.pnl);
-  console.log('Funding Payment:', liveDetails.fundingPayment);
-  console.log('Is Liquidatable:', liveDetails.isLiquidatable);
-}
-
-// Get all maker positions for a perp
-const makerPositions = await getAllMakerPositions(context, perpId);
-
-// Close a position
-const closedPosition = await takerPositions[0].closePosition({
-  margin: 0,  // Full close
-  unspecifiedAmountLimit: 1000000
+// Open a taker (long/short) position
+const takerPosition = await openTakerPosition(context, perpId, {
+  isLong: true,
+  margin: 100,    // $100 USDC
+  leverage: 2,    // 2x leverage
+  unspecifiedAmountLimit: 0,
 });
 
-// Note: To open new positions, call the PerpManager contract directly using viem:
-// const txHash = await context.walletClient.writeContract({
-//   address: context.deployments().perpManager,
-//   abi: PERP_MANAGER_ABI,
-//   functionName: 'openTakerPosition',
-//   args: [perpId, isLong, margin, leverage, unspecifiedAmountLimit]
-// });
+// Open a maker (LP) position
+const makerPosition = await openMakerPosition(context, perpId, {
+  margin: 1000,
+  priceLower: 2900,
+  priceUpper: 3100,
+  liquidity: 1000000n,
+  maxAmt0In: 1000000,
+  maxAmt1In: 1000000,
+});
+
+// Get live details for a position (requires position ID from transaction receipt)
+const positionData = await context.getOpenPositionData(
+  perpId,
+  positionId,  // bigint from PositionOpened event
+  isLong,      // boolean tracked from when position was opened
+  isMaker      // boolean tracked from when position was opened
+);
+
+console.log('Position PnL:', positionData.liveDetails.pnl);
+console.log('Funding Payment:', positionData.liveDetails.fundingPayment);
+console.log('Is Liquidatable:', positionData.liveDetails.isLiquidatable);
+
+// Note: Position tracking must be done externally (e.g., tracking PositionOpened events)
+// The SDK requires you to provide position IDs and metadata
 ```
 
 ### Close Positions
@@ -271,14 +268,26 @@ const closedPosition = await position.closePosition({
 ### User Data
 
 ```typescript
-// Fetch comprehensive user data
-const userData = await context.getUserData(userAddress);
+// Fetch user data with live details for tracked positions
+// You must provide position metadata from your own tracking system
+const positions = [
+  { perpId: '0x...', positionId: 1n, isLong: true, isMaker: false },
+  { perpId: '0x...', positionId: 2n, isLong: false, isMaker: false },
+];
+
+const userData = await context.getUserData(userAddress, positions);
 
 console.log(userData.usdcBalance);
-console.log(userData.openPositions);
-console.log(userData.closedPositions);
-console.log(userData.realizedPnl);
-console.log(userData.unrealizedPnl);
+console.log(userData.openPositions); // Array with live details for each position
+
+// Access individual position live details
+for (const position of userData.openPositions) {
+  console.log('Position:', position.positionId);
+  console.log('PnL:', position.liveDetails.pnl);
+  console.log('Funding:', position.liveDetails.fundingPayment);
+  console.log('Margin:', position.liveDetails.effectiveMargin);
+  console.log('Liquidatable:', position.liveDetails.isLiquidatable);
+}
 ```
 
 ## API Reference
@@ -288,28 +297,24 @@ console.log(userData.unrealizedPnl);
 #### `PerpCityContext`
 Base context for all SDK operations. Includes:
 - `getPerpConfig(perpId)` - Fetch and cache perp configuration (module addresses, pool settings)
-- `getPerpData(perpId)` - Fetch comprehensive perp data
-- `getUserData(userAddress)` - Fetch user data
+- `getPerpData(perpId)` - Fetch perp data from contracts
+- `getUserData(userAddress, positions)` - Fetch user data with live position details
+- `getOpenPositionData(perpId, positionId, isLong, isMaker)` - Fetch live details for a single position
 - `deployments()` - Get deployment addresses
-
-#### `GlobalPerpCityContext`
-Optimized context that batches GraphQL queries for better performance.
 
 ### Main Functions
 
 #### Perp Manager
-- `getPerps(context)` - Get all perp IDs
 - `createPerp(context, params)` - Create a new perp market
+- `openTakerPosition(context, perpId, params)` - Open a taker (long/short) position
+- `openMakerPosition(context, perpId, params)` - Open a maker (LP) position
 
 #### Perp Data (Pure Functions)
 - `getPerpMark(perpData)` - Get mark price
-- `getPerpIndex(perpData)` - Get index price  
-- `getPerpFundingRate(perpData)` - Get funding rate
+- `getPerpBeacon(perpData)` - Get oracle beacon address
+- `getPerpTickSpacing(perpData)` - Get tick spacing
 - `getPerpBounds(perpData)` - Get margin and leverage bounds
 - `getPerpFees(perpData)` - Get fee structure
-- `getPerpOpenInterest(perpData)` - Get open interest
-- `getPerpMarkTimeSeries(perpData)` - Get historical mark prices
-- `getPerpIndexTimeSeries(perpData)` - Get historical index prices
 
 #### Position Functions
 - `getPositionPnl(positionData)` - Get position PnL
@@ -320,10 +325,8 @@ Optimized context that batches GraphQL queries for better performance.
 
 #### User Functions
 - `getUserUsdcBalance(userData)` - Get USDC balance
-- `getUserOpenPositions(userData)` - Get open positions
-- `getUserClosedPositions(userData)` - Get closed positions
-- `getUserRealizedPnl(userData)` - Get realized PnL
-- `getUserUnrealizedPnl(userData)` - Get unrealized PnL
+- `getUserOpenPositions(userData)` - Get open positions with live details
+- `getUserWalletAddress(userData)` - Get user's wallet address
 
 ## Examples
 
@@ -376,7 +379,9 @@ Create a `.env.local` file:
 
 ```env
 PRIVATE_KEY=your_private_key_here
-GOLDSKY_BEARER_TOKEN=your_goldsky_api_key_here
+RPC_URL=https://sepolia.base.org
+PERP_MANAGER_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
+USDC_ADDRESS=0xC1a5D4E99BB224713dd179eA9CA2Fa6600706210
 ```
 
 ## License

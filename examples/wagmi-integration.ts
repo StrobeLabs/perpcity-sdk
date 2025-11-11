@@ -8,21 +8,12 @@
 import { useWalletClient, useChainId } from 'wagmi';
 import { useMemo, useState } from 'react';
 import { PerpCityContext } from '../src/context';
-import { GraphQLClient } from 'graphql-request';
 import { openTakerPosition, openMakerPosition } from '../src/functions/perp-manager';
 import type { Hex } from 'viem';
 
 // ============================================================================
 // Setup Functions
 // ============================================================================
-
-function getGoldskyClient(chainId: number): GraphQLClient {
-  const endpoints: Record<number, string> = {
-    84532: 'https://api.goldsky.com/api/public/project_.../subgraphs/perpcity-base-sepolia',
-    8453: 'https://api.goldsky.com/api/public/project_.../subgraphs/perpcity-base',
-  };
-  return new GraphQLClient(endpoints[chainId] || endpoints[84532]);
-}
 
 function getDeployments(chainId: number) {
   const deployments: Record<number, { perpManager: Hex; usdc: Hex }> = {
@@ -59,11 +50,10 @@ export function usePerpCity(): PerpCityContext | null {
     if (!walletClient) return null;
 
     // Wagmi's WalletClient is viem-compatible - works directly with SDK!
-    return new PerpCityContext(
+    return new PerpCityContext({
       walletClient,
-      getGoldskyClient(chainId),
-      getDeployments(chainId)
-    );
+      deployments: getDeployments(chainId),
+    });
   }, [walletClient, chainId]);
 }
 

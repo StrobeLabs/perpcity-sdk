@@ -1,15 +1,5 @@
 import type { Address, Hex } from "viem";
 
-export type OpenInterest = {
-  takerLongNotional: number,
-  takerShortNotional: number,
-}
-
-export type TimeSeries<T extends number | OpenInterest> = {
-  timestamp: number,
-  value: T,
-}
-
 export type Bounds = {
   minMargin: number,
   minTakerLeverage: number,
@@ -28,13 +18,6 @@ export type LiveDetails = {
   fundingPayment: number;
   effectiveMargin: number;
   isLiquidatable: boolean;
-}
-
-export type ClosedPosition = {
-  perpId: Hex;
-  wasMaker: boolean;
-  wasLong: boolean;
-  pnlAtClose: number;
 }
 
 export type ClosePositionParams = {
@@ -73,28 +56,15 @@ export type PerpData = {
   id: Hex;
   tickSpacing: number;
   mark: number;
-  index: number;
   beacon: Address;
-  lastIndexUpdate: number;
-  openInterest: OpenInterest;
-  markTimeSeries: TimeSeries<number>[];
-  indexTimeSeries: TimeSeries<number>[];
-  fundingRate: number;
   bounds: Bounds;
   fees: Fees;
-  openInterestTimeSeries: TimeSeries<OpenInterest>[];
-  fundingRateTimeSeries: TimeSeries<number>[];
-  totalOpenMakerPnl: number;
-  totalOpenTakerPnl: number;
 }
 
 export type UserData = {
   walletAddress: Hex;
   usdcBalance: number;
   openPositions: OpenPositionData[];
-  closedPositions: ClosedPosition[];
-  realizedPnl: number;
-  unrealizedPnl: number;
 }
 
 export type OpenPositionData = {

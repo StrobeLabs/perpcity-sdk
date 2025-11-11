@@ -4,7 +4,6 @@ import {
   ContractError,
   TransactionRejectedError,
   InsufficientFundsError,
-  GraphQLError,
   RPCError,
   ValidationError,
   parseContractError,
@@ -40,12 +39,6 @@ describe('Error Classes', () => {
     const error = new InsufficientFundsError();
     expect(error.message).toBe('Insufficient funds for transaction');
     expect(error.name).toBe('InsufficientFundsError');
-  });
-
-  it('should create GraphQLError', () => {
-    const error = new GraphQLError('Query failed');
-    expect(error.message).toBe('Query failed');
-    expect(error.name).toBe('GraphQLError');
   });
 
   it('should create RPCError', () => {

@@ -31,20 +31,66 @@ LOCKUP_PERIOD_MODULE_ADDRESS=0x...
 SQRT_PRICE_IMPACT_LIMIT_MODULE_ADDRESS=0x...
 ```
 
+### Private RPC Providers (Recommended for Production)
+
+For production applications, we recommend using a private RPC provider like [Alchemy](https://www.alchemy.com/) or [Infura](https://infura.io/) for better reliability, performance, and rate limits.
+
+**Using Alchemy (Recommended):**
+
+```bash
+# Set your Alchemy API key
+RPC_API_KEY=your_alchemy_api_key_here
+RPC_PROVIDER=alchemy  # Optional, defaults to 'alchemy'
+CHAIN_ID=84532  # Optional: 84532 for Base Sepolia, 8453 for Base Mainnet
+```
+
+The SDK will automatically construct the appropriate URL:
+- Base Sepolia: `https://base-sepolia.g.alchemy.com/v2/{YOUR_KEY}`
+- Base Mainnet: `https://base-mainnet.g.alchemy.com/v2/{YOUR_KEY}`
+
+**Using Infura:**
+
+```bash
+RPC_API_KEY=your_infura_api_key_here
+RPC_PROVIDER=infura
+CHAIN_ID=84532
+```
+
+**Priority:** If `RPC_API_KEY` is set, it takes priority over `RPC_URL`.
+
+**Using the getRpcUrl helper:**
+
+```typescript
+import { getRpcUrl } from '@strobelabs/perpcity-sdk';
+
+// Automatically uses RPC_API_KEY if set, otherwise falls back to RPC_URL
+const rpcUrl = getRpcUrl({ chainId: 84532 });
+
+// Or provide configuration directly
+const rpcUrl = getRpcUrl({
+  chainId: 8453,  // Base Mainnet
+  provider: 'alchemy',
+  apiKey: 'your_key'
+});
+```
+
 ## Quick Start
 
 ```typescript
-import { PerpCityContext } from '@strobelabs/perpcity-sdk';
+import { PerpCityContext, getRpcUrl } from '@strobelabs/perpcity-sdk';
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
+
+// Get RPC URL (supports both private providers and custom URLs)
+const rpcUrl = getRpcUrl({ chainId: baseSepolia.id });
 
 // Create wallet client
 const account = privateKeyToAccount(process.env.PRIVATE_KEY);
 const walletClient = createWalletClient({
   account,
   chain: baseSepolia,
-  transport: http(process.env.RPC_URL)
+  transport: http(rpcUrl)
 });
 
 // Initialize context with configuration
@@ -378,10 +424,20 @@ pnpm ci
 Create a `.env.local` file:
 
 ```env
+# Required
 PRIVATE_KEY=your_private_key_here
-RPC_URL=https://sepolia.base.org
 PERP_MANAGER_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
 USDC_ADDRESS=0xC1a5D4E99BB224713dd179eA9CA2Fa6600706210
+
+# RPC Configuration (choose one option):
+
+# Option 1: Private RPC (Recommended for production)
+RPC_API_KEY=your_alchemy_or_infura_key
+RPC_PROVIDER=alchemy  # or 'infura'
+CHAIN_ID=84532  # 84532 for Base Sepolia, 8453 for Base Mainnet
+
+# Option 2: Custom/Public RPC
+# RPC_URL=https://sepolia.base.org
 ```
 
 ## License

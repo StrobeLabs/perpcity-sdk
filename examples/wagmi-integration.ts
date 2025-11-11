@@ -238,10 +238,19 @@ export function TradingInterface({ perpId }: { perpId: Hex }) {
  *    import { PrivyProvider } from '@privy-io/react-auth';
  *    import { baseSepolia } from 'wagmi/chains';
  *
+ *    // Option 1: Using Alchemy (recommended for production)
  *    const wagmiConfig = createConfig({
  *      chains: [baseSepolia],
  *      transports: {
- *        [baseSepolia.id]: http(),
+ *        [baseSepolia.id]: http(`https://base-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`),
+ *      },
+ *    });
+ *
+ *    // Option 2: Using public RPC (for development)
+ *    const wagmiConfig = createConfig({
+ *      chains: [baseSepolia],
+ *      transports: {
+ *        [baseSepolia.id]: http('https://sepolia.base.org'),
  *      },
  *    });
  *

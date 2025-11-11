@@ -6,8 +6,8 @@ config({ path: '.env.local' });
 
 beforeAll(() => {
   // Validate required environment variables for e2e tests
-  if (!process.env.RPC_URL) {
-    throw new Error('RPC_URL is required for e2e tests. Please set it in .env.local');
+  if (!process.env.RPC_URL && !process.env.RPC_API_KEY) {
+    throw new Error('Either RPC_URL or RPC_API_KEY is required for e2e tests. Please set one in .env.local');
   }
   if (!process.env.PRIVATE_KEY) {
     throw new Error('PRIVATE_KEY is required for e2e tests. Please set it in .env.local');

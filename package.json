@@ -2,7 +2,7 @@
   "name": "@strobelabs/perpcity-sdk",
   "author": "Strobe Labs",
   "description": "TypeScript SDK for interacting with Perp City contracts",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -37,11 +37,8 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@graphql-typed-document-node/core": "^3.2.0",
     "@isaacs/ttlcache": "^1.4.1",
     "@uniswap/v3-sdk": "^3.25.2",
-    "graphql": "^16.11.0",
-    "graphql-request": "^7.2.0",
     "viem": "^2.37.8"
   }
 }

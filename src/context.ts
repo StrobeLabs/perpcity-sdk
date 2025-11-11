@@ -1,18 +1,14 @@
-import { GraphQLClient } from 'graphql-request'
 import { publicActions, formatUnits } from "viem";
 import { PerpCityContextConfig, PerpCityDeployments } from "./types";
-import { TypedDocumentNode } from "@graphql-typed-document-node/core";
-import { parse } from "graphql";
 import { Address, Hex } from "viem";
-import { PerpData, UserData, OpenPositionData, LiveDetails, ClosedPosition, OpenInterest, TimeSeries, Bounds, Fees, PerpConfig } from "./types/entity-data";
+import { PerpData, UserData, OpenPositionData, LiveDetails, Bounds, Fees, PerpConfig } from "./types/entity-data";
 import { scaleFrom6Decimals, sqrtPriceX96ToPrice, marginRatioToLeverage } from "./utils";
-import { withErrorHandling, GraphQLError, RPCError } from "./utils/errors";
+import { withErrorHandling } from "./utils/errors";
 import { PERP_MANAGER_ABI } from "./abis/perp-manager";
 import { erc20Abi } from "viem";
 
 export class PerpCityContext {
   public readonly walletClient;
-  public readonly goldskyClient: GraphQLClient;
   private readonly _deployments: PerpCityDeployments;
   private readonly configCache: Map<Hex, PerpConfig>;
 
@@ -20,16 +16,6 @@ export class PerpCityContext {
     this.configCache = new Map();
     this.walletClient = config.walletClient.extend(publicActions);
     this._deployments = config.deployments;
-
-    const headers: Record<string, string> = {};
-    
-    if (config.goldskyBearerToken) {
-      headers.authorization = `Bearer ${config.goldskyBearerToken}`;
-    }
-    
-    this.goldskyClient = new GraphQLClient(config.goldskyEndpoint, {
-      headers,
-    });
   }
 
   deployments(): PerpCityDeployments {
@@ -40,144 +26,17 @@ export class PerpCityContext {
 
   private async fetchPerpData(perpId: Hex): Promise<PerpData> {
     return withErrorHandling(async () => {
-      // Batch all perp-related queries into a single GraphQL request
-      const perpQuery: TypedDocumentNode<{
-        perp: {
-          beacon: { id: Hex };
-        };
-        perpSnapshots: {
-          timestamp: BigInt;
-          markPrice: string;
-          takerLongNotional: string;
-          takerShortNotional: string;
-          fundingRate: string;
-        }[];
-      }, { perpId: Hex }> = parse(`
-        query ($perpId: Bytes!) {
-          perp(id: $perpId) {
-            beacon { id }
-          }
-          perpSnapshots(
-            orderBy: timestamp
-            orderDirection: asc
-            where: { perp: $perpId }
-          ) {
-            timestamp
-            markPrice
-            takerLongNotional
-            takerShortNotional
-            fundingRate
-          }
-        }
-      `);
-
-      const beaconQuery: TypedDocumentNode<{
-        beaconSnapshots: {
-          timestamp: BigInt;
-          indexPrice: string;
-        }[];
-      }, { beaconAddr: Address }> = parse(`
-        query ($beaconAddr: Bytes!) {
-          beaconSnapshots(
-            orderBy: timestamp
-            orderDirection: asc
-            where: { beacon: $beaconAddr }
-          ) {
-            timestamp
-            indexPrice
-          }
-        }
-      `);
-
-      let perpResponse: any;
-      try {
-        // Execute first query to get beacon address
-        perpResponse = await this.goldskyClient.request(perpQuery, { perpId });
-      } catch (error) {
-        throw new GraphQLError(`Failed to fetch perp data for ${perpId}: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error : undefined);
-      }
-
-      if (!perpResponse.perp || !perpResponse.perp.beacon) {
-        throw new GraphQLError(`Perp ${perpId} not found or has no beacon`);
-      }
-
-      let beaconResponse: any;
-      let contractData: Awaited<ReturnType<typeof this.fetchPerpContractData>>;
-
-      // Get latest mark price from snapshots if available to pass to contract data fetch
-      const latestMarkPrice = perpResponse.perpSnapshots.length > 0
-        ? Number(perpResponse.perpSnapshots[perpResponse.perpSnapshots.length - 1].markPrice)
-        : undefined;
-
-      try {
-        // Execute remaining queries in parallel
-        [beaconResponse, contractData] = await Promise.all([
-          this.goldskyClient.request(beaconQuery, { beaconAddr: perpResponse.perp.beacon.id }),
-          this.fetchPerpContractData(perpId, latestMarkPrice),
-        ]);
-      } catch (error) {
-        if (error instanceof GraphQLError || error instanceof RPCError) {
-          throw error;
-        }
-        throw new GraphQLError(`Failed to fetch beacon or contract data: ${error instanceof Error ? error.message : String(error)}`, error instanceof Error ? error : undefined);
-      }
-
-      // Guard against empty snapshots for new perps
-      if (perpResponse.perpSnapshots.length === 0) {
-        throw new GraphQLError(`No perpSnapshots found for perp ${perpId}. This perp may be newly created with no trading activity yet.`);
-      }
-      if ((beaconResponse as any).beaconSnapshots.length === 0) {
-        throw new GraphQLError(`No beaconSnapshots found for perp ${perpId} beacon ${perpResponse.perp.beacon.id}. The beacon may not have any price updates yet.`);
-      }
-
-      // Process time series data
-      const markTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
-        timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.markPrice),
-      }));
-
-      const indexTimeSeries: TimeSeries<number>[] = (beaconResponse as any).beaconSnapshots.map((snapshot: any) => ({
-        timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.indexPrice),
-      }));
-
-      const openInterestTimeSeries: TimeSeries<OpenInterest>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
-        timestamp: Number(snapshot.timestamp),
-        value: {
-          takerLongNotional: Number(snapshot.takerLongNotional),
-          takerShortNotional: Number(snapshot.takerShortNotional),
-        },
-      }));
-
-      const fundingRateTimeSeries: TimeSeries<number>[] = perpResponse.perpSnapshots.map((snapshot: any) => ({
-        timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.fundingRate),
-      }));
-
-      // Get latest values (safe after guard check)
-      const latestSnapshot = perpResponse.perpSnapshots[perpResponse.perpSnapshots.length - 1];
-      const latestBeaconSnapshot = (beaconResponse as any).beaconSnapshots[(beaconResponse as any).beaconSnapshots.length - 1];
+      // Fetch contract data only - no historical time series
+      const contractData = await this.fetchPerpContractData(perpId);
+      const config = await this.getPerpConfig(perpId);
 
       const perpData: PerpData = {
         id: perpId,
         tickSpacing: contractData.tickSpacing,
         mark: sqrtPriceX96ToPrice(contractData.sqrtPriceX96),
-        index: Number(latestBeaconSnapshot.indexPrice),
-        beacon: perpResponse.perp.beacon.id as Address,
-        lastIndexUpdate: Number(latestBeaconSnapshot.timestamp),
-        openInterest: {
-          takerLongNotional: Number(latestSnapshot.takerLongNotional),
-          takerShortNotional: Number(latestSnapshot.takerShortNotional),
-        },
-        markTimeSeries,
-        indexTimeSeries,
-        fundingRate: Number(latestSnapshot.fundingRate),
+        beacon: config.beacon,
         bounds: contractData.bounds,
         fees: contractData.fees,
-        openInterestTimeSeries,
-        fundingRateTimeSeries,
-        totalOpenMakerPnl: 0, // These will be calculated by functions
-        totalOpenTakerPnl: 0, // These will be calculated by functions
       };
 
       return perpData;
@@ -267,323 +126,39 @@ export class PerpCityContext {
     return this.fetchPerpData(perpId);
   }
 
-  /**
-   * Fetch data for multiple perps efficiently with true batching
-   * This fetches all perps in just 2 Goldsky requests total (not 2N!)
-   */
-  async getMultiplePerpData(perpIds: Hex[]): Promise<Map<Hex, PerpData>> {
-    if (perpIds.length === 0) {
-      return new Map();
-    }
 
-    // If only one perp, use the single fetch method
-    if (perpIds.length === 1) {
-      const data = await this.fetchPerpData(perpIds[0]);
-      return new Map([[perpIds[0], data]]);
-    }
-
-    // Batch query for all perps and their snapshots
-    const batchPerpQuery: TypedDocumentNode<{
-      perps: {
-        id: Hex;
-        beacon: { id: Hex };
-      }[];
-      perpSnapshots: {
-        perp: { id: Hex };
-        timestamp: BigInt;
-        markPrice: string;
-        takerLongNotional: string;
-        takerShortNotional: string;
-        fundingRate: string;
-      }[];
-    }, { perpIds: Hex[] }> = parse(`
-      query ($perpIds: [Bytes!]!) {
-        perps(where: { id_in: $perpIds }) {
-          id
-          beacon { id }
-        }
-        perpSnapshots(
-          orderBy: timestamp
-          orderDirection: asc
-          where: { perp_in: $perpIds }
-        ) {
-          perp { id }
-          timestamp
-          markPrice
-          takerLongNotional
-          takerShortNotional
-          fundingRate
-        }
-      }
-    `);
-
-    // Execute first query to get all perps and snapshots
-    const perpResponse: any = await this.goldskyClient.request(batchPerpQuery, { perpIds });
-
-    // Extract unique beacon IDs
-    const beaconIds = [...new Set(perpResponse.perps.map((p: any) => p.beacon.id as Address))];
-
-    // Batch query for all unique beacons
-    const batchBeaconQuery: TypedDocumentNode<{
-      beaconSnapshots: {
-        beacon: { id: Hex };
-        timestamp: BigInt;
-        indexPrice: string;
-      }[];
-    }, { beaconIds: Address[] }> = parse(`
-      query ($beaconIds: [Bytes!]!) {
-        beaconSnapshots(
-          orderBy: timestamp
-          orderDirection: asc
-          where: { beacon_in: $beaconIds }
-        ) {
-          beacon { id }
-          timestamp
-          indexPrice
-        }
-      }
-    `);
-
-    // Fetch beacon data and contract data in parallel
-    const [beaconResponse, contractDataMap] = await Promise.all([
-      this.goldskyClient.request(batchBeaconQuery, { beaconIds: beaconIds as any }),
-      this.fetchMultiplePerpContractData(perpIds),
-    ]);
-
-    // Group snapshots by perp ID
-    const snapshotsByPerp = new Map<Hex, any[]>();
-    perpResponse.perpSnapshots.forEach((snapshot: any) => {
-      const perpId = snapshot.perp.id as Hex;
-      if (!snapshotsByPerp.has(perpId)) {
-        snapshotsByPerp.set(perpId, []);
-      }
-      snapshotsByPerp.get(perpId)!.push(snapshot);
+  private async fetchUserData(
+    userAddress: Hex,
+    positions: Array<{ perpId: Hex; positionId: bigint; isLong: boolean; isMaker: boolean }>
+  ): Promise<UserData> {
+    const usdcBalance = await this.walletClient.readContract({
+      address: this.deployments().usdc,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [userAddress],
     });
 
-    // Group beacon snapshots by beacon ID
-    const snapshotsByBeacon = new Map<Address, any[]>();
-    (beaconResponse as any).beaconSnapshots.forEach((snapshot: any) => {
-      const beaconId = snapshot.beacon.id as Address;
-      if (!snapshotsByBeacon.has(beaconId)) {
-        snapshotsByBeacon.set(beaconId, []);
-      }
-      snapshotsByBeacon.get(beaconId)!.push(snapshot);
-    });
-
-    // Create perp lookup map with proper typing
-    const perpLookup = new Map<Hex, { id: Hex; beacon: { id: Address } }>(
-      perpResponse.perps.map((p: any) => [
-        p.id as Hex,
-        p as { id: Hex; beacon: { id: Address } }
-      ])
-    );
-
-    // Build PerpData for each perp
-    const resultMap = new Map<Hex, PerpData>();
-
-    for (const perpId of perpIds) {
-      const perp = perpLookup.get(perpId);
-      if (!perp) {
-        throw new Error(`Perp ${perpId} not found`);
-      }
-
-      // Type-safe beacon access
-      const beaconId = perp.beacon.id;
-      const snapshots = snapshotsByPerp.get(perpId) || [];
-      const beaconSnapshots = snapshotsByBeacon.get(beaconId) || [];
-      const contractData = contractDataMap.get(perpId);
-
-      if (!contractData) {
-        throw new Error(`Contract data for perp ${perpId} not found`);
-      }
-
-      if (snapshots.length === 0) {
-        throw new Error(`No snapshots found for perp ${perpId}`);
-      }
-
-      if (beaconSnapshots.length === 0) {
-        throw new Error(`No beacon snapshots found for perp ${perpId}`);
-      }
-
-      // Process time series data
-      const markTimeSeries: TimeSeries<number>[] = snapshots.map((snapshot: any) => ({
-        timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.markPrice),
-      }));
-
-      const indexTimeSeries: TimeSeries<number>[] = beaconSnapshots.map((snapshot: any) => ({
-        timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.indexPrice),
-      }));
-
-      const openInterestTimeSeries: TimeSeries<OpenInterest>[] = snapshots.map((snapshot: any) => ({
-        timestamp: Number(snapshot.timestamp),
-        value: {
-          takerLongNotional: Number(snapshot.takerLongNotional),
-          takerShortNotional: Number(snapshot.takerShortNotional),
-        },
-      }));
-
-      const fundingRateTimeSeries: TimeSeries<number>[] = snapshots.map((snapshot: any) => ({
-        timestamp: Number(snapshot.timestamp),
-        value: Number(snapshot.fundingRate),
-      }));
-
-      // Get latest values
-      const latestSnapshot = snapshots[snapshots.length - 1];
-      const latestBeaconSnapshot = beaconSnapshots[beaconSnapshots.length - 1];
-
-      const perpData: PerpData = {
-        id: perpId,
-        tickSpacing: contractData.tickSpacing,
-        mark: sqrtPriceX96ToPrice(contractData.sqrtPriceX96),
-        index: Number(latestBeaconSnapshot.indexPrice),
-        beacon: beaconId,
-        lastIndexUpdate: Number(latestBeaconSnapshot.timestamp),
-        openInterest: {
-          takerLongNotional: Number(latestSnapshot.takerLongNotional),
-          takerShortNotional: Number(latestSnapshot.takerShortNotional),
-        },
-        markTimeSeries,
-        indexTimeSeries,
-        fundingRate: Number(latestSnapshot.fundingRate),
-        bounds: contractData.bounds,
-        fees: contractData.fees,
-        openInterestTimeSeries,
-        fundingRateTimeSeries,
-        totalOpenMakerPnl: 0,
-        totalOpenTakerPnl: 0,
-      };
-
-      resultMap.set(perpId, perpData);
-    }
-
-    return resultMap;
-  }
-
-  private async fetchMultiplePerpContractData(perpIds: Hex[]): Promise<Map<Hex, {
-    tickSpacing: number;
-    sqrtPriceX96: bigint;
-    bounds: Bounds;
-    fees: Fees;
-  }>> {
-    // Fetch all contract data in parallel
-    const results = await Promise.all(
-      perpIds.map(async (perpId) => ({
-        perpId,
-        data: await this.fetchPerpContractData(perpId),
-      }))
-    );
-
-    return new Map(results.map(({ perpId, data }) => [perpId, data]));
-  }
-
-  private async fetchUserData(userAddress: Hex): Promise<UserData> {
-    const [usdcBalance, openPositionsData, closedPositionsData] = await Promise.all([
-      this.walletClient.readContract({
-        address: this.deployments().usdc,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [userAddress],
-      }),
-      this.fetchUserOpenPositions(userAddress),
-      this.fetchUserClosedPositions(userAddress),
-    ]);
-
-    const realizedPnl = closedPositionsData.reduce((acc, position) => acc + position.pnlAtClose, 0);
-    const unrealizedPnl = openPositionsData.reduce(
-      (acc, position) => acc + position.liveDetails.pnl - position.liveDetails.fundingPayment,
-      0
+    // Fetch live details for all positions in parallel
+    const openPositionsData = await Promise.all(
+      positions.map(async ({ perpId, positionId, isLong, isMaker }) => {
+        const liveDetails = await this.fetchPositionLiveDetailsFromContract(perpId, positionId);
+        return {
+          perpId,
+          positionId,
+          isLong,
+          isMaker,
+          liveDetails,
+        };
+      })
     );
 
     return {
       walletAddress: userAddress,
       usdcBalance: Number(formatUnits(usdcBalance, 6)),
       openPositions: openPositionsData,
-      closedPositions: closedPositionsData,
-      realizedPnl,
-      unrealizedPnl,
     };
   }
 
-  private async fetchUserOpenPositions(userAddress: Hex): Promise<OpenPositionData[]> {
-    const query: TypedDocumentNode<{
-      openPositions: {
-        perp: { id: Hex };
-        inContractPosId: bigint;
-        isLong: boolean;
-        isMaker: boolean;
-      }[];
-    }, { holder: Address }> = parse(`
-      query ($holder: Bytes!) {
-        openPositions(
-          where: { holder: $holder }
-        ) {
-          perp { id }
-          inContractPosId
-          isLong
-          isMaker
-        }
-      }
-    `);
-
-    const response: any = await this.goldskyClient.request(query, { holder: userAddress });
-
-    const positionsWithDetails = await Promise.all(
-      response.openPositions.map(async (position: any) => {
-        // Normalize inContractPosId to bigint (GraphQL returns it as a string)
-        const positionId = typeof position.inContractPosId === 'bigint' 
-          ? position.inContractPosId 
-          : BigInt(position.inContractPosId);
-        
-        const liveDetails = await this.fetchPositionLiveDetailsFromContract(
-          position.perp.id,
-          positionId
-        );
-
-        return {
-          perpId: position.perp.id as Hex,
-          positionId,
-          isLong: position.isLong as boolean,
-          isMaker: position.isMaker as boolean,
-          liveDetails,
-        };
-      })
-    );
-
-    return positionsWithDetails;
-  }
-
-  private async fetchUserClosedPositions(userAddress: Hex): Promise<ClosedPosition[]> {
-    const query: TypedDocumentNode<{
-      closedPositions: {
-        perp: { id: Hex };
-        wasMaker: boolean;
-        wasLong: boolean;
-        pnlAtClose: string;
-      }[];
-    }, { holder: Address }> = parse(`
-      query ($holder: Bytes!) {
-        closedPositions(
-          where: { holder: $holder }
-        ) {
-          perp { id }
-          wasMaker
-          wasLong
-          pnlAtClose
-        }
-      }
-    `);
-
-    const response: any = await this.goldskyClient.request(query, { holder: userAddress });
-
-    return response.closedPositions.map((position: any) => ({
-      perpId: position.perp.id as Hex,
-      wasMaker: position.wasMaker as boolean,
-      wasLong: position.wasLong as boolean,
-      pnlAtClose: Number(position.pnlAtClose),
-    }));
-  }
 
   private async fetchPositionLiveDetailsFromContract(perpId: Hex, positionId: bigint): Promise<LiveDetails> {
     return withErrorHandling(async () => {
@@ -612,54 +187,37 @@ export class PerpCityContext {
   }
 
   /**
-   * Fetch comprehensive user data with all positions in a single batched request
+   * Fetch comprehensive user data with live details for all positions
+   * @param userAddress - The user's wallet address
+   * @param positions - Array of position metadata (perpId, positionId, isLong, isMaker) tracked from transaction receipts
    */
-  async getUserData(userAddress: Hex): Promise<UserData> {
-    return this.fetchUserData(userAddress);
+  async getUserData(
+    userAddress: Hex,
+    positions: Array<{ perpId: Hex; positionId: bigint; isLong: boolean; isMaker: boolean }>
+  ): Promise<UserData> {
+    return this.fetchUserData(userAddress, positions);
   }
 
   /**
    * Fetch open position data with live details
+   * @param perpId - The perpetual market ID
+   * @param positionId - The position ID
+   * @param isLong - Whether the position is long (true) or short (false)
+   * @param isMaker - Whether the position is a maker (LP) position
    */
-  async getOpenPositionData(perpId: Hex, positionId: bigint): Promise<OpenPositionData> {
-    // First fetch the position metadata from GraphQL
-    const query: TypedDocumentNode<{
-      openPositions: {
-        isLong: boolean;
-        isMaker: boolean;
-      }[];
-    }, { perpId: Hex; posId: string }> = parse(`
-      query ($perpId: Bytes!, $posId: BigInt!) {
-        openPositions(
-          where: { perp: $perpId, inContractPosId: $posId }
-          first: 1
-        ) {
-          isLong
-          isMaker
-        }
-      }
-    `);
-
-    const [positionResponse, liveDetails] = await Promise.all([
-      this.goldskyClient.request(query, { perpId, posId: positionId.toString() }),
-      this.fetchPositionLiveDetailsFromContract(perpId, positionId),
-    ]);
-
-    const position = (positionResponse as any).openPositions[0];
-
-    // Handle missing position data - GraphQL may return empty array if position doesn't exist
-    if (!position) {
-      throw new Error(
-        `Position not found in GraphQL: perpId=${perpId}, positionId=${positionId}. ` +
-        `The position may not exist or may have been closed.`
-      );
-    }
+  async getOpenPositionData(
+    perpId: Hex,
+    positionId: bigint,
+    isLong: boolean,
+    isMaker: boolean
+  ): Promise<OpenPositionData> {
+    const liveDetails = await this.fetchPositionLiveDetailsFromContract(perpId, positionId);
 
     return {
       perpId,
       positionId,
-      isLong: position.isLong,
-      isMaker: position.isMaker,
+      isLong,
+      isMaker,
       liveDetails,
     };
   }

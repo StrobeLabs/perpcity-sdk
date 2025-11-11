@@ -47,16 +47,6 @@ export class InsufficientFundsError extends PerpCityError {
 }
 
 /**
- * Error thrown when a GraphQL query fails
- */
-export class GraphQLError extends PerpCityError {
-  constructor(message: string, cause?: Error) {
-    super(message, cause);
-    this.name = "GraphQLError";
-  }
-}
-
-/**
  * Error thrown when an RPC call fails
  */
 export class RPCError extends PerpCityError {

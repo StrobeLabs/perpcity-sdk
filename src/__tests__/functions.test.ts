@@ -1,23 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import {
   getPerpMark,
-  getPerpIndex,
   getPerpBeacon,
-  getPerpOpenInterest,
   getPerpBounds,
   getPerpFees,
-  getPerpFundingRate,
-  getPerpMarkTimeSeries,
-  getPerpIndexTimeSeries,
-  getPerpOpenInterestTimeSeries,
-  getPerpFundingRateTimeSeries,
   getPerpTickSpacing
 } from '../functions/perp';
 import {
   getUserUsdcBalance,
   getUserOpenPositions,
-  getUserRealizedPnl,
-  getUserUnrealizedPnl
+  getUserWalletAddress
 } from '../functions/user';
 import {
   getPositionPnl,
@@ -32,16 +24,7 @@ describe('Perp Functions', () => {
     id: '0x123' as any,
     tickSpacing: 60,
     mark: 50.0,
-    index: 49.5,
     beacon: '0xbeacon',
-    lastIndexUpdate: 1000,
-    openInterest: {
-      takerLongNotional: 1000,
-      takerShortNotional: 500,
-    },
-    markTimeSeries: [],
-    indexTimeSeries: [],
-    fundingRate: 0.001,
     bounds: {
       minMargin: 100,
       minTakerLeverage: 1,
@@ -53,29 +36,14 @@ describe('Perp Functions', () => {
       lpFee: 0.003,
       liquidationFee: 0.004,
     },
-    openInterestTimeSeries: [],
-    fundingRateTimeSeries: [],
-    totalOpenMakerPnl: 0,
-    totalOpenTakerPnl: 0,
   };
 
   it('should extract mark price', () => {
     expect(getPerpMark(mockPerpData)).toBe(50.0);
   });
 
-  it('should extract index price', () => {
-    expect(getPerpIndex(mockPerpData)).toBe(49.5);
-  });
-
   it('should extract beacon address', () => {
     expect(getPerpBeacon(mockPerpData)).toBe('0xbeacon');
-  });
-
-  it('should extract open interest', () => {
-    expect(getPerpOpenInterest(mockPerpData)).toEqual({
-      takerLongNotional: 1000,
-      takerShortNotional: 500,
-    });
   });
 
   it('should extract bounds', () => {
@@ -95,28 +63,8 @@ describe('Perp Functions', () => {
     });
   });
 
-  it('should extract funding rate', () => {
-    expect(getPerpFundingRate(mockPerpData)).toBe(0.001);
-  });
-
   it('should extract tick spacing', () => {
     expect(getPerpTickSpacing(mockPerpData)).toBe(60);
-  });
-
-  it('should extract mark time series', () => {
-    expect(getPerpMarkTimeSeries(mockPerpData)).toEqual([]);
-  });
-
-  it('should extract index time series', () => {
-    expect(getPerpIndexTimeSeries(mockPerpData)).toEqual([]);
-  });
-
-  it('should extract open interest time series', () => {
-    expect(getPerpOpenInterestTimeSeries(mockPerpData)).toEqual([]);
-  });
-
-  it('should extract funding rate time series', () => {
-    expect(getPerpFundingRateTimeSeries(mockPerpData)).toEqual([]);
   });
 });
 
@@ -138,16 +86,6 @@ describe('User Functions', () => {
         },
       }
     ],
-    closedPositions: [
-      {
-        perpId: '0x123' as any,
-        wasMaker: false,
-        wasLong: true,
-        pnlAtClose: 25.0,
-      }
-    ],
-    realizedPnl: 25.0,
-    unrealizedPnl: 45.0,
   };
 
   it('should extract USDC balance', () => {
@@ -161,12 +99,8 @@ describe('User Functions', () => {
     expect(positions[0].positionId).toBe(BigInt(1));
   });
 
-  it('should extract realized PnL', () => {
-    expect(getUserRealizedPnl(mockUserData)).toBe(25.0);
-  });
-
-  it('should extract unrealized PnL', () => {
-    expect(getUserUnrealizedPnl(mockUserData)).toBe(45.0);
+  it('should extract wallet address', () => {
+    expect(getUserWalletAddress(mockUserData)).toBe('0xuser');
   });
 });
 

@@ -13,7 +13,5 @@ export interface PerpCityDeployments {
 
 export interface PerpCityContextConfig {
   walletClient: WalletClient;
-  goldskyBearerToken?: string;
-  goldskyEndpoint: string;
   deployments: PerpCityDeployments;
 }

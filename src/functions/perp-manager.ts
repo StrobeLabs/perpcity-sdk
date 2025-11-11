@@ -1,31 +1,12 @@
 import { PerpCityContext } from "../context";
 import { priceToSqrtPriceX96, scale6Decimals, scaleToX96, priceToTick } from "../utils";
-import { withErrorHandling, GraphQLError } from "../utils/errors";
+import { withErrorHandling } from "../utils/errors";
 import { approveUsdc } from "../utils/approve";
 import type { Address, Hex } from "viem";
 import { publicActions, decodeEventLog } from "viem";
-import { gql } from "graphql-request";
-import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
-import { parse } from 'graphql';
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import { CreatePerpParams, OpenTakerPositionParams, OpenMakerPositionParams } from "../types/entity-data";
 import { OpenPosition } from "./open-position";
-
-// Functional alternatives for PerpManager methods
-export async function getPerps(context: PerpCityContext): Promise<Hex[]> {
-  return withErrorHandling(async () => {
-    const query: TypedDocumentNode<{ perps: { id: Hex }[] }, {}> = parse(gql`
-      {
-        perps {
-          id
-        }
-      }
-    `)
-
-    const response = await context.goldskyClient.request(query);
-    return response.perps.map((perpData: { id: Hex }) => perpData.id as Hex);
-  }, "getPerps");
-}
 
 export async function createPerp(context: PerpCityContext, params: CreatePerpParams): Promise<Hex> {
   return withErrorHandling(async () => {

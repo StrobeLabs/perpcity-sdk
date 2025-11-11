@@ -12,12 +12,6 @@ export function setup(): { context: PerpCityContext; perpId: Hex } {
   if (!process.env['PRIVATE_KEY']) {
     throw new Error(`Missing required env var: PRIVATE_KEY`);
   }
-  if (!process.env['GOLDSKY_BEARER_TOKEN']) {
-    throw new Error(`Missing required env var: GOLDSKY_BEARER_TOKEN`);
-  }
-  if (!process.env['GOLDSKY_ENDPOINT']) {
-    throw new Error(`Missing required env var: GOLDSKY_ENDPOINT`);
-  }
   if (!process.env['PERP_MANAGER_ADDRESS']) {
     throw new Error(`Missing required env var: PERP_MANAGER_ADDRESS`);
   }
@@ -36,8 +30,6 @@ export function setup(): { context: PerpCityContext; perpId: Hex } {
 
   const context = new PerpCityContext({
     walletClient: walletClient,
-    goldskyBearerToken: process.env.GOLDSKY_BEARER_TOKEN,
-    goldskyEndpoint: process.env.GOLDSKY_ENDPOINT,
     deployments: {
       perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
       usdc: process.env.USDC_ADDRESS as `0x${string}`,

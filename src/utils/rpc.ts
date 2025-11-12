@@ -7,24 +7,28 @@ export interface RpcConfig {
 }
 
 /**
- * Get the appropriate RPC URL based on environment configuration
+ * Get the RPC URL from environment or configuration
+ *
+ * This is a simple helper that retrieves the RPC URL from the RPC_URL
+ * environment variable or accepts a direct override. The function does
+ * not construct URLs - it expects the full endpoint URL to be provided.
  *
  * @param config - Optional configuration with URL override
  * @returns The RPC URL to use for connections
  * @throws Error if no RPC URL is configured
  *
  * @example
- * // Using environment variable
- * // RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
+ * // Get URL from RPC_URL environment variable
+ * // RPC_URL=https://your-rpc-endpoint.example
  * const url = getRpcUrl();
- * // Returns: https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
+ * // Returns: https://your-rpc-endpoint.example
  *
  * @example
- * // Using config override
+ * // Override with custom URL
  * const url = getRpcUrl({
- *   url: 'https://base-mainnet.g.alchemy.com/v2/YOUR_KEY'
+ *   url: 'https://custom-rpc.example'
  * });
- * // Returns: https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
+ * // Returns: https://custom-rpc.example
  */
 export function getRpcUrl(config: RpcConfig = {}): string {
   const rpcUrl = config.url ?? process.env.RPC_URL;
@@ -32,10 +36,10 @@ export function getRpcUrl(config: RpcConfig = {}): string {
   if (!rpcUrl) {
     throw new Error(
       'RPC_URL is required. Please set the RPC_URL environment variable with your full RPC endpoint URL.\n' +
-      'Examples:\n' +
-      '  - Alchemy: https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY\n' +
-      '  - Infura: https://base-sepolia.infura.io/v3/YOUR_API_KEY\n' +
-      '  - Public RPC: https://sepolia.base.org'
+      'Example URLs (use your own provider and API key):\n' +
+      '  https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY\n' +
+      '  https://base-sepolia.infura.io/v3/YOUR_API_KEY\n' +
+      '  https://sepolia.base.org'
     );
   }
 

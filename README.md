@@ -13,7 +13,8 @@ pnpm add @strobelabs/perpcity-sdk
 The SDK requires configuration via environment variables. Create a `.env` file:
 
 ```bash
-# Blockchain RPC endpoint
+# Blockchain RPC endpoint (full URL)
+# For production, use a private RPC provider like Alchemy or Infura
 RPC_URL=https://sepolia.base.org
 
 # Your private key (only for write operations)
@@ -31,48 +32,53 @@ LOCKUP_PERIOD_MODULE_ADDRESS=0x...
 SQRT_PRICE_IMPACT_LIMIT_MODULE_ADDRESS=0x...
 ```
 
-### Private RPC Providers (Recommended for Production)
+### RPC Configuration
+
+#### Private RPC Providers (Recommended for Production)
 
 For production applications, we recommend using a private RPC provider like [Alchemy](https://www.alchemy.com/) or [Infura](https://infura.io/) for better reliability, performance, and rate limits.
 
-**Using Alchemy (Recommended):**
+Simply set `RPC_URL` to your provider's full endpoint URL:
 
 ```bash
-# Set your Alchemy API key
-RPC_API_KEY=your_alchemy_api_key_here
-RPC_PROVIDER=alchemy  # Optional, defaults to 'alchemy'
-CHAIN_ID=84532  # REQUIRED when using RPC_API_KEY: 84532 for Base Sepolia, 8453 for Base Mainnet
+# Alchemy (Recommended)
+RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+
+# Or for Base Mainnet
+RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+
+# Infura
+RPC_URL=https://base-sepolia.infura.io/v3/YOUR_API_KEY
+
+# Or for Base Mainnet
+RPC_URL=https://base-mainnet.infura.io/v3/YOUR_API_KEY
 ```
 
-The SDK will automatically construct the appropriate URL:
-- Base Sepolia: `https://base-sepolia.g.alchemy.com/v2/{YOUR_KEY}`
-- Base Mainnet: `https://base-mainnet.g.alchemy.com/v2/{YOUR_KEY}`
+#### Public RPC (Development Only)
 
-**IMPORTANT:** When using private RPC providers (RPC_API_KEY), you MUST specify a chain ID either via the `CHAIN_ID` environment variable or by passing `chainId` to `getRpcUrl()`. This requirement prevents production misrouting errors. For custom RPC URLs (RPC_URL), the chain ID is optional but recommended (defaults to Base Sepolia with a warning if omitted).
-
-**Using Infura:**
+For development and testing, you can use public RPC endpoints:
 
 ```bash
-RPC_API_KEY=your_infura_api_key_here
-RPC_PROVIDER=infura
-CHAIN_ID=84532  # REQUIRED when using RPC_API_KEY
+# Base Sepolia (testnet)
+RPC_URL=https://sepolia.base.org
+
+# Base Mainnet
+RPC_URL=https://mainnet.base.org
 ```
 
-**Priority:** If `RPC_API_KEY` is set, it takes priority over `RPC_URL`.
+#### Using getRpcUrl Helper
 
-**Using the getRpcUrl helper:**
+The SDK provides a helper function for retrieving the RPC URL:
 
 ```typescript
 import { getRpcUrl } from '@strobelabs/perpcity-sdk';
 
-// Automatically uses RPC_API_KEY if set, otherwise falls back to RPC_URL
-const rpcUrl = getRpcUrl({ chainId: 84532 });
+// Get RPC URL from RPC_URL environment variable
+const rpcUrl = getRpcUrl();
 
-// Or provide configuration directly
+// Or override with a custom URL
 const rpcUrl = getRpcUrl({
-  chainId: 8453,  // Base Mainnet
-  provider: 'alchemy',
-  apiKey: 'your_key'
+  url: 'https://base-mainnet.g.alchemy.com/v2/YOUR_KEY'
 });
 ```
 
@@ -84,8 +90,8 @@ import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
 
-// Get RPC URL (supports both private providers and custom URLs)
-const rpcUrl = getRpcUrl({ chainId: baseSepolia.id });
+// Get RPC URL from environment
+const rpcUrl = getRpcUrl();
 
 // Create wallet client
 const account = privateKeyToAccount(process.env.PRIVATE_KEY);
@@ -431,14 +437,11 @@ PRIVATE_KEY=your_private_key_here
 PERP_MANAGER_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
 USDC_ADDRESS=0xC1a5D4E99BB224713dd179eA9CA2Fa6600706210
 
-# RPC Configuration (choose one option):
+# RPC Configuration
+# For production, use a private RPC provider URL
+RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY
 
-# Option 1: Private RPC (Recommended for production)
-RPC_API_KEY=your_alchemy_or_infura_key
-RPC_PROVIDER=alchemy  # or 'infura'
-CHAIN_ID=84532  # 84532 for Base Sepolia, 8453 for Base Mainnet
-
-# Option 2: Custom/Public RPC
+# Or for development/testing with public RPC
 # RPC_URL=https://sepolia.base.org
 ```
 

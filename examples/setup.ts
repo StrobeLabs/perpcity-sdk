@@ -6,9 +6,9 @@ import { privateKeyToAccount } from 'viem/accounts';
 import type { Hex } from 'viem';
 
 export function setup(): { context: PerpCityContext; perpId: Hex } {
-  // Validate RPC configuration (either RPC_URL or RPC_API_KEY must be set)
-  if (!process.env['RPC_URL'] && !process.env['RPC_API_KEY']) {
-    throw new Error(`Missing required env var: Either RPC_URL or RPC_API_KEY must be set`);
+  // Validate required environment variables
+  if (!process.env['RPC_URL']) {
+    throw new Error(`Missing required env var: RPC_URL`);
   }
   if (!process.env['PRIVATE_KEY']) {
     throw new Error(`Missing required env var: PRIVATE_KEY`);
@@ -23,8 +23,8 @@ export function setup(): { context: PerpCityContext; perpId: Hex } {
     throw new Error(`Missing required env var: PERP_ID`);
   }
 
-  // Get RPC URL using the helper (supports private providers like Alchemy)
-  const rpcUrl = getRpcUrl({ chainId: baseSepolia.id });
+  // Get RPC URL from environment
+  const rpcUrl = getRpcUrl();
 
   const walletClient = createWalletClient({
     chain: baseSepolia,

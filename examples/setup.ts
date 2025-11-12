@@ -1,11 +1,12 @@
 import 'dotenv/config';
-import { PerpCityContext } from "../dist";
+import { PerpCityContext, getRpcUrl } from "../dist";
 import { createWalletClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from 'viem/accounts';
 import type { Hex } from 'viem';
 
 export function setup(): { context: PerpCityContext; perpId: Hex } {
+  // Validate required environment variables
   if (!process.env['RPC_URL']) {
     throw new Error(`Missing required env var: RPC_URL`);
   }
@@ -22,9 +23,12 @@ export function setup(): { context: PerpCityContext; perpId: Hex } {
     throw new Error(`Missing required env var: PERP_ID`);
   }
 
+  // Get RPC URL from environment
+  const rpcUrl = getRpcUrl();
+
   const walletClient = createWalletClient({
     chain: baseSepolia,
-    transport: http(process.env.RPC_URL),
+    transport: http(rpcUrl),
     account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
   })
 

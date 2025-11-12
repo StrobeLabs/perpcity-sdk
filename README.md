@@ -13,7 +13,8 @@ pnpm add @strobelabs/perpcity-sdk
 The SDK requires configuration via environment variables. Create a `.env` file:
 
 ```bash
-# Blockchain RPC endpoint
+# Blockchain RPC endpoint (full URL)
+# For production, use a private RPC provider like Alchemy or Infura
 RPC_URL=https://sepolia.base.org
 
 # Your private key (only for write operations)
@@ -31,20 +32,73 @@ LOCKUP_PERIOD_MODULE_ADDRESS=0x...
 SQRT_PRICE_IMPACT_LIMIT_MODULE_ADDRESS=0x...
 ```
 
+### RPC Configuration
+
+#### Private RPC Providers (Recommended for Production)
+
+For production applications, we recommend using a private RPC provider like [Alchemy](https://www.alchemy.com/) or [Infura](https://infura.io/) for better reliability, performance, and rate limits.
+
+Simply set `RPC_URL` to your provider's full endpoint URL:
+
+```bash
+# Alchemy (Recommended)
+RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+
+# Or for Base Mainnet
+RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+
+# Infura
+RPC_URL=https://base-sepolia.infura.io/v3/YOUR_API_KEY
+
+# Or for Base Mainnet
+RPC_URL=https://base-mainnet.infura.io/v3/YOUR_API_KEY
+```
+
+#### Public RPC (Development Only)
+
+For development and testing, you can use public RPC endpoints:
+
+```bash
+# Base Sepolia (testnet)
+RPC_URL=https://sepolia.base.org
+
+# Base Mainnet
+RPC_URL=https://mainnet.base.org
+```
+
+#### Using getRpcUrl Helper
+
+The SDK provides a helper function for retrieving the RPC URL:
+
+```typescript
+import { getRpcUrl } from '@strobelabs/perpcity-sdk';
+
+// Get RPC URL from RPC_URL environment variable
+const rpcUrl = getRpcUrl();
+
+// Or override with a custom URL
+const rpcUrl = getRpcUrl({
+  url: 'https://base-mainnet.g.alchemy.com/v2/YOUR_KEY'
+});
+```
+
 ## Quick Start
 
 ```typescript
-import { PerpCityContext } from '@strobelabs/perpcity-sdk';
+import { PerpCityContext, getRpcUrl } from '@strobelabs/perpcity-sdk';
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
+
+// Get RPC URL from environment
+const rpcUrl = getRpcUrl();
 
 // Create wallet client
 const account = privateKeyToAccount(process.env.PRIVATE_KEY);
 const walletClient = createWalletClient({
   account,
   chain: baseSepolia,
-  transport: http(process.env.RPC_URL)
+  transport: http(rpcUrl)
 });
 
 // Initialize context with configuration
@@ -378,10 +432,17 @@ pnpm ci
 Create a `.env.local` file:
 
 ```env
+# Required
 PRIVATE_KEY=your_private_key_here
-RPC_URL=https://sepolia.base.org
 PERP_MANAGER_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
 USDC_ADDRESS=0xC1a5D4E99BB224713dd179eA9CA2Fa6600706210
+
+# RPC Configuration
+# For production, use a private RPC provider URL
+RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+
+# Or for development/testing with public RPC
+# RPC_URL=https://sepolia.base.org
 ```
 
 ## License

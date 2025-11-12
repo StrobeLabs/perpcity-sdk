@@ -53,7 +53,13 @@ export const CHAIN_IDS = {
  */
 export function getRpcUrl(config: RpcConfig = {}): string {
   const apiKey = config.apiKey ?? process.env.RPC_API_KEY;
-  const provider = config.provider ?? (process.env.RPC_PROVIDER as RpcProvider) ?? 'alchemy';
+  const envProvider = process.env.RPC_PROVIDER;
+  if (envProvider && envProvider !== 'alchemy' && envProvider !== 'infura') {
+    throw new Error(
+      `Invalid RPC_PROVIDER: "${envProvider}". Supported providers: alchemy, infura`
+    );
+  }
+  const provider = config.provider ?? (envProvider as RpcProvider) ?? 'alchemy';
   const fallbackUrl = config.fallbackUrl ?? process.env.RPC_URL;
   const chainId = config.chainId;
 

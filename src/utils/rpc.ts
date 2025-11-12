@@ -65,7 +65,7 @@ export function getRpcUrl(config: RpcConfig = {}): string {
 
   // If API key is provided, construct private RPC URL
   if (apiKey) {
-    const networkUrl = getProviderUrl(chainId, provider);
+    const networkUrl = getProviderUrl(chainId, provider, true);
     return `${networkUrl}${apiKey}`;
   }
 
@@ -85,11 +85,12 @@ export function getRpcUrl(config: RpcConfig = {}): string {
  *
  * @param chainId - The chain ID (e.g., 84532 for Base Sepolia)
  * @param provider - The RPC provider (alchemy or infura)
+ * @param isPrivateRpc - Whether this is for a private RPC connection (API key present)
  * @returns The base URL for the provider (without API key)
  */
-function getProviderUrl(chainId: number | undefined, provider: RpcProvider): string {
+function getProviderUrl(chainId: number | undefined, provider: RpcProvider, isPrivateRpc: boolean): string {
   // Determine chain network name
-  const network = getNetworkName(chainId);
+  const network = getNetworkName(chainId, isPrivateRpc);
 
   switch (provider) {
     case 'alchemy':
@@ -105,11 +106,34 @@ function getProviderUrl(chainId: number | undefined, provider: RpcProvider): str
  * Get the network name for a given chain ID
  *
  * @param chainId - The chain ID
+ * @param isPrivateRpc - Whether this is for a private RPC connection (API key present)
  * @returns The network name used by RPC providers
  */
-function getNetworkName(chainId: number | undefined): string {
-  // If no chainId provided, try to infer from environment or default to Base Sepolia
-  const effectiveChainId = chainId ?? getChainIdFromEnv() ?? CHAIN_IDS.BASE_SEPOLIA;
+function getNetworkName(chainId: number | undefined, isPrivateRpc: boolean): string {
+  // Try to get chainId from environment if not provided
+  const envChainId = getChainIdFromEnv();
+  const effectiveChainId = chainId ?? envChainId;
+
+  // If using private RPC (API key) without explicit chainId, throw error
+  if (isPrivateRpc && !effectiveChainId) {
+    throw new Error(
+      'Chain ID is required when using private RPC providers (RPC_API_KEY). ' +
+      'Production deployments must explicitly specify chainId to avoid misrouting requests. ' +
+      'Supported chain IDs: Base Sepolia (84532), Base Mainnet (8453). ' +
+      'Set chainId in getRpcUrl() config or via CHAIN_ID environment variable.'
+    );
+  }
+
+  // If no chainId provided and not private RPC, default to Base Sepolia with warning
+  if (!effectiveChainId) {
+    console.warn(
+      'WARNING: No chain ID specified, defaulting to Base Sepolia (84532). ' +
+      'This may cause issues in production. Please specify chainId explicitly via ' +
+      'getRpcUrl() config or CHAIN_ID environment variable. ' +
+      'Supported chain IDs: Base Sepolia (84532), Base Mainnet (8453).'
+    );
+    return 'base-sepolia';
+  }
 
   switch (effectiveChainId) {
     case CHAIN_IDS.BASE_SEPOLIA:

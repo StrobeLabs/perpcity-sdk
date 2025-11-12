@@ -41,19 +41,21 @@ For production applications, we recommend using a private RPC provider like [Alc
 # Set your Alchemy API key
 RPC_API_KEY=your_alchemy_api_key_here
 RPC_PROVIDER=alchemy  # Optional, defaults to 'alchemy'
-CHAIN_ID=84532  # Optional: 84532 for Base Sepolia, 8453 for Base Mainnet
+CHAIN_ID=84532  # REQUIRED when using RPC_API_KEY: 84532 for Base Sepolia, 8453 for Base Mainnet
 ```
 
 The SDK will automatically construct the appropriate URL:
 - Base Sepolia: `https://base-sepolia.g.alchemy.com/v2/{YOUR_KEY}`
 - Base Mainnet: `https://base-mainnet.g.alchemy.com/v2/{YOUR_KEY}`
 
+**IMPORTANT:** When using private RPC providers (RPC_API_KEY), you MUST specify a chain ID either via the `CHAIN_ID` environment variable or by passing `chainId` to `getRpcUrl()`. This requirement prevents production misrouting errors. For custom RPC URLs (RPC_URL), the chain ID is optional but recommended (defaults to Base Sepolia with a warning if omitted).
+
 **Using Infura:**
 
 ```bash
 RPC_API_KEY=your_infura_api_key_here
 RPC_PROVIDER=infura
-CHAIN_ID=84532
+CHAIN_ID=84532  # REQUIRED when using RPC_API_KEY
 ```
 
 **Priority:** If `RPC_API_KEY` is set, it takes priority over `RPC_URL`.

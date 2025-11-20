@@ -2,3 +2,23 @@ node_modules/
 dist/
 .env
 .env.local
+
+# Debug scripts
+check-*.ts
+test-*.ts
+debug-*.ts
+calc-*.ts
+get-*.ts
+
+# Logs
+*.log
+
+# Temporary docs
+*_RESULTS.md
+*_ANALYSIS.md
+*_ISSUES_FOUND.md
+
+# LLM-only documentation (not for human reviewers)
+INTEGRATION_TESTS_SETUP.md
+CONTRACT_ARCHITECTURE.md
+src/__tests__/integration/README.md

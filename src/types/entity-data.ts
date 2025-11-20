@@ -30,7 +30,10 @@ export type OpenTakerPositionParams = {
   isLong: boolean;          // true = long, false = short
   margin: number;           // USDC amount in human units (e.g., 100 = $100)
   leverage: number;         // Leverage multiplier (e.g., 2 = 2x)
-  unspecifiedAmountLimit: number; // Slippage protection
+  unspecifiedAmountLimit: number | bigint; // Slippage protection
+                                           // - For longs: minimum perp tokens to receive (0 = no minimum)
+                                           // - For shorts: maximum perp tokens to send (use 2n**128n-1n for no limit)
+                                           // Can pass number (in human units) or bigint (raw value)
 }
 
 export type OpenMakerPositionParams = {

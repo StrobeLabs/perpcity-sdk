@@ -28,6 +28,21 @@ export const PERP_MANAGER_ABI =
     },
     {
         "inputs": [],
+        "name": "TransferFromFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "TransferFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "ApproveFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "FeeTooLarge",
         "type": "error"
     },
@@ -139,6 +154,11 @@ export const PERP_MANAGER_ABI =
     {
         "inputs": [],
         "name": "NoHandoverRequest",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "NoLiquidityToReceiveFees",
         "type": "error"
     },
     {

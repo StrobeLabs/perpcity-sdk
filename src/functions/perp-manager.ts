@@ -80,6 +80,14 @@ export async function openTakerPosition(
   params: OpenTakerPositionParams
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
+    // Validate inputs
+    if (params.margin <= 0) {
+      throw new Error('Margin must be greater than 0');
+    }
+    if (params.leverage <= 0) {
+      throw new Error('Leverage must be greater than 0');
+    }
+
     // Convert margin to 6-decimal scaled bigint
     const marginScaled = scale6Decimals(params.margin);
 
@@ -89,13 +97,18 @@ export async function openTakerPosition(
     // Convert leverage to X96 format: leverage * 2^96
     const levX96 = scaleToX96(params.leverage);
 
+    // Handle unspecifiedAmountLimit - can be number (human units) or bigint (raw value)
+    const unspecifiedAmountLimit = typeof params.unspecifiedAmountLimit === 'bigint'
+      ? params.unspecifiedAmountLimit
+      : scale6Decimals(params.unspecifiedAmountLimit);
+
     // Prepare contract parameters - deployed contract requires holder address
     const contractParams = {
       holder: context.walletClient.account!.address,
       isLong: params.isLong,
       margin: marginScaled,
       levX96,
-      unspecifiedAmountLimit: scale6Decimals(params.unspecifiedAmountLimit),
+      unspecifiedAmountLimit,
     };
 
     // Simulate transaction - deployed contract uses openTakerPos
@@ -124,20 +137,23 @@ export async function openTakerPosition(
 
     for (const log of receipt.logs) {
       try {
+        // Don't specify eventName - let viem auto-detect from ABI
         const decoded = decodeEventLog({
           abi: PERP_MANAGER_ABI,
           data: log.data,
           topics: log.topics,
-          eventName: 'PositionOpened',
         });
 
-        // Match perpId and ensure it's a taker position
-        if (decoded.args.perpId === perpId && !decoded.args.isMaker) {
+        // Check if this is a PositionOpened event for our perpId and it's a taker
+        // Note: perpId from events is lowercased, so normalize both for comparison
+        if (decoded.eventName === 'PositionOpened' &&
+            (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
+            !decoded.args.isMaker) {
           takerPosId = decoded.args.posId as bigint;
           break;
         }
       } catch (e) {
-        // Skip logs that aren't PositionOpened events
+        // Skip logs that can't be decoded with our ABI
         continue;
       }
     }
@@ -146,8 +162,8 @@ export async function openTakerPosition(
       throw new Error(`PositionOpened event not found in transaction receipt. Hash: ${txHash}`);
     }
 
-    // Return OpenPosition instance
-    return new OpenPosition(context, perpId, takerPosId, params.isLong, false);
+    // Return OpenPosition instance with transaction hash
+    return new OpenPosition(context, perpId, takerPosId, params.isLong, false, txHash);
   }, 'openTakerPosition');
 }
 
@@ -157,11 +173,21 @@ export async function openMakerPosition(
   params: OpenMakerPositionParams
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
+    // Validate inputs
+    if (params.margin <= 0) {
+      throw new Error('Margin must be greater than 0');
+    }
+    if (params.priceLower >= params.priceUpper) {
+      throw new Error('priceLower must be less than priceUpper');
+    }
+
     // Convert margin to 6-decimal scaled bigint
     const marginScaled = scale6Decimals(params.margin);
 
-    // Approve USDC spending
-    await approveUsdc(context, marginScaled);
+    // Approve USDC spending - need to approve margin + maxAmt1In
+    // because the contract may need to pull additional USDC for LP position
+    const totalApprovalNeeded = marginScaled + scale6Decimals(params.maxAmt1In);
+    await approveUsdc(context, totalApprovalNeeded);
 
     // Get perp data to determine tick spacing
     const perpData = await context.getPerpData(perpId);
@@ -170,10 +196,20 @@ export async function openMakerPosition(
     const tickLower = priceToTick(params.priceLower, true);  // round down
     const tickUpper = priceToTick(params.priceUpper, false); // round up
 
-    // Ensure ticks are valid for tick spacing
+    // Validate ticks are aligned to tick spacing
     const tickSpacing = perpData.tickSpacing;
     const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
     const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
+
+    // Throw error if ticks need alignment - require users to provide pre-aligned prices
+    if (tickLower !== alignedTickLower || tickUpper !== alignedTickUpper) {
+      throw new Error(
+        `Ticks must be aligned to tickSpacing (${tickSpacing}). ` +
+        `Provided ticks: [${tickLower}, ${tickUpper}], ` +
+        `Required aligned ticks: [${alignedTickLower}, ${alignedTickUpper}]. ` +
+        `Adjust your priceLower/priceUpper to match the aligned tick values.`
+      );
+    }
 
     // Prepare contract parameters - deployed contract requires holder address
     const contractParams = {
@@ -212,20 +248,23 @@ export async function openMakerPosition(
 
     for (const log of receipt.logs) {
       try {
+        // Don't specify eventName - let viem auto-detect from ABI
         const decoded = decodeEventLog({
           abi: PERP_MANAGER_ABI,
           data: log.data,
           topics: log.topics,
-          eventName: 'PositionOpened',
         });
 
-        // Match perpId and ensure it's a maker position
-        if (decoded.args.perpId === perpId && decoded.args.isMaker) {
+        // Check if this is a PositionOpened event for our perpId and it's a maker
+        // Note: perpId from events is lowercased, so normalize both for comparison
+        if (decoded.eventName === 'PositionOpened' &&
+            (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
+            decoded.args.isMaker) {
           makerPosId = decoded.args.posId as bigint;
           break;
         }
       } catch (e) {
-        // Skip logs that aren't PositionOpened events
+        // Skip logs that can't be decoded with our ABI
         continue;
       }
     }
@@ -234,7 +273,7 @@ export async function openMakerPosition(
       throw new Error(`PositionOpened event not found in transaction receipt. Hash: ${txHash}`);
     }
 
-    // Return OpenPosition instance (isLong will be determined by position data)
-    return new OpenPosition(context, perpId, makerPosId, undefined, true);
+    // Return OpenPosition instance with transaction hash (isLong will be determined by position data)
+    return new OpenPosition(context, perpId, makerPosId, undefined, true, txHash);
   }, 'openMakerPosition');
 }

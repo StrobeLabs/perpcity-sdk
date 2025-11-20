@@ -64,6 +64,7 @@ export async function closePosition(
       functionName: 'closePosition',
       args: [contractParams],
       account: context.walletClient.account,
+      gas: 500000n, // Provide explicit gas limit to avoid estimation issues
     });
 
     const txHash = await context.walletClient.writeContract(request);

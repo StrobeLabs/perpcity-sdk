@@ -1,6 +1,9 @@
 import { NUMBER_1E6, BIGINT_1E6, Q96 } from "./constants";
 
 export function priceToSqrtPriceX96(price: number): bigint {
+  if (price <= 0) {
+    throw new Error('Price must be positive');
+  }
   if (price > Number.MAX_SAFE_INTEGER) {
     throw new Error('Price too large');
   }
@@ -9,6 +12,11 @@ export function priceToSqrtPriceX96(price: number): bigint {
   return BigInt(Math.floor(scaledSqrtPrice)) * Q96 / BigInt(NUMBER_1E6);
 }
 
+/**
+ * Scales a number to 6 decimal precision as a bigint
+ * @param amount - The amount to scale (can be negative for signed values)
+ * @returns The scaled amount as a bigint
+ */
 export function scale6Decimals(amount: number): bigint {
   if (amount > Number.MAX_SAFE_INTEGER / NUMBER_1E6) {
     throw new Error('Amount too large');
@@ -32,6 +40,9 @@ export function scaleFromX96(valueX96: bigint): number {
 }
 
 export function priceToTick(price: number, roundDown: boolean): number {
+  if (price <= 0) {
+    throw new Error('Price must be positive');
+  }
   const logPrice = Math.log(price) / Math.log(1.0001);
   return roundDown ? Math.floor(logPrice) : Math.ceil(logPrice);
 }
@@ -42,6 +53,9 @@ export function sqrtPriceX96ToPrice(sqrtPriceX96: bigint): number {
 }
 
 export function marginRatioToLeverage(marginRatio: number): number {
+  if (marginRatio <= 0) {
+    throw new Error('Margin ratio must be greater than 0');
+  }
   return NUMBER_1E6 / marginRatio;
 }
 

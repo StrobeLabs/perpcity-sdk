@@ -12,13 +12,15 @@ export class OpenPosition {
   public readonly positionId: bigint;
   public readonly isLong?: boolean;
   public readonly isMaker?: boolean;
+  public readonly txHash?: Hex;
 
-  constructor(context: PerpCityContext, perpId: Hex, positionId: bigint, isLong?: boolean, isMaker?: boolean) {
+  constructor(context: PerpCityContext, perpId: Hex, positionId: bigint, isLong?: boolean, isMaker?: boolean, txHash?: Hex) {
     this.context = context;
     this.perpId = perpId;
     this.positionId = positionId;
     this.isLong = isLong;
     this.isMaker = isMaker;
+    this.txHash = txHash;
   }
 
   async closePosition(params: ClosePositionParams): Promise<OpenPosition | null> {
@@ -37,6 +39,7 @@ export class OpenPosition {
         functionName: 'closePosition',
         args: [contractParams],
         account: this.context.walletClient.account,
+        gas: 500000n, // Provide explicit gas limit to avoid estimation issues
       });
 
       // Execute the transaction
@@ -100,7 +103,7 @@ export class OpenPosition {
       }
 
       // Return new OpenPosition with the new position from partial close
-      return new OpenPosition(this.context, this.perpId, newPositionId, this.isLong, this.isMaker);
+      return new OpenPosition(this.context, this.perpId, newPositionId, this.isLong, this.isMaker, txHash);
     }, `closePosition for ${this.isMaker ? 'maker' : 'taker'} position ${this.positionId}`);
   }
 

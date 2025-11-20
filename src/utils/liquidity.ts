@@ -8,6 +8,15 @@ import { PerpCityContext } from "../context";
  * but is not present in the deployed contracts.
  */
 export async function estimateLiquidity(context: PerpCityContext, tickLower: number, tickUpper: number, usdScaled: bigint): Promise<bigint> {
+  // Validate inputs
+  if (tickLower >= tickUpper) {
+    throw new Error(`Invalid tick range: tickLower (${tickLower}) must be less than tickUpper (${tickUpper})`);
+  }
+
+  if (usdScaled === 0n) {
+    return 0n;
+  }
+
   // Calculate sqrt prices from ticks using Uniswap v3 formula
   // sqrtPriceX96 = sqrt(1.0001^tick) * 2^96
   const Q96 = 1n << 96n;
@@ -18,6 +27,11 @@ export async function estimateLiquidity(context: PerpCityContext, tickLower: num
   // Calculate liquidity using the formula:
   // L = amount1 / (sqrtPriceUpper - sqrtPriceLower) * Q96
   const sqrtPriceDiff = sqrtPriceUpperX96 - sqrtPriceLowerX96;
+
+  if (sqrtPriceDiff === 0n) {
+    throw new Error(`Division by zero: sqrtPriceDiff is 0 for ticks ${tickLower} to ${tickUpper}. sqrtLower=${sqrtPriceLowerX96}, sqrtUpper=${sqrtPriceUpperX96}`);
+  }
+
   const liquidity = (usdScaled * Q96) / sqrtPriceDiff;
 
   return liquidity;

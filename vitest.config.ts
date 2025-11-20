@@ -10,6 +10,7 @@ export default defineConfig({
       '**/dist/**',
       '**/e2e/**',
       '**/*.e2e.test.ts',
+      '**/integration/**', // Exclude integration tests from unit tests
     ],
   },
 });

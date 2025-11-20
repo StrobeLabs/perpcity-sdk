@@ -5,15 +5,19 @@ import { PerpData, UserData, OpenPositionData, LiveDetails, Bounds, Fees, PerpCo
 import { scaleFrom6Decimals, sqrtPriceX96ToPrice, marginRatioToLeverage } from "./utils";
 import { withErrorHandling } from "./utils/errors";
 import { PERP_MANAGER_ABI } from "./abis/perp-manager";
+import { MARGIN_RATIOS_ABI } from "./abis/margin-ratios";
+import { FEES_ABI } from "./abis/fees";
 import { erc20Abi } from "viem";
+import TTLCache from "@isaacs/ttlcache";
 
 export class PerpCityContext {
   public readonly walletClient;
   private readonly _deployments: PerpCityDeployments;
-  private readonly configCache: Map<Hex, PerpConfig>;
+  private readonly configCache: TTLCache<Hex, PerpConfig>;
 
   constructor(config: PerpCityContextConfig) {
-    this.configCache = new Map();
+    // Cache perp configs for 5 minutes to reduce RPC calls
+    this.configCache = new TTLCache({ ttl: 5 * 60 * 1000 });
     this.walletClient = config.walletClient.extend(publicActions);
     this._deployments = config.deployments;
   }
@@ -55,12 +59,38 @@ export class PerpCityContext {
     }
 
     // Fetch from contract
-    const cfg = await this.walletClient.readContract({
+    const result = await this.walletClient.readContract({
       address: this.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: 'cfgs',
       args: [perpId]
-    }) as any;
+    });
+
+    // Viem returns outer tuple as array, inner tuples as objects with named properties
+    const resultArray = result as unknown as any[];
+    const keyData = resultArray[0];
+
+    // Validate that perpId exists - contract returns empty values for non-existent perps
+    if (!keyData || keyData.tickSpacing === 0 || keyData.currency0 === '0x0000000000000000000000000000000000000000') {
+      throw new Error(`Perp ID ${perpId} not found or invalid`);
+    }
+
+    const cfg: PerpConfig = {
+      key: {
+        currency0: keyData.currency0 as Address,
+        currency1: keyData.currency1 as Address,
+        fee: Number(keyData.fee),
+        tickSpacing: Number(keyData.tickSpacing),
+        hooks: keyData.hooks as Address,
+      },
+      creator: resultArray[1] as Address,
+      vault: resultArray[2] as Address,
+      beacon: resultArray[3] as Address,
+      fees: resultArray[4] as Address,
+      marginRatios: resultArray[5] as Address,
+      lockupPeriod: resultArray[6] as Address,
+      sqrtPriceImpactLimit: resultArray[7] as Address,
+    };
 
     // Store in cache
     this.configCache.set(perpId, cfg);
@@ -97,23 +127,62 @@ export class PerpCityContext {
         }) as bigint;
       }
 
-      // NOTE: Deployed contracts use modular architecture where fees and margin ratios
-      // are in separate contracts (cfg.fees, cfg.marginRatios addresses).
-      // We don't have ABIs for those modules, so using placeholder values.
-      // These will be removed in PR 2 when Goldsky is removed.
+      // Fetch bounds and fees from module contracts in parallel
+      const [minTakerRatio, maxTakerRatio, creatorFee, insuranceFee, lpFee, liquidationFee] = await Promise.all([
+        this.walletClient.readContract({
+          address: cfg.marginRatios,
+          abi: MARGIN_RATIOS_ABI,
+          functionName: 'MIN_TAKER_RATIO',
+        }),
+        this.walletClient.readContract({
+          address: cfg.marginRatios,
+          abi: MARGIN_RATIOS_ABI,
+          functionName: 'MAX_TAKER_RATIO',
+        }),
+        this.walletClient.readContract({
+          address: cfg.fees,
+          abi: FEES_ABI,
+          functionName: 'CREATOR_FEE',
+        }),
+        this.walletClient.readContract({
+          address: cfg.fees,
+          abi: FEES_ABI,
+          functionName: 'INSURANCE_FEE',
+        }),
+        this.walletClient.readContract({
+          address: cfg.fees,
+          abi: FEES_ABI,
+          functionName: 'LP_FEE',
+        }),
+        this.walletClient.readContract({
+          address: cfg.fees,
+          abi: FEES_ABI,
+          functionName: 'LIQUIDATION_FEE',
+        }),
+      ]);
+
+      // Convert margin ratios to leverage bounds
+      // Margin ratio is scaled by 1e6, where ratio = margin / notional
+      // Leverage = notional / margin = 1 / ratio
+      const minTakerLeverage = marginRatioToLeverage(Number(maxTakerRatio)); // Note: max ratio -> min leverage
+      const maxTakerLeverage = marginRatioToLeverage(Number(minTakerRatio)); // Note: min ratio -> max leverage
+
+      // Convert fees from scaled uint24 (1e6) to decimal percentages
+      const scaleFee = (fee: number) => fee / 1e6;
+
       return {
         tickSpacing,
         sqrtPriceX96,
         bounds: {
-          minMargin: 10, // Placeholder - would need to call cfg.marginRatios contract
-          minTakerLeverage: 1.1,
-          maxTakerLeverage: 20,
+          minMargin: 10, // Still hardcoded - not available from margin ratios module
+          minTakerLeverage,
+          maxTakerLeverage,
         },
         fees: {
-          creatorFee: 0.0001, // Placeholder - would need to call cfg.fees contract
-          insuranceFee: 0.0001,
-          lpFee: 0.0003,
-          liquidationFee: 0.01,
+          creatorFee: scaleFee(Number(creatorFee)),
+          insuranceFee: scaleFee(Number(insuranceFee)),
+          lpFee: scaleFee(Number(lpFee)),
+          liquidationFee: scaleFee(Number(liquidationFee)),
         },
       };
     }, `fetchPerpContractData for perp ${perpId}`);

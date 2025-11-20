@@ -26,6 +26,11 @@ export type ClosePositionParams = {
   maxAmt1In: number;
 }
 
+export type ClosePositionResult = {
+  position: any | null; // Will be OpenPosition | null, but avoiding circular dependency
+  txHash: Hex;
+}
+
 export type OpenTakerPositionParams = {
   isLong: boolean;          // true = long, false = short
   margin: number;           // USDC amount in human units (e.g., 100 = $100)

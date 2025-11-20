@@ -8,18 +8,20 @@ export async function closePosition(position: OpenPosition) : Promise<OpenPositi
     minAmt1Out: 0
   });
 
-  if (result === null) {
+  console.log('Transaction Hash:', result.txHash);
+
+  if (result.position === null) {
     console.log('Taker Position Closed');
     console.log('Taker Position ID:', position.positionId);
-    console.log
+    console.log();
     return null;
   } else {
     console.log('Maker Position Closed');
     console.log('Maker Position ID:', position.positionId);
     console.log('Taker Position Opened');
-    console.log('Taker Position ID: ', result.positionId);
+    console.log('Taker Position ID: ', result.position.positionId);
     console.log();
-    return result;
+    return result.position;
   }
 }
 

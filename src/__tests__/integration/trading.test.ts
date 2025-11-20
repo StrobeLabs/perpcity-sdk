@@ -17,7 +17,7 @@ describe('Trading Operations Integration Tests', () => {
   // Helper function to clean up positions after tests
   async function cleanupPosition(positionId: bigint, perpId: `0x${string}`) {
     try {
-      await closePosition(context, perpId, positionId, {
+      const result = await closePosition(context, perpId, positionId, {
         minAmt0Out: 0,
         minAmt1Out: 0,
         maxAmt1In: 10000, // Generous max to ensure close succeeds
@@ -415,10 +415,13 @@ describe('Trading Operations Integration Tests', () => {
         }
       );
 
-      // Full close returns null
-      expect(closeResult).toBeNull();
+      // Full close returns null position with txHash
+      expect(closeResult.position).toBeNull();
+      expect(closeResult.txHash).toBeDefined();
+      expect(closeResult.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
 
       console.log('Closed position:', position.positionId.toString());
+      console.log('Close transaction hash:', closeResult.txHash);
     }, 60000);
 
     it('should close a taker position using OpenPosition method', async () => {
@@ -440,16 +443,19 @@ describe('Trading Operations Integration Tests', () => {
       console.log('Opened position to close:', position.positionId.toString());
 
       // Taker positions have no lockup period - close immediately
-      const closedPosition = await position.closePosition({
+      const closeResult = await position.closePosition({
         minAmt0Out: 0,
         minAmt1Out: 0,
         maxAmt1In: 1000,
       });
 
-      // Full close returns null
-      expect(closedPosition).toBeNull();
+      // Full close returns null position with txHash
+      expect(closeResult.position).toBeNull();
+      expect(closeResult.txHash).toBeDefined();
+      expect(closeResult.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
 
       console.log('Closed position using method:', position.positionId.toString());
+      console.log('Close transaction hash:', closeResult.txHash);
     }, 60000);
 
     it('should fail to close non-existent position', async () => {

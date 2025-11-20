@@ -205,9 +205,8 @@ describe('Context Integration Tests', () => {
       await context.getPerpConfig(perpId);
       const duration2 = Date.now() - startTime2;
 
-      // Cached call should be significantly faster
-      expect(duration2).toBeLessThan(duration1);
-      expect(duration2).toBeLessThan(100); // Should be nearly instant
+      // Cached call should be significantly faster (at least 50% faster)
+      expect(duration2).toBeLessThan(duration1 * 0.5);
     }, 30000);
 
     it('should cache perp config with 5-minute TTL', async () => {

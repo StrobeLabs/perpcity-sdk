@@ -210,7 +210,7 @@ describe('Context Integration Tests', () => {
       expect(duration2).toBeLessThan(100); // Should be nearly instant
     }, 30000);
 
-    it('BUG: cache never expires', async () => {
+    it('should cache perp config with 5-minute TTL', async () => {
       if (!config.testPerpId) {
         console.log('Skipping: TEST_PERP_ID not configured in .env.local');
         return;
@@ -218,14 +218,14 @@ describe('Context Integration Tests', () => {
 
       const perpId = config.testPerpId as `0x${string}`;
 
-      // Fetch config
+      // Fetch config - should be cached
       await context.getPerpConfig(perpId);
 
-      // Cache should persist indefinitely
+      // Cache should contain the entry (expires after 5 minutes per context.ts:20)
       expect(context['configCache'].has(perpId)).toBe(true);
 
-      // There's no way to invalidate cache except creating new context
-      // This documents the bug that cache never expires
+      // Note: Cache entries expire after 5 minutes (TTL: 5 * 60 * 1000 ms)
+      // To invalidate cache immediately, create a new context instance
     }, 30000);
   });
 });

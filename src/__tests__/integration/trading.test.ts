@@ -4,7 +4,7 @@ import { openTakerPosition, openMakerPosition } from '../../functions/perp-manag
 import { closePosition } from '../../functions/position';
 import { approveUsdc } from '../../utils/approve';
 import { estimateLiquidity } from '../../utils/liquidity';
-import { priceToTick, scale6Decimals } from '../../utils';
+import { priceToTick, tickToPrice, scale6Decimals } from '../../utils';
 import { PerpCityContext } from '../../context';
 import { erc20Abi } from 'viem';
 
@@ -86,9 +86,9 @@ describe('Trading Operations Integration Tests', () => {
       const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
       const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
 
-      // Convert aligned ticks back to prices for the SDK
-      const tightPriceLower = Math.pow(1.0001, alignedTickLower);
-      const tightPriceUpper = Math.pow(1.0001, alignedTickUpper);
+      // Convert aligned ticks back to prices using tickToPrice for accuracy
+      const tightPriceLower = tickToPrice(alignedTickLower);
+      const tightPriceUpper = tickToPrice(alignedTickUpper);
 
       const marginScaled = scale6Decimals(marginAmount);
       const baseLiquidity = await estimateLiquidity(context, alignedTickLower, alignedTickUpper, marginScaled);

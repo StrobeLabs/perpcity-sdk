@@ -47,6 +47,10 @@ export function priceToTick(price: number, roundDown: boolean): number {
   return roundDown ? Math.floor(logPrice) : Math.ceil(logPrice);
 }
 
+export function tickToPrice(tick: number): number {
+  return Math.pow(1.0001, tick);
+}
+
 export function sqrtPriceX96ToPrice(sqrtPriceX96: bigint): number {
   const priceX96 = sqrtPriceX96 * sqrtPriceX96 / Q96;
   return scaleFromX96(priceX96);

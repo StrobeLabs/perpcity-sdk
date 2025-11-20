@@ -76,17 +76,19 @@ describe('Trading Operations Integration Tests', () => {
       // Target: margin/notional ≈ 1.0-1.2 for safe middle ground
 
       const marginAmount = 500; // Increased margin for more robust test liquidity
-      const desiredPriceLower = currentPrice * 0.95; // Desired range: ±5%
-      const desiredPriceUpper = currentPrice * 1.05;
 
-      // Calculate aligned ticks (SDK now requires pre-aligned ticks)
+      // Strategy: Work with ticks directly to avoid floating point precision issues
+      // Get current tick, then create aligned tick range around it
       const tickSpacing = perpData.tickSpacing;
-      const tickLower = priceToTick(desiredPriceLower, true);
-      const tickUpper = priceToTick(desiredPriceUpper, false);
-      const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
-      const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
+      const currentTick = priceToTick(currentPrice, true);
+      const currentTickAligned = Math.floor(currentTick / tickSpacing) * tickSpacing;
 
-      // Convert aligned ticks back to prices using tickToPrice for accuracy
+      // Create ±5% range using tick spacing (35 ticks ≈ 3.5% per side)
+      const tickRange = 35 * tickSpacing; // 35 * 30 = 1050 ticks
+      const alignedTickLower = currentTickAligned - tickRange;
+      const alignedTickUpper = currentTickAligned + tickRange;
+
+      // Convert aligned ticks to prices
       const tightPriceLower = tickToPrice(alignedTickLower);
       const tightPriceUpper = tickToPrice(alignedTickUpper);
 

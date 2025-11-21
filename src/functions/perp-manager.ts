@@ -1,11 +1,15 @@
-import { PerpCityContext } from "../context";
-import { priceToSqrtPriceX96, scale6Decimals, scaleToX96, priceToTick } from "../utils";
-import { withErrorHandling } from "../utils/errors";
-import { approveUsdc } from "../utils/approve";
-import type { Address, Hex } from "viem";
-import { publicActions, decodeEventLog } from "viem";
+import type { Hex } from "viem";
+import { decodeEventLog, publicActions } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
-import { CreatePerpParams, OpenTakerPositionParams, OpenMakerPositionParams } from "../types/entity-data";
+import type { PerpCityContext } from "../context";
+import type {
+  CreatePerpParams,
+  OpenMakerPositionParams,
+  OpenTakerPositionParams,
+} from "../types/entity-data";
+import { priceToSqrtPriceX96, priceToTick, scale6Decimals, scaleToX96 } from "../utils";
+import { approveUsdc } from "../utils/approve";
+import { withErrorHandling } from "../utils/errors";
 import { OpenPosition } from "./open-position";
 
 export async function createPerp(context: PerpCityContext, params: CreatePerpParams): Promise<Hex> {
@@ -17,10 +21,11 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
     const fees = params.fees ?? deployments.feesModule;
     const marginRatios = params.marginRatios ?? deployments.marginRatiosModule;
     const lockupPeriod = params.lockupPeriod ?? deployments.lockupPeriodModule;
-    const sqrtPriceImpactLimit = params.sqrtPriceImpactLimit ?? deployments.sqrtPriceImpactLimitModule;
+    const sqrtPriceImpactLimit =
+      params.sqrtPriceImpactLimit ?? deployments.sqrtPriceImpactLimitModule;
 
     if (!fees || !marginRatios || !lockupPeriod || !sqrtPriceImpactLimit) {
-      throw new Error('Module addresses must be provided either in params or deployment config');
+      throw new Error("Module addresses must be provided either in params or deployment config");
     }
 
     const contractParams = {
@@ -35,7 +40,7 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
     const { request } = await context.walletClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'createPerp',
+      functionName: "createPerp",
       args: [contractParams],
       account: context.walletClient.account,
     });
@@ -48,7 +53,7 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     // Check if transaction was successful
-    if (receipt.status === 'reverted') {
+    if (receipt.status === "reverted") {
       throw new Error(`Transaction reverted. Hash: ${txHash}`);
     }
 
@@ -59,18 +64,15 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
           abi: PERP_MANAGER_ABI,
           data: log.data,
           topics: log.topics,
-          eventName: 'PerpCreated',
+          eventName: "PerpCreated",
         });
 
         // Return the perpId from the event
         return decoded.args.perpId as Hex;
-      } catch (e) {
-        // Skip logs that aren't PerpCreated event
-        continue;
-      }
+      } catch (_e) {}
     }
 
-    throw new Error('PerpCreated event not found in transaction receipt');
+    throw new Error("PerpCreated event not found in transaction receipt");
   }, "createPerp");
 }
 
@@ -82,10 +84,10 @@ export async function openTakerPosition(
   return withErrorHandling(async () => {
     // Validate inputs
     if (params.margin <= 0) {
-      throw new Error('Margin must be greater than 0');
+      throw new Error("Margin must be greater than 0");
     }
     if (params.leverage <= 0) {
-      throw new Error('Leverage must be greater than 0');
+      throw new Error("Leverage must be greater than 0");
     }
 
     // Convert margin to 6-decimal scaled bigint
@@ -98,9 +100,10 @@ export async function openTakerPosition(
     const levX96 = scaleToX96(params.leverage);
 
     // Handle unspecifiedAmountLimit - can be number (human units) or bigint (raw value)
-    const unspecifiedAmountLimit = typeof params.unspecifiedAmountLimit === 'bigint'
-      ? params.unspecifiedAmountLimit
-      : scale6Decimals(params.unspecifiedAmountLimit);
+    const unspecifiedAmountLimit =
+      typeof params.unspecifiedAmountLimit === "bigint"
+        ? params.unspecifiedAmountLimit
+        : scale6Decimals(params.unspecifiedAmountLimit);
 
     // Prepare contract parameters - deployed contract requires holder address
     const contractParams = {
@@ -115,7 +118,7 @@ export async function openTakerPosition(
     const { request } = await context.walletClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'openTakerPos' as any,
+      functionName: "openTakerPos" as any,
       args: [perpId, contractParams],
       account: context.walletClient.account,
     });
@@ -128,7 +131,7 @@ export async function openTakerPosition(
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     // Verify success
-    if (receipt.status === 'reverted') {
+    if (receipt.status === "reverted") {
       throw new Error(`Transaction reverted. Hash: ${txHash}`);
     }
 
@@ -146,16 +149,15 @@ export async function openTakerPosition(
 
         // Check if this is a PositionOpened event for our perpId and it's a taker
         // Note: perpId from events is lowercased, so normalize both for comparison
-        if (decoded.eventName === 'PositionOpened' &&
-            (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
-            !decoded.args.isMaker) {
+        if (
+          decoded.eventName === "PositionOpened" &&
+          (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
+          !decoded.args.isMaker
+        ) {
           takerPosId = decoded.args.posId as bigint;
           break;
         }
-      } catch (e) {
-        // Skip logs that can't be decoded with our ABI
-        continue;
-      }
+      } catch (_e) {}
     }
 
     if (!takerPosId) {
@@ -164,7 +166,7 @@ export async function openTakerPosition(
 
     // Return OpenPosition instance with transaction hash
     return new OpenPosition(context, perpId, takerPosId, params.isLong, false, txHash);
-  }, 'openTakerPosition');
+  }, "openTakerPosition");
 }
 
 export async function openMakerPosition(
@@ -175,10 +177,10 @@ export async function openMakerPosition(
   return withErrorHandling(async () => {
     // Validate inputs
     if (params.margin <= 0) {
-      throw new Error('Margin must be greater than 0');
+      throw new Error("Margin must be greater than 0");
     }
     if (params.priceLower >= params.priceUpper) {
-      throw new Error('priceLower must be less than priceUpper');
+      throw new Error("priceLower must be less than priceUpper");
     }
 
     // Convert margin to 6-decimal scaled bigint
@@ -193,7 +195,7 @@ export async function openMakerPosition(
     const perpData = await context.getPerpData(perpId);
 
     // Convert prices to ticks
-    const tickLower = priceToTick(params.priceLower, true);  // round down
+    const tickLower = priceToTick(params.priceLower, true); // round down
     const tickUpper = priceToTick(params.priceUpper, false); // round up
 
     // Validate ticks are aligned to tick spacing
@@ -205,9 +207,9 @@ export async function openMakerPosition(
     if (tickLower !== alignedTickLower || tickUpper !== alignedTickUpper) {
       throw new Error(
         `Ticks must be aligned to tickSpacing (${tickSpacing}). ` +
-        `Provided ticks: [${tickLower}, ${tickUpper}], ` +
-        `Required aligned ticks: [${alignedTickLower}, ${alignedTickUpper}]. ` +
-        `Adjust your priceLower/priceUpper to match the aligned tick values.`
+          `Provided ticks: [${tickLower}, ${tickUpper}], ` +
+          `Required aligned ticks: [${alignedTickLower}, ${alignedTickUpper}]. ` +
+          `Adjust your priceLower/priceUpper to match the aligned tick values.`
       );
     }
 
@@ -226,7 +228,7 @@ export async function openMakerPosition(
     const { request } = await context.walletClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'openMakerPos' as any,
+      functionName: "openMakerPos" as any,
       args: [perpId, contractParams],
       account: context.walletClient.account,
     });
@@ -239,7 +241,7 @@ export async function openMakerPosition(
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     // Verify success
-    if (receipt.status === 'reverted') {
+    if (receipt.status === "reverted") {
       throw new Error(`Transaction reverted. Hash: ${txHash}`);
     }
 
@@ -257,16 +259,15 @@ export async function openMakerPosition(
 
         // Check if this is a PositionOpened event for our perpId and it's a maker
         // Note: perpId from events is lowercased, so normalize both for comparison
-        if (decoded.eventName === 'PositionOpened' &&
-            (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
-            decoded.args.isMaker) {
+        if (
+          decoded.eventName === "PositionOpened" &&
+          (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
+          decoded.args.isMaker
+        ) {
           makerPosId = decoded.args.posId as bigint;
           break;
         }
-      } catch (e) {
-        // Skip logs that can't be decoded with our ABI
-        continue;
-      }
+      } catch (_e) {}
     }
 
     if (!makerPosId) {
@@ -275,5 +276,5 @@ export async function openMakerPosition(
 
     // Return OpenPosition instance with transaction hash (isLong will be determined by position data)
     return new OpenPosition(context, perpId, makerPosId, undefined, true, txHash);
-  }, 'openMakerPosition');
+  }, "openMakerPosition");
 }

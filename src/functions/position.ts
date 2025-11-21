@@ -1,10 +1,14 @@
-import { Hex, formatUnits, decodeEventLog } from "viem";
-import { publicActions } from "viem";
-import { PerpCityContext } from "../context";
-import { scale6Decimals, scaleFrom6Decimals } from "../utils";
-import { withErrorHandling } from "../utils/errors";
+import { decodeEventLog, formatUnits, type Hex, publicActions } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
-import { OpenPositionData, LiveDetails, ClosePositionParams, ClosePositionResult } from "../types/entity-data";
+import type { PerpCityContext } from "../context";
+import type {
+  ClosePositionParams,
+  ClosePositionResult,
+  LiveDetails,
+  OpenPositionData,
+} from "../types/entity-data";
+import { scale6Decimals } from "../utils";
+import { withErrorHandling } from "../utils/errors";
 
 // Pure functions that operate on OpenPositionData
 export function getPositionPerpId(positionData: OpenPositionData): Hex {
@@ -58,10 +62,10 @@ export async function closePosition(
       maxAmt1In: scale6Decimals(params.maxAmt1In),
     };
 
-    const { result, request } = await context.walletClient.extend(publicActions).simulateContract({
+    const { request } = await context.walletClient.extend(publicActions).simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'closePosition',
+      functionName: "closePosition",
       args: [contractParams],
       account: context.walletClient.account,
       gas: 500000n, // Provide explicit gas limit to avoid estimation issues
@@ -74,7 +78,7 @@ export async function closePosition(
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     // Check if transaction was successful
-    if (receipt.status === 'reverted') {
+    if (receipt.status === "reverted") {
       throw new Error(`Transaction reverted. Hash: ${txHash}`);
     }
 
@@ -89,7 +93,7 @@ export async function closePosition(
           abi: PERP_MANAGER_ABI,
           data: log.data,
           topics: log.topics,
-          eventName: 'PositionOpened',
+          eventName: "PositionOpened",
         });
 
         // Match the perpId and extract the new position ID
@@ -97,10 +101,7 @@ export async function closePosition(
           newPositionId = decoded.args.posId as bigint;
           break;
         }
-      } catch (e) {
-        // Skip logs that aren't PositionOpened events
-        continue;
-      }
+      } catch (_e) {}
     }
 
     // If no PositionOpened event found, this was a full close - return null
@@ -122,7 +123,7 @@ export async function closePosition(
 
 export async function getPositionLiveDetailsFromContract(
   context: PerpCityContext,
-  perpId: Hex,
+  _perpId: Hex,
   positionId: bigint
 ): Promise<LiveDetails> {
   return withErrorHandling(async () => {
@@ -130,15 +131,17 @@ export async function getPositionLiveDetailsFromContract(
     const result = (await context.walletClient.readContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'quoteClosePosition' as any,
+      functionName: "quoteClosePosition" as any,
       args: [positionId],
-    }) as unknown) as readonly [boolean, bigint, bigint, bigint, boolean];
+    })) as unknown as readonly [boolean, bigint, bigint, bigint, boolean];
 
     // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]
     const [success, pnl, funding, netMargin, wasLiquidated] = result;
 
     if (!success) {
-      throw new Error(`Failed to quote position ${positionId} - position may be invalid or already closed`);
+      throw new Error(
+        `Failed to quote position ${positionId} - position may be invalid or already closed`
+      );
     }
 
     return {

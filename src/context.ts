@@ -1,14 +1,20 @@
-import { publicActions, formatUnits } from "viem";
-import { PerpCityContextConfig, PerpCityDeployments } from "./types";
-import { Address, Hex } from "viem";
-import { PerpData, UserData, OpenPositionData, LiveDetails, Bounds, Fees, PerpConfig } from "./types/entity-data";
-import { scaleFrom6Decimals, sqrtPriceX96ToPrice, marginRatioToLeverage } from "./utils";
-import { withErrorHandling } from "./utils/errors";
-import { PERP_MANAGER_ABI } from "./abis/perp-manager";
-import { MARGIN_RATIOS_ABI } from "./abis/margin-ratios";
-import { FEES_ABI } from "./abis/fees";
-import { erc20Abi } from "viem";
 import TTLCache from "@isaacs/ttlcache";
+import { type Address, erc20Abi, formatUnits, type Hex, publicActions } from "viem";
+import { FEES_ABI } from "./abis/fees";
+import { MARGIN_RATIOS_ABI } from "./abis/margin-ratios";
+import { PERP_MANAGER_ABI } from "./abis/perp-manager";
+import type { PerpCityContextConfig, PerpCityDeployments } from "./types";
+import type {
+  Bounds,
+  Fees,
+  LiveDetails,
+  OpenPositionData,
+  PerpConfig,
+  PerpData,
+  UserData,
+} from "./types/entity-data";
+import { marginRatioToLeverage, sqrtPriceX96ToPrice } from "./utils";
+import { withErrorHandling } from "./utils/errors";
 
 export class PerpCityContext {
   public readonly walletClient;
@@ -62,8 +68,8 @@ export class PerpCityContext {
     const result = await this.walletClient.readContract({
       address: this.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: 'cfgs',
-      args: [perpId]
+      functionName: "cfgs",
+      args: [perpId],
     });
 
     // Viem returns outer tuple as array, inner tuples as objects with named properties
@@ -71,7 +77,11 @@ export class PerpCityContext {
     const keyData = resultArray[0];
 
     // Validate that perpId exists - contract returns empty values for non-existent perps
-    if (!keyData || keyData.tickSpacing === 0 || keyData.currency0 === '0x0000000000000000000000000000000000000000') {
+    if (
+      !keyData ||
+      keyData.tickSpacing === 0 ||
+      keyData.currency0 === "0x0000000000000000000000000000000000000000"
+    ) {
       throw new Error(`Perp ID ${perpId} not found or invalid`);
     }
 
@@ -98,7 +108,10 @@ export class PerpCityContext {
     return cfg;
   }
 
-  private async fetchPerpContractData(perpId: Hex, markPrice?: number): Promise<{
+  private async fetchPerpContractData(
+    perpId: Hex,
+    markPrice?: number
+  ): Promise<{
     tickSpacing: number;
     sqrtPriceX96: bigint;
     bounds: Bounds;
@@ -116,50 +129,51 @@ export class PerpCityContext {
       if (markPrice) {
         // Convert mark price to sqrtPriceX96 format
         const sqrtPrice = Math.sqrt(markPrice);
-        sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * (2 ** 96)));
+        sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * 2 ** 96));
       } else {
         // Fallback to TWAP with 1 second lookback
-        sqrtPriceX96 = await this.walletClient.readContract({
+        sqrtPriceX96 = (await this.walletClient.readContract({
           address: this.deployments().perpManager,
           abi: PERP_MANAGER_ABI,
-          functionName: 'timeWeightedAvgSqrtPriceX96',
-          args: [perpId, 1]
-        }) as bigint;
+          functionName: "timeWeightedAvgSqrtPriceX96",
+          args: [perpId, 1],
+        })) as bigint;
       }
 
       // Fetch bounds and fees from module contracts in parallel
-      const [minTakerRatio, maxTakerRatio, creatorFee, insuranceFee, lpFee, liquidationFee] = await Promise.all([
-        this.walletClient.readContract({
-          address: cfg.marginRatios,
-          abi: MARGIN_RATIOS_ABI,
-          functionName: 'MIN_TAKER_RATIO',
-        }),
-        this.walletClient.readContract({
-          address: cfg.marginRatios,
-          abi: MARGIN_RATIOS_ABI,
-          functionName: 'MAX_TAKER_RATIO',
-        }),
-        this.walletClient.readContract({
-          address: cfg.fees,
-          abi: FEES_ABI,
-          functionName: 'CREATOR_FEE',
-        }),
-        this.walletClient.readContract({
-          address: cfg.fees,
-          abi: FEES_ABI,
-          functionName: 'INSURANCE_FEE',
-        }),
-        this.walletClient.readContract({
-          address: cfg.fees,
-          abi: FEES_ABI,
-          functionName: 'LP_FEE',
-        }),
-        this.walletClient.readContract({
-          address: cfg.fees,
-          abi: FEES_ABI,
-          functionName: 'LIQUIDATION_FEE',
-        }),
-      ]);
+      const [minTakerRatio, maxTakerRatio, creatorFee, insuranceFee, lpFee, liquidationFee] =
+        await Promise.all([
+          this.walletClient.readContract({
+            address: cfg.marginRatios,
+            abi: MARGIN_RATIOS_ABI,
+            functionName: "MIN_TAKER_RATIO",
+          }),
+          this.walletClient.readContract({
+            address: cfg.marginRatios,
+            abi: MARGIN_RATIOS_ABI,
+            functionName: "MAX_TAKER_RATIO",
+          }),
+          this.walletClient.readContract({
+            address: cfg.fees,
+            abi: FEES_ABI,
+            functionName: "CREATOR_FEE",
+          }),
+          this.walletClient.readContract({
+            address: cfg.fees,
+            abi: FEES_ABI,
+            functionName: "INSURANCE_FEE",
+          }),
+          this.walletClient.readContract({
+            address: cfg.fees,
+            abi: FEES_ABI,
+            functionName: "LP_FEE",
+          }),
+          this.walletClient.readContract({
+            address: cfg.fees,
+            abi: FEES_ABI,
+            functionName: "LIQUIDATION_FEE",
+          }),
+        ]);
 
       // Convert margin ratios to leverage bounds
       // Margin ratio is scaled by 1e6, where ratio = margin / notional
@@ -195,7 +209,6 @@ export class PerpCityContext {
     return this.fetchPerpData(perpId);
   }
 
-
   private async fetchUserData(
     userAddress: Hex,
     positions: Array<{ perpId: Hex; positionId: bigint; isLong: boolean; isMaker: boolean }>
@@ -203,7 +216,7 @@ export class PerpCityContext {
     const usdcBalance = await this.walletClient.readContract({
       address: this.deployments().usdc,
       abi: erc20Abi,
-      functionName: 'balanceOf',
+      functionName: "balanceOf",
       args: [userAddress],
     });
 
@@ -228,22 +241,26 @@ export class PerpCityContext {
     };
   }
 
-
-  private async fetchPositionLiveDetailsFromContract(perpId: Hex, positionId: bigint): Promise<LiveDetails> {
+  private async fetchPositionLiveDetailsFromContract(
+    _perpId: Hex,
+    positionId: bigint
+  ): Promise<LiveDetails> {
     return withErrorHandling(async () => {
       // Use quoteClosePosition which provides live position details
       const result = (await this.walletClient.readContract({
         address: this.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
-        functionName: 'quoteClosePosition' as any,
+        functionName: "quoteClosePosition" as any,
         args: [positionId],
-      }) as unknown) as readonly [boolean, bigint, bigint, bigint, boolean];
+      })) as unknown as readonly [boolean, bigint, bigint, bigint, boolean];
 
       // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]
       const [success, pnl, funding, netMargin, wasLiquidated] = result;
 
       if (!success) {
-        throw new Error(`Failed to quote position ${positionId} - position may be invalid or already closed`);
+        throw new Error(
+          `Failed to quote position ${positionId} - position may be invalid or already closed`
+        );
       }
 
       return {

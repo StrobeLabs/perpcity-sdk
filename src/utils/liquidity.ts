@@ -1,4 +1,4 @@
-import { PerpCityContext } from "../context";
+import type { PerpCityContext } from "../context";
 
 /**
  * Calculate liquidity from USDC amount (amount1) using Uniswap v3 formula
@@ -7,10 +7,17 @@ import { PerpCityContext } from "../context";
  * This replicates the estimateLiquidityForAmount1 function that existed in older contracts
  * but is not present in the deployed contracts.
  */
-export async function estimateLiquidity(context: PerpCityContext, tickLower: number, tickUpper: number, usdScaled: bigint): Promise<bigint> {
+export async function estimateLiquidity(
+  _context: PerpCityContext,
+  tickLower: number,
+  tickUpper: number,
+  usdScaled: bigint
+): Promise<bigint> {
   // Validate inputs
   if (tickLower >= tickUpper) {
-    throw new Error(`Invalid tick range: tickLower (${tickLower}) must be less than tickUpper (${tickUpper})`);
+    throw new Error(
+      `Invalid tick range: tickLower (${tickLower}) must be less than tickUpper (${tickUpper})`
+    );
   }
 
   if (usdScaled === 0n) {
@@ -29,7 +36,9 @@ export async function estimateLiquidity(context: PerpCityContext, tickLower: num
   const sqrtPriceDiff = sqrtPriceUpperX96 - sqrtPriceLowerX96;
 
   if (sqrtPriceDiff === 0n) {
-    throw new Error(`Division by zero: sqrtPriceDiff is 0 for ticks ${tickLower} to ${tickUpper}. sqrtLower=${sqrtPriceLowerX96}, sqrtUpper=${sqrtPriceUpperX96}`);
+    throw new Error(
+      `Division by zero: sqrtPriceDiff is 0 for ticks ${tickLower} to ${tickUpper}. sqrtLower=${sqrtPriceLowerX96}, sqrtUpper=${sqrtPriceUpperX96}`
+    );
   }
 
   const liquidity = (usdScaled * Q96) / sqrtPriceDiff;
@@ -67,7 +76,5 @@ function getSqrtRatioAtTick(tick: number): bigint {
 
   if (tick > 0) ratio = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn / ratio;
 
-  return (ratio % (1n << 32n)) > 0n
-    ? (ratio >> 32n) + 1n
-    : (ratio >> 32n);
+  return ratio % (1n << 32n) > 0n ? (ratio >> 32n) + 1n : ratio >> 32n;
 }

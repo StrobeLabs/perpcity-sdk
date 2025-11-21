@@ -91,11 +91,10 @@ export function OpenLongButton({ perpId }: { perpId: Hex }) {
   };
 
   return (
-    <button onClick={handleOpenLong}
-  disabled={loading || !context}>
-      {loading ? 'Opening...' : 'Open Long 2x'}
+    <button onClick={handleOpenLong} disabled={loading || !context}>
+      {loading ? "Opening..." : "Open Long 2x"}
     </button>
-  )
+  );
 }
 
 // ============================================================================
@@ -132,11 +131,10 @@ export function OpenShortButton({ perpId }: { perpId: Hex }) {
   };
 
   return (
-    <button onClick={handleOpenShort}
-  disabled={loading || !context}>
-      {loading ? 'Opening...' : 'Open Short 3x'}
+    <button onClick={handleOpenShort} disabled={loading || !context}>
+      {loading ? "Opening..." : "Open Short 3x"}
     </button>
-  )
+  );
 }
 
 // ============================================================================
@@ -184,11 +182,10 @@ export function OpenMakerButton({ perpId }: { perpId: Hex }) {
   };
 
   return (
-    <button onClick={handleOpenMaker}
-  disabled={loading || !context}>
-      {loading ? 'Opening...' : 'Open Maker Position'}
+    <button onClick={handleOpenMaker} disabled={loading || !context}>
+      {loading ? "Opening..." : "Open Maker Position"}
     </button>
-  )
+  );
 }
 
 // ============================================================================
@@ -201,44 +198,26 @@ export function TradingInterface({ perpId }: { perpId: Hex }) {
   if (!context) {
     return (
       <div>
-        <h2>Connect
-    Wallet;
-    to;
-    Trade < /2>h < p > Please;
-    connect;
-    your;
-    wallet;
-    using Privy;
-    to;
-    start;
-    trading.</p>
+        <h2>Connect Wallet to Trade</h2>
+        <p>Please connect your wallet using Privy to start trading.</p>
       </div>
-    )
+    );
   }
 
   return (
     <div>
-      <h2>Trading
-  Interface < /2>h < div;
-  style={{ marginBottom: '20px' }
-}
->
+      <h2>Trading Interface</h2>
+      <div style={{ marginBottom: "20px" }}>
         <h3>Taker Positions</h3>
-        <OpenLongButton perpId=
-{
-  perpId;
-}
-/> < OpenShortButton;
-perpId={perpId} />
+        <OpenLongButton perpId={perpId} />
+        <OpenShortButton perpId={perpId} />
       </div>
-
       <div>
-        <h3>Maker
-Positions < /3>h < OpenMakerButton;
-perpId={perpId} />
+        <h3>Maker Positions</h3>
+        <OpenMakerButton perpId={perpId} />
       </div>
     </div>
-)
+  );
 }
 
 // ============================================================================

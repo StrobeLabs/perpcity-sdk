@@ -1,54 +1,47 @@
-import { OpenPosition, type Perp, type PerpManager, User } from '../dist';
-import { setup } from './setup';
+import type { Hex } from "viem";
+import type { PerpCityContext } from "../dist";
+import { setup } from "./setup";
 
-export async function view(perpManager: PerpManager): Promise<void> {
-  const perps: Perp[] = await perpManager.getPerps();
-  console.log('perps: ');
-  for (const perp of perps) {
-    console.log('id:', perp.id);
-    console.log('mark:', await perp.mark());
-    console.log('index:', await perp.index());
-    console.log('beacon:', await perp.beacon());
-    console.log('lastIndexUpdate:', await perp.lastIndexUpdate());
-    console.log('openInterest:', await perp.openInterest());
-    console.log('markTimeSeries:', await perp.markTimeSeries());
-    console.log('indexTimeSeries:', await perp.indexTimeSeries());
-    console.log('openInterestTimeSeries:', await perp.openInterestTimeSeries());
-    console.log('fundingRateTimeSeries:', await perp.fundingRateTimeSeries());
-    console.log('tradingBounds:', await perp.bounds());
-    console.log('fees:', await perp.fees());
-    console.log('fundingRate:', await perp.fundingRate());
-    console.log('totalOpenMakerPnl:', await perp.totalOpenMakerPnl());
-    console.log('totalOpenTakerPnl:', await perp.totalOpenTakerPnl());
-    console.log();
-  }
+export async function view(context: PerpCityContext, perpId: Hex): Promise<void> {
+  // Fetch perp data
+  console.log("Fetching perp data for:", perpId);
+  const perpData = await context.getPerpData(perpId);
+  console.log("perpData:");
+  console.log("  id:", perpData.id);
+  console.log("  mark:", perpData.mark);
+  console.log("  beacon:", perpData.beacon);
+  console.log("  tickSpacing:", perpData.tickSpacing);
+  console.log("  bounds:", perpData.bounds);
+  console.log("  fees:", perpData.fees);
   console.log();
 
-  const user = new User(perpManager.context);
-  console.log('usdcBalance:', await user.usdcBalance());
+  // Fetch perp config
+  const perpConfig = await context.getPerpConfig(perpId);
+  console.log("perpConfig:");
+  console.log("  creator:", perpConfig.creator);
+  console.log("  vault:", perpConfig.vault);
+  console.log("  beacon:", perpConfig.beacon);
+  console.log("  fees module:", perpConfig.fees);
+  console.log("  marginRatios module:", perpConfig.marginRatios);
   console.log();
-  console.log('realizedPnl:', await user.realizedPnl());
-  console.log('unrealizedPnl:', await user.unrealizedPnl());
-  console.log('openPositions: ');
-  for (const position of await user.openPositions()) {
-    console.log('perpId:', position.perpId);
-    console.log('inContractPosId:', position.positionId);
-    console.log('liveDetails:', await position.liveDetails());
-    console.log();
-  }
-  console.log('closedPositions: ');
-  for (const position of await user.closedPositions()) {
-    console.log('perpId:', position.perpId);
-    console.log('wasMaker:', position.wasMaker);
-    console.log('wasLong:', position.wasLong);
-    console.log('pnlAtClose:', position.pnlAtClose);
-    console.log();
+
+  // Get user's USDC balance and positions
+  // Note: getUserData requires position metadata tracked from transaction receipts
+  // For a simple balance check without positions, use this approach:
+  const userAddress = context.walletClient.account?.address;
+  if (userAddress) {
+    console.log("User address:", userAddress);
+    // To get user data with positions, you need to track position IDs from transaction receipts
+    // Example with no open positions:
+    const userData = await context.getUserData(userAddress, []);
+    console.log("usdcBalance:", userData.usdcBalance);
+    console.log("openPositions count:", userData.openPositions.length);
   }
 }
 
 async function main() {
-  const perpManager = setup();
-  await view(perpManager);
+  const { context, perpId } = setup();
+  await view(context, perpId);
 }
 
 main();

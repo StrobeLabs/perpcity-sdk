@@ -4,7 +4,7 @@ import { PerpCityContext } from "../context";
 import { scale6Decimals, scaleFrom6Decimals } from "../utils";
 import { withErrorHandling, parseContractError } from "../utils/errors";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
-import { ClosePositionParams, LiveDetails } from "../types/entity-data";
+import { ClosePositionParams, ClosePositionResult, LiveDetails } from "../types/entity-data";
 
 export class OpenPosition {
   public readonly context: PerpCityContext;
@@ -23,7 +23,7 @@ export class OpenPosition {
     this.txHash = txHash;
   }
 
-  async closePosition(params: ClosePositionParams): Promise<OpenPosition | null> {
+  async closePosition(params: ClosePositionParams): Promise<ClosePositionResult> {
     return withErrorHandling(async () => {
       const contractParams = {
         posId: this.positionId,
@@ -99,11 +99,11 @@ export class OpenPosition {
 
       // If no new position ID, this was a full close
       if (!newPositionId) {
-        return null;
+        return { position: null, txHash };
       }
 
       // Return new OpenPosition with the new position from partial close
-      return new OpenPosition(this.context, this.perpId, newPositionId, this.isLong, this.isMaker, txHash);
+      return { position: new OpenPosition(this.context, this.perpId, newPositionId, this.isLong, this.isMaker, txHash), txHash };
     }, `closePosition for ${this.isMaker ? 'maker' : 'taker'} position ${this.positionId}`);
   }
 

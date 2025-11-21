@@ -4,7 +4,7 @@ import { PerpCityContext } from "../context";
 import { scale6Decimals, scaleFrom6Decimals } from "../utils";
 import { withErrorHandling } from "../utils/errors";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
-import { OpenPositionData, LiveDetails, ClosePositionParams } from "../types/entity-data";
+import { OpenPositionData, LiveDetails, ClosePositionParams, ClosePositionResult } from "../types/entity-data";
 
 // Pure functions that operate on OpenPositionData
 export function getPositionPerpId(positionData: OpenPositionData): Hex {
@@ -49,7 +49,7 @@ export async function closePosition(
   perpId: Hex,
   positionId: bigint,
   params: ClosePositionParams
-): Promise<OpenPositionData | null> {
+): Promise<ClosePositionResult> {
   return withErrorHandling(async () => {
     const contractParams = {
       posId: positionId,
@@ -105,14 +105,17 @@ export async function closePosition(
 
     // If no PositionOpened event found, this was a full close - return null
     if (!newPositionId) {
-      return null;
+      return { position: null, txHash };
     }
 
     // Return the updated position data with actual on-chain position ID
     return {
-      perpId,
-      positionId: newPositionId,
-      liveDetails: await getPositionLiveDetailsFromContract(context, perpId, newPositionId),
+      position: {
+        perpId,
+        positionId: newPositionId,
+        liveDetails: await getPositionLiveDetailsFromContract(context, perpId, newPositionId),
+      },
+      txHash,
     };
   }, `closePosition for position ${positionId}`);
 }

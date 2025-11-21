@@ -1,11 +1,11 @@
 import { OpenPosition } from '../dist';
 import { setup } from './setup';
 
-export async function closePosition(position: OpenPosition) : Promise<OpenPosition | null> {
+export async function closePosition(position: OpenPosition): Promise<OpenPosition | null> {
   const result = await position.closePosition({
     maxAmt1In: 1000000,
     minAmt0Out: 0,
-    minAmt1Out: 0
+    minAmt1Out: 0,
   });
 
   console.log('Transaction Hash:', result.txHash);

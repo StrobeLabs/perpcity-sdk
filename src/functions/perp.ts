@@ -1,4 +1,4 @@
-import { PerpData } from "../types/entity-data";
+import type { PerpData } from "../types/entity-data";
 
 // Pure functions that operate on PerpData
 export function getPerpMark(perpData: PerpData): number {
@@ -20,4 +20,3 @@ export function getPerpFees(perpData: PerpData) {
 export function getPerpTickSpacing(perpData: PerpData): number {
   return perpData.tickSpacing;
 }
-

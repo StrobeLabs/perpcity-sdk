@@ -1,5 +1,5 @@
-import { Hex } from "viem";
-import { UserData, OpenPositionData } from "../types/entity-data";
+import type { Hex } from "viem";
+import type { OpenPositionData, UserData } from "../types/entity-data";
 
 // Pure functions that operate on UserData
 export function getUserUsdcBalance(userData: UserData): number {

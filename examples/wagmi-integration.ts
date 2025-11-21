@@ -5,11 +5,11 @@
  * The SDK is fully compatible with wagmi's useWalletClient hook - no conversion needed!
  */
 
-import { useWalletClient, useChainId } from 'wagmi';
 import { useMemo, useState } from 'react';
-import { PerpCityContext } from '../src/context';
-import { openTakerPosition, openMakerPosition } from '../src/functions/perp-manager';
 import type { Hex } from 'viem';
+import { useChainId, useWalletClient } from 'wagmi';
+import { PerpCityContext } from '../src/context';
+import { openMakerPosition, openTakerPosition } from '../src/functions/perp-manager';
 
 // ============================================================================
 // Setup Functions
@@ -19,11 +19,11 @@ function getDeployments(chainId: number) {
   const deployments: Record<number, { perpManager: Hex; usdc: Hex }> = {
     84532: {
       perpManager: '0x...' as Hex, // Replace with actual address
-      usdc: '0x...' as Hex,         // Replace with actual address
+      usdc: '0x...' as Hex, // Replace with actual address
     },
     8453: {
       perpManager: '0x...' as Hex, // Replace with actual address
-      usdc: '0x...' as Hex,         // Replace with actual address
+      usdc: '0x...' as Hex, // Replace with actual address
     },
   };
   return deployments[chainId] || deployments[84532];
@@ -75,8 +75,8 @@ export function OpenLongButton({ perpId }: { perpId: Hex }) {
     try {
       const position = await openTakerPosition(context, perpId, {
         isLong: true,
-        margin: 100,      // $100 USDC
-        leverage: 2,      // 2x leverage
+        margin: 100, // $100 USDC
+        leverage: 2, // 2x leverage
         unspecifiedAmountLimit: 0, // No limit (max slippage)
       });
 
@@ -91,10 +91,11 @@ export function OpenLongButton({ perpId }: { perpId: Hex }) {
   };
 
   return (
-    <button onClick={handleOpenLong} disabled={loading || !context}>
+    <button onClick={handleOpenLong}
+  disabled={loading || !context}>
       {loading ? 'Opening...' : 'Open Long 2x'}
     </button>
-  );
+  )
 }
 
 // ============================================================================
@@ -115,8 +116,8 @@ export function OpenShortButton({ perpId }: { perpId: Hex }) {
     try {
       const position = await openTakerPosition(context, perpId, {
         isLong: false,
-        margin: 100,      // $100 USDC
-        leverage: 3,      // 3x leverage
+        margin: 100, // $100 USDC
+        leverage: 3, // 3x leverage
         unspecifiedAmountLimit: 1000000,
       });
 
@@ -131,10 +132,11 @@ export function OpenShortButton({ perpId }: { perpId: Hex }) {
   };
 
   return (
-    <button onClick={handleOpenShort} disabled={loading || !context}>
+    <button onClick={handleOpenShort}
+  disabled={loading || !context}>
       {loading ? 'Opening...' : 'Open Short 3x'}
     </button>
-  );
+  )
 }
 
 // ============================================================================
@@ -164,11 +166,11 @@ export function OpenMakerButton({ perpId }: { perpId: Hex }) {
 
       const position = await openMakerPosition(context, perpId, {
         margin: 100,
-        priceLower: markPrice * 0.9,  // 10% below mark
-        priceUpper: markPrice * 1.1,  // 10% above mark
+        priceLower: markPrice * 0.9, // 10% below mark
+        priceUpper: markPrice * 1.1, // 10% above mark
         liquidity,
-        maxAmt0In: 1000000,  // Max perps
-        maxAmt1In: 1000000,  // Max USDC
+        maxAmt0In: 1000000, // Max perps
+        maxAmt1In: 1000000, // Max USDC
       });
 
       console.log('Maker position opened:', position.positionId);
@@ -182,10 +184,11 @@ export function OpenMakerButton({ perpId }: { perpId: Hex }) {
   };
 
   return (
-    <button onClick={handleOpenMaker} disabled={loading || !context}>
+    <button onClick={handleOpenMaker}
+  disabled={loading || !context}>
       {loading ? 'Opening...' : 'Open Maker Position'}
     </button>
-  );
+  )
 }
 
 // ============================================================================
@@ -198,28 +201,44 @@ export function TradingInterface({ perpId }: { perpId: Hex }) {
   if (!context) {
     return (
       <div>
-        <h2>Connect Wallet to Trade</h2>
-        <p>Please connect your wallet using Privy to start trading.</p>
+        <h2>Connect
+    Wallet;
+    to;
+    Trade < /2>h < p > Please;
+    connect;
+    your;
+    wallet;
+    using Privy;
+    to;
+    start;
+    trading.</p>
       </div>
-    );
+    )
   }
 
   return (
     <div>
-      <h2>Trading Interface</h2>
-
-      <div style={{ marginBottom: '20px' }}>
+      <h2>Trading
+  Interface < /2>h < div;
+  style={{ marginBottom: '20px' }
+}
+>
         <h3>Taker Positions</h3>
-        <OpenLongButton perpId={perpId} />
-        <OpenShortButton perpId={perpId} />
+        <OpenLongButton perpId=
+{
+  perpId;
+}
+/> < OpenShortButton;
+perpId={perpId} />
       </div>
 
       <div>
-        <h3>Maker Positions</h3>
-        <OpenMakerButton perpId={perpId} />
+        <h3>Maker
+Positions < /3>h < OpenMakerButton;
+perpId={perpId} />
       </div>
     </div>
-  );
+)
 }
 
 // ============================================================================

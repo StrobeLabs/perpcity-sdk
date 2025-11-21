@@ -1,5 +1,5 @@
-import { setup } from './setup';
 import { openMakerPosition } from '../src/functions/perp-manager';
+import { setup } from './setup';
 
 async function main() {
   const { context, perpId } = setup();

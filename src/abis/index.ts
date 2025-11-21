@@ -1,2 +1,2 @@
-export * from './perp-manager';
-export * from './beacon';
+export * from "./beacon";
+export * from "./perp-manager";

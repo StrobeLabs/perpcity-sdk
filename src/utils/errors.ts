@@ -1,5 +1,4 @@
-import { BaseError, ContractFunctionRevertedError, decodeErrorResult } from "viem";
-import { PERP_MANAGER_ABI } from "../abis/perp-manager";
+import { BaseError, ContractFunctionRevertedError } from "viem";
 
 /**
  * Error category classification
@@ -36,7 +35,10 @@ export interface ErrorDebugInfo {
  * Base class for all PerpCity SDK errors
  */
 export class PerpCityError extends Error {
-  constructor(message: string, public readonly cause?: Error) {
+  constructor(
+    message: string,
+    public readonly cause?: Error
+  ) {
     super(message);
     this.name = "PerpCityError";
   }
@@ -228,7 +230,10 @@ function detectErrorSource(errorName: string): ErrorSource {
 /**
  * Format a contract error name and args into a user-friendly message with debug info
  */
-function formatContractError(errorName: string, args: readonly unknown[]): { message: string; debug: ErrorDebugInfo } {
+function formatContractError(
+  errorName: string,
+  args: readonly unknown[]
+): { message: string; debug: ErrorDebugInfo } {
   const source = detectErrorSource(errorName);
 
   switch (errorName) {
@@ -374,7 +379,8 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
     // Uniswap V4 PoolManager errors
     case "CurrencyNotSettled":
       return {
-        message: "Currency balance not settled after operation. The pool manager requires all currency deltas to be settled before unlocking.",
+        message:
+          "Currency balance not settled after operation. The pool manager requires all currency deltas to be settled before unlocking.",
         debug: {
           source,
           category: ErrorCategory.SYSTEM_ERROR,
@@ -384,7 +390,8 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 
     case "PoolNotInitialized":
       return {
-        message: "Pool does not exist or has not been initialized. Ensure the pool has been created before attempting to interact with it.",
+        message:
+          "Pool does not exist or has not been initialized. Ensure the pool has been created before attempting to interact with it.",
         debug: { source, category: ErrorCategory.STATE_ERROR },
       };
 
@@ -401,7 +408,8 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 
     case "ManagerLocked":
       return {
-        message: "Uniswap V4 Pool Manager is currently locked. This is a temporary state during transaction processing.",
+        message:
+          "Uniswap V4 Pool Manager is currently locked. This is a temporary state during transaction processing.",
         debug: {
           source,
           category: ErrorCategory.STATE_ERROR,
@@ -430,7 +438,8 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 
     case "UnauthorizedDynamicLPFeeUpdate":
       return {
-        message: "Unauthorized attempt to update dynamic LP fee. Only authorized addresses can modify fees.",
+        message:
+          "Unauthorized attempt to update dynamic LP fee. Only authorized addresses can modify fees.",
         debug: { source, category: ErrorCategory.USER_ERROR },
       };
 
@@ -442,20 +451,23 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 
     case "NonzeroNativeValue":
       return {
-        message: "Native ETH was sent with the transaction when none was expected. Do not send ETH with this operation.",
+        message:
+          "Native ETH was sent with the transaction when none was expected. Do not send ETH with this operation.",
         debug: { source, category: ErrorCategory.USER_ERROR },
       };
 
     case "MustClearExactPositiveDelta":
       return {
-        message: "Must clear exact positive delta. The transaction must settle the exact amount owed to the pool.",
+        message:
+          "Must clear exact positive delta. The transaction must settle the exact amount owed to the pool.",
         debug: { source, category: ErrorCategory.SYSTEM_ERROR },
       };
 
     // Missing PerpManager errors - ERC721/Ownership
     case "AccountBalanceOverflow":
       return {
-        message: "Account balance overflow detected. This is a critical error that should not occur under normal conditions.",
+        message:
+          "Account balance overflow detected. This is a critical error that should not occur under normal conditions.",
         debug: { source, category: ErrorCategory.SYSTEM_ERROR },
       };
 
@@ -491,7 +503,8 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 
     case "TransferToNonERC721ReceiverImplementer":
       return {
-        message: "Cannot transfer position to a contract that does not implement ERC721 receiver interface.",
+        message:
+          "Cannot transfer position to a contract that does not implement ERC721 receiver interface.",
         debug: { source, category: ErrorCategory.USER_ERROR },
       };
 
@@ -522,13 +535,15 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
     // Missing PerpManager errors - Transfer/Approval
     case "TransferFromFailed":
       return {
-        message: "ERC20 transferFrom operation failed. Ensure you have approved sufficient tokens and have enough balance.",
+        message:
+          "ERC20 transferFrom operation failed. Ensure you have approved sufficient tokens and have enough balance.",
         debug: { source, category: ErrorCategory.USER_ERROR },
       };
 
     case "TransferFailed":
       return {
-        message: "ERC20 transfer operation failed. This may indicate insufficient balance or a token contract issue.",
+        message:
+          "ERC20 transfer operation failed. This may indicate insufficient balance or a token contract issue.",
         debug: { source, category: ErrorCategory.SYSTEM_ERROR },
       };
 
@@ -547,7 +562,8 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 
     case "FeesNotRegistered":
       return {
-        message: "Fees module has not been registered for this pool. Please register the fees module before proceeding.",
+        message:
+          "Fees module has not been registered for this pool. Please register the fees module before proceeding.",
         debug: { source, category: ErrorCategory.CONFIG_ERROR },
       };
 
@@ -559,19 +575,22 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 
     case "MarginRatiosNotRegistered":
       return {
-        message: "Margin ratios module has not been registered for this pool. Please register the module before proceeding.",
+        message:
+          "Margin ratios module has not been registered for this pool. Please register the module before proceeding.",
         debug: { source, category: ErrorCategory.CONFIG_ERROR },
       };
 
     case "LockupPeriodNotRegistered":
       return {
-        message: "Lockup period module has not been registered for this pool. Please register the module before proceeding.",
+        message:
+          "Lockup period module has not been registered for this pool. Please register the module before proceeding.",
         debug: { source, category: ErrorCategory.CONFIG_ERROR },
       };
 
     case "SqrtPriceImpactLimitNotRegistered":
       return {
-        message: "Sqrt price impact limit module has not been registered for this pool. Please register the module before proceeding.",
+        message:
+          "Sqrt price impact limit module has not been registered for this pool. Please register the module before proceeding.",
         debug: { source, category: ErrorCategory.CONFIG_ERROR },
       };
 
@@ -602,25 +621,29 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 
     case "PositionLocked":
       return {
-        message: "This position is currently locked. Maker positions have a time-based lockup period to ensure liquidity stability.",
+        message:
+          "This position is currently locked. Maker positions have a time-based lockup period to ensure liquidity stability.",
         debug: { source, category: ErrorCategory.STATE_ERROR },
       };
 
     case "ZeroDelta":
       return {
-        message: "Position has zero size. Cannot perform operation on a position with no open size.",
+        message:
+          "Position has zero size. Cannot perform operation on a position with no open size.",
         debug: { source, category: ErrorCategory.STATE_ERROR },
       };
 
     case "NotPoolManager":
       return {
-        message: "Only the Uniswap V4 Pool Manager can call this function. This indicates an architectural issue.",
+        message:
+          "Only the Uniswap V4 Pool Manager can call this function. This indicates an architectural issue.",
         debug: { source, category: ErrorCategory.SYSTEM_ERROR },
       };
 
     case "NoLiquidityToReceiveFees":
       return {
-        message: "No liquidity available to receive fees. Ensure there is sufficient liquidity in the pool.",
+        message:
+          "No liquidity available to receive fees. Ensure there is sufficient liquidity in the pool.",
         debug: { source, category: ErrorCategory.STATE_ERROR },
       };
 
@@ -635,10 +658,7 @@ function formatContractError(errorName: string, args: readonly unknown[]): { mes
 /**
  * Wrap an async function with error handling
  */
-export async function withErrorHandling<T>(
-  fn: () => Promise<T>,
-  context: string
-): Promise<T> {
+export async function withErrorHandling<T>(fn: () => Promise<T>, context: string): Promise<T> {
   try {
     return await fn();
   } catch (error) {

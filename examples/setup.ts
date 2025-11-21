@@ -1,9 +1,9 @@
 import 'dotenv/config';
-import { PerpCityContext, getRpcUrl } from "../dist";
-import { createWalletClient, http } from "viem";
-import { baseSepolia } from "viem/chains";
-import { privateKeyToAccount } from 'viem/accounts';
 import type { Hex } from 'viem';
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
+import { getRpcUrl, PerpCityContext } from '../dist';
 
 export function setup(): { context: PerpCityContext; perpId: Hex } {
   // Validate required environment variables
@@ -30,7 +30,7 @@ export function setup(): { context: PerpCityContext; perpId: Hex } {
     chain: baseSepolia,
     transport: http(rpcUrl),
     account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
-  })
+  });
 
   const context = new PerpCityContext({
     walletClient: walletClient,

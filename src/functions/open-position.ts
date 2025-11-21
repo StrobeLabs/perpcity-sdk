@@ -1,10 +1,10 @@
 import type { Hex } from "viem";
-import { publicActions, formatUnits, decodeEventLog } from "viem";
-import { PerpCityContext } from "../context";
-import { scale6Decimals, scaleFrom6Decimals } from "../utils";
-import { withErrorHandling, parseContractError } from "../utils/errors";
+import { decodeEventLog, formatUnits, publicActions } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
-import { ClosePositionParams, ClosePositionResult, LiveDetails } from "../types/entity-data";
+import type { PerpCityContext } from "../context";
+import type { ClosePositionParams, ClosePositionResult, LiveDetails } from "../types/entity-data";
+import { scale6Decimals } from "../utils";
+import { withErrorHandling } from "../utils/errors";
 
 export class OpenPosition {
   public readonly context: PerpCityContext;
@@ -14,7 +14,14 @@ export class OpenPosition {
   public readonly isMaker?: boolean;
   public readonly txHash?: Hex;
 
-  constructor(context: PerpCityContext, perpId: Hex, positionId: bigint, isLong?: boolean, isMaker?: boolean, txHash?: Hex) {
+  constructor(
+    context: PerpCityContext,
+    perpId: Hex,
+    positionId: bigint,
+    isLong?: boolean,
+    isMaker?: boolean,
+    txHash?: Hex
+  ) {
     this.context = context;
     this.perpId = perpId;
     this.positionId = positionId;
@@ -24,87 +31,100 @@ export class OpenPosition {
   }
 
   async closePosition(params: ClosePositionParams): Promise<ClosePositionResult> {
-    return withErrorHandling(async () => {
-      const contractParams = {
-        posId: this.positionId,
-        minAmt0Out: scale6Decimals(params.minAmt0Out),
-        minAmt1Out: scale6Decimals(params.minAmt1Out),
-        maxAmt1In: scale6Decimals(params.maxAmt1In),
-      };
+    return withErrorHandling(
+      async () => {
+        const contractParams = {
+          posId: this.positionId,
+          minAmt0Out: scale6Decimals(params.minAmt0Out),
+          minAmt1Out: scale6Decimals(params.minAmt1Out),
+          maxAmt1In: scale6Decimals(params.maxAmt1In),
+        };
 
-      // Simulate the transaction first - this will catch contract errors early
-      const { request } = await this.context.walletClient.extend(publicActions).simulateContract({
-        address: this.context.deployments().perpManager,
-        abi: PERP_MANAGER_ABI,
-        functionName: 'closePosition',
-        args: [contractParams],
-        account: this.context.walletClient.account,
-        gas: 500000n, // Provide explicit gas limit to avoid estimation issues
-      });
+        // Simulate the transaction first - this will catch contract errors early
+        const { request } = await this.context.walletClient.extend(publicActions).simulateContract({
+          address: this.context.deployments().perpManager,
+          abi: PERP_MANAGER_ABI,
+          functionName: "closePosition",
+          args: [contractParams],
+          account: this.context.walletClient.account,
+          gas: 500000n, // Provide explicit gas limit to avoid estimation issues
+        });
 
-      // Execute the transaction
-      const txHash = await this.context.walletClient.writeContract(request);
+        // Execute the transaction
+        const txHash = await this.context.walletClient.writeContract(request);
 
-      // Wait for transaction confirmation
-      const publicClient = this.context.walletClient.extend(publicActions);
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+        // Wait for transaction confirmation
+        const publicClient = this.context.walletClient.extend(publicActions);
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-      // Check if transaction was successful
-      if (receipt.status === 'reverted') {
-        throw new Error(`Transaction reverted. Hash: ${txHash}`);
-      }
+        // Check if transaction was successful
+        if (receipt.status === "reverted") {
+          throw new Error(`Transaction reverted. Hash: ${txHash}`);
+        }
 
-      // Scan transaction events to determine if this was a partial or full close
-      // For partial closes, a PositionOpened event is emitted with the new position ID
-      // For full closes, a PositionClosed event is emitted
-      let newPositionId: bigint | null = null;
-      let wasFullyClosed = false;
+        // Scan transaction events to determine if this was a partial or full close
+        // For partial closes, a PositionOpened event is emitted with the new position ID
+        // For full closes, a PositionClosed event is emitted
+        let newPositionId: bigint | null = null;
+        let _wasFullyClosed = false;
 
-      for (const log of receipt.logs) {
-        try {
-          // Check for PositionOpened event (partial close)
-          const openedDecoded = decodeEventLog({
-            abi: PERP_MANAGER_ABI,
-            data: log.data,
-            topics: log.topics,
-            eventName: 'PositionOpened',
-          });
-
-          // Match the perpId and extract the new position ID
-          if (openedDecoded.args.perpId === this.perpId) {
-            newPositionId = openedDecoded.args.posId as bigint;
-            break;
-          }
-        } catch (e) {
-          // Not a PositionOpened event, try PositionClosed
+        for (const log of receipt.logs) {
           try {
-            const closedDecoded = decodeEventLog({
+            // Check for PositionOpened event (partial close)
+            const openedDecoded = decodeEventLog({
               abi: PERP_MANAGER_ABI,
               data: log.data,
               topics: log.topics,
-              eventName: 'PositionClosed',
+              eventName: "PositionOpened",
             });
 
-            // If this position was fully closed, mark it
-            if (closedDecoded.args.perpId === this.perpId && closedDecoded.args.posId === this.positionId) {
-              wasFullyClosed = true;
+            // Match the perpId and extract the new position ID
+            if (openedDecoded.args.perpId === this.perpId) {
+              newPositionId = openedDecoded.args.posId as bigint;
               break;
             }
-          } catch (e2) {
-            // Neither event, skip
-            continue;
+          } catch (_e) {
+            // Not a PositionOpened event, try PositionClosed
+            try {
+              const closedDecoded = decodeEventLog({
+                abi: PERP_MANAGER_ABI,
+                data: log.data,
+                topics: log.topics,
+                eventName: "PositionClosed",
+              });
+
+              // If this position was fully closed, mark it
+              if (
+                closedDecoded.args.perpId === this.perpId &&
+                closedDecoded.args.posId === this.positionId
+              ) {
+                _wasFullyClosed = true;
+                break;
+              }
+            } catch (_e2) {}
           }
         }
-      }
 
-      // If no new position ID, this was a full close
-      if (!newPositionId) {
-        return { position: null, txHash };
-      }
+        // If no new position ID, this was a full close
+        if (!newPositionId) {
+          return { position: null, txHash };
+        }
 
-      // Return new OpenPosition with the new position from partial close
-      return { position: new OpenPosition(this.context, this.perpId, newPositionId, this.isLong, this.isMaker, txHash), txHash };
-    }, `closePosition for ${this.isMaker ? 'maker' : 'taker'} position ${this.positionId}`);
+        // Return new OpenPosition with the new position from partial close
+        return {
+          position: new OpenPosition(
+            this.context,
+            this.perpId,
+            newPositionId,
+            this.isLong,
+            this.isMaker,
+            txHash
+          ),
+          txHash,
+        };
+      },
+      `closePosition for ${this.isMaker ? "maker" : "taker"} position ${this.positionId}`
+    );
   }
 
   async liveDetails(): Promise<LiveDetails> {
@@ -113,15 +133,17 @@ export class OpenPosition {
       const result = (await this.context.walletClient.readContract({
         address: this.context.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
-        functionName: 'quoteClosePosition' as any,
+        functionName: "quoteClosePosition" as any,
         args: [this.positionId],
-      }) as unknown) as readonly [boolean, bigint, bigint, bigint, boolean];
+      })) as unknown as readonly [boolean, bigint, bigint, bigint, boolean];
 
       // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]
       const [success, pnl, funding, netMargin, wasLiquidated] = result;
 
       if (!success) {
-        throw new Error(`Failed to quote position ${this.positionId} - position may be invalid or already closed`);
+        throw new Error(
+          `Failed to quote position ${this.positionId} - position may be invalid or already closed`
+        );
       }
 
       return {

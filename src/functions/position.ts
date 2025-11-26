@@ -171,15 +171,14 @@ export function calculateEntryPrice(rawData: PositionRawData): number {
     return 0;
   }
 
-  // Both values are in scaled format (6 decimals for USD, 18 for perp)
-  // entryUsdDelta is scaled by 1e6, entryPerpDelta is scaled by 1e18
-  // Price = USD / Perp = (usdDelta / 1e6) / (perpDelta / 1e18) = usdDelta * 1e12 / perpDelta
+  // Both values are in scaled format (6 decimals each)
+  // entryUsdDelta is scaled by 1e6, entryPerpDelta is scaled by 1e6
+  // Price = USD / Perp = (usdDelta / 1e6) / (perpDelta / 1e6) = usdDelta / perpDelta
   const absPerpDelta = perpDelta < 0n ? -perpDelta : perpDelta;
   const absUsdDelta = usdDelta < 0n ? -usdDelta : usdDelta;
 
-  // Scale to get price in human units
-  const priceScaled = (absUsdDelta * BigInt(1e12)) / absPerpDelta;
-  return Number(priceScaled);
+  // Since both are scaled by 1e6, they cancel out
+  return Number(absUsdDelta) / Number(absPerpDelta);
 }
 
 /**
@@ -188,8 +187,8 @@ export function calculateEntryPrice(rawData: PositionRawData): number {
  * @returns Position size (positive for long, negative for short)
  */
 export function calculatePositionSize(rawData: PositionRawData): number {
-  // entryPerpDelta is scaled by 1e18
-  return Number(rawData.entryPerpDelta) / 1e18;
+  // entryPerpDelta is scaled by 1e6
+  return Number(rawData.entryPerpDelta) / 1e6;
 }
 
 /**

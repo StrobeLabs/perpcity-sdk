@@ -231,4 +231,89 @@ describe("Context Integration Tests", () => {
       // To invalidate cache immediately, create a new context instance
     }, 30000);
   });
+
+  describe("getPositionRawData", () => {
+    it("should throw error for non-existent position", async () => {
+      const nonExistentPositionId = 999999999n;
+
+      await expect(async () => {
+        await context.getPositionRawData(nonExistentPositionId);
+      }).rejects.toThrow();
+    }, 30000);
+
+    it("should fetch raw position data for valid position", async () => {
+      if (!config.testPositionId) {
+        console.log("Skipping: TEST_POSITION_ID not configured in .env.local");
+        return;
+      }
+
+      const positionId = BigInt(config.testPositionId);
+      const rawData = await context.getPositionRawData(positionId);
+
+      expect(rawData).toBeDefined();
+      expect(rawData.perpId).toBeTypeOf("string");
+      expect(rawData.positionId).toBe(positionId);
+      expect(rawData.margin).toBeTypeOf("number");
+      expect(rawData.entryPerpDelta).toBeTypeOf("bigint");
+      expect(rawData.entryUsdDelta).toBeTypeOf("bigint");
+      expect(rawData.marginRatios).toBeDefined();
+      expect(rawData.marginRatios.min).toBeTypeOf("number");
+      expect(rawData.marginRatios.max).toBeTypeOf("number");
+    }, 30000);
+
+    it("should have valid margin ratios", async () => {
+      if (!config.testPositionId) {
+        console.log("Skipping: TEST_POSITION_ID not configured in .env.local");
+        return;
+      }
+
+      const positionId = BigInt(config.testPositionId);
+      const rawData = await context.getPositionRawData(positionId);
+
+      // Min margin ratio should be less than max margin ratio
+      expect(rawData.marginRatios.min).toBeLessThan(rawData.marginRatios.max);
+
+      // Both should be positive
+      expect(rawData.marginRatios.min).toBeGreaterThan(0);
+      expect(rawData.marginRatios.max).toBeGreaterThan(0);
+
+      // Both should be scaled by 1e6 (between 0 and 1e6 for reasonable margin ratios)
+      expect(rawData.marginRatios.min).toBeLessThanOrEqual(1000000);
+      expect(rawData.marginRatios.max).toBeLessThanOrEqual(1000000);
+    }, 30000);
+
+    it("should have consistent entry deltas", async () => {
+      if (!config.testPositionId) {
+        console.log("Skipping: TEST_POSITION_ID not configured in .env.local");
+        return;
+      }
+
+      const positionId = BigInt(config.testPositionId);
+      const rawData = await context.getPositionRawData(positionId);
+
+      // For a non-maker position, entry deltas should have opposite signs
+      // (long: positive perp delta, negative usd delta; short: opposite)
+      // OR both should be zero for closed position
+      const perpDeltaSign = rawData.entryPerpDelta > 0n ? 1 : rawData.entryPerpDelta < 0n ? -1 : 0;
+      const usdDeltaSign = rawData.entryUsdDelta > 0n ? 1 : rawData.entryUsdDelta < 0n ? -1 : 0;
+
+      if (perpDeltaSign !== 0 && usdDeltaSign !== 0) {
+        // For taker positions, signs should be opposite
+        expect(perpDeltaSign).not.toBe(usdDeltaSign);
+      }
+    }, 30000);
+
+    it("should have non-negative margin for open position", async () => {
+      if (!config.testPositionId) {
+        console.log("Skipping: TEST_POSITION_ID not configured in .env.local");
+        return;
+      }
+
+      const positionId = BigInt(config.testPositionId);
+      const rawData = await context.getPositionRawData(positionId);
+
+      // Margin should be non-negative for any position
+      expect(rawData.margin).toBeGreaterThanOrEqual(0);
+    }, 30000);
+  });
 });

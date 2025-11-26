@@ -83,6 +83,21 @@ export type OpenPositionData = {
   liveDetails: LiveDetails;
 };
 
+export type MarginRatios = {
+  min: number; // Minimum margin ratio (scaled by 1e6)
+  max: number; // Maximum margin ratio (scaled by 1e6)
+  liq: number; // Liquidation margin ratio (scaled by 1e6)
+};
+
+export type PositionRawData = {
+  perpId: Hex;
+  positionId: bigint;
+  margin: number; // Current margin in USDC
+  entryPerpDelta: bigint; // Position size in perp tokens (raw)
+  entryUsdDelta: bigint; // Entry notional value in USDC (raw)
+  marginRatios: MarginRatios;
+};
+
 export type CacheConfig = {
   ttl: number; // Time to live in milliseconds
   maxSize: number; // Maximum cache size

@@ -11,6 +11,7 @@ import type {
   OpenPositionData,
   PerpConfig,
   PerpData,
+  PositionRawData,
   UserData,
 } from "./types/entity-data";
 import { marginRatioToLeverage, sqrtPriceX96ToPrice } from "./utils";
@@ -306,5 +307,57 @@ export class PerpCityContext {
       isMaker,
       liveDetails,
     };
+  }
+
+  /**
+   * Fetch raw position data from the contract
+   * This includes entry price data, margin, and position size needed for calculations
+   * @param positionId - The position ID
+   */
+  async getPositionRawData(positionId: bigint): Promise<PositionRawData> {
+    return withErrorHandling(async () => {
+      const result = await this.walletClient.readContract({
+        address: this.deployments().perpManager,
+        abi: PERP_MANAGER_ABI,
+        functionName: "positions",
+        args: [positionId],
+      });
+
+      // The result is a tuple matching the Position struct:
+      // [perpId, margin, entryPerpDelta, entryUsdDelta, entryCumlFundingX96,
+      //  entryCumlBadDebtX96, entryCumlUtilizationX96, marginRatios, makerDetails]
+      const resultArray = result as unknown as readonly [
+        Hex, // perpId
+        bigint, // margin
+        bigint, // entryPerpDelta
+        bigint, // entryUsdDelta
+        bigint, // entryCumlFundingX96
+        bigint, // entryCumlBadDebtX96
+        bigint, // entryCumlUtilizationX96
+        { min: number; max: number; liq: number }, // marginRatios
+        unknown, // makerDetails (not needed for now)
+      ];
+
+      const [perpId, margin, entryPerpDelta, entryUsdDelta, , , , marginRatios] = resultArray;
+
+      // Check if position exists (non-existent positions have zero perpId)
+      const zeroPerpId = `0x${"0".repeat(64)}` as Hex;
+      if (perpId === zeroPerpId) {
+        throw new Error(`Position ${positionId} does not exist`);
+      }
+
+      return {
+        perpId,
+        positionId,
+        margin: Number(formatUnits(margin, 6)),
+        entryPerpDelta,
+        entryUsdDelta,
+        marginRatios: {
+          min: Number(marginRatios.min),
+          max: Number(marginRatios.max),
+          liq: Number(marginRatios.liq),
+        },
+      };
+    }, `getPositionRawData for position ${positionId}`);
   }
 }

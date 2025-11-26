@@ -157,7 +157,7 @@ describe("Position Calculation Functions", () => {
     margin: 100,
     entryPerpDelta: 2000000n, // 2 perp tokens (1e6)
     entryUsdDelta: 100000000n, // $100 (1e6)
-    marginRatios: { min: 100000, max: 500000 },
+    marginRatios: { min: 100000, max: 500000, liq: 50000 },
   };
 
   describe("calculateEntryPrice", () => {

@@ -334,7 +334,7 @@ export class PerpCityContext {
         bigint, // entryCumlFundingX96
         bigint, // entryCumlBadDebtX96
         bigint, // entryCumlUtilizationX96
-        { min: number; max: number }, // marginRatios
+        { min: number; max: number; liq: number }, // marginRatios
         unknown, // makerDetails (not needed for now)
       ];
 
@@ -349,6 +349,7 @@ export class PerpCityContext {
         marginRatios: {
           min: Number(marginRatios.min),
           max: Number(marginRatios.max),
+          liq: Number(marginRatios.liq),
         },
       };
     }, `getPositionRawData for position ${positionId}`);

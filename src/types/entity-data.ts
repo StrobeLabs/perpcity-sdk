@@ -86,6 +86,7 @@ export type OpenPositionData = {
 export type MarginRatios = {
   min: number; // Minimum margin ratio (scaled by 1e6)
   max: number; // Maximum margin ratio (scaled by 1e6)
+  liq: number; // Liquidation margin ratio (scaled by 1e6)
 };
 
 export type PositionRawData = {

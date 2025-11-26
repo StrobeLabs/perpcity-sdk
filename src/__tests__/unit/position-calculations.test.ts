@@ -17,7 +17,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 50000000n, // $50 (1e6 scaled)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const entryPrice = calculateEntryPrice(rawData);
@@ -33,7 +33,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: -2000000n, // -2 perp tokens (1e6)
         entryUsdDelta: -100000000n, // -$100 (1e6 scaled)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const entryPrice = calculateEntryPrice(rawData);
@@ -49,7 +49,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 0n,
         entryUsdDelta: 0n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const entryPrice = calculateEntryPrice(rawData);
@@ -64,7 +64,7 @@ describe("Position Calculation Functions", () => {
         margin: 10000,
         entryPerpDelta: 100000000n, // 100 perp tokens (1e6)
         entryUsdDelta: 5000000000n, // $5000 (1e6 scaled)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const entryPrice = calculateEntryPrice(rawData);
@@ -80,7 +80,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 10000000n, // 10 perp tokens (1e6)
         entryUsdDelta: 123450000n, // $123.45 (1e6 scaled)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const entryPrice = calculateEntryPrice(rawData);
@@ -98,7 +98,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 50000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const size = calculatePositionSize(rawData);
@@ -113,7 +113,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: -2000000n, // -2 perp tokens (1e6)
         entryUsdDelta: -100000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const size = calculatePositionSize(rawData);
@@ -128,7 +128,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 0n,
         entryUsdDelta: 0n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const size = calculatePositionSize(rawData);
@@ -143,7 +143,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 500000n, // 0.5 perp tokens (1e6)
         entryUsdDelta: 25000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const size = calculatePositionSize(rawData);
@@ -158,7 +158,7 @@ describe("Position Calculation Functions", () => {
         margin: 10000,
         entryPerpDelta: 100000000n, // 100 perp tokens (1e6)
         entryUsdDelta: 5000000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const size = calculatePositionSize(rawData);
@@ -175,7 +175,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 50000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 60;
@@ -192,7 +192,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: -2000000n, // -2 perp tokens (1e6)
         entryUsdDelta: -100000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 55;
@@ -209,7 +209,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 0n,
         entryUsdDelta: 0n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 50;
@@ -225,7 +225,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1500000n, // 1.5 perp tokens (1e6)
         entryUsdDelta: 75000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 52.75;
@@ -242,7 +242,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 50000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const shortData: PositionRawData = {
@@ -251,7 +251,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: -1000000n, // -1 perp token (1e6)
         entryUsdDelta: -50000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 60;
@@ -338,7 +338,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 50000000n, // $50 entry price (1e6)
-        marginRatios: { min: 100000, max: 500000 }, // min ratio = 0.1 (10%)
+        marginRatios: { min: 100000, max: 500000, liq: 50000 }, // min ratio = 0.1 (10%)
       };
 
       const markPrice = 50;
@@ -359,7 +359,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: -1000000n, // -1 perp token (1e6)
         entryUsdDelta: -50000000n, // $50 entry price (1e6)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 50;
@@ -380,7 +380,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 0n,
         entryUsdDelta: 0n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 50;
@@ -397,7 +397,7 @@ describe("Position Calculation Functions", () => {
         margin: 0,
         entryPerpDelta: 1000000000000000000n,
         entryUsdDelta: 50000000n,
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 50;
@@ -414,7 +414,7 @@ describe("Position Calculation Functions", () => {
         margin: 10,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 50000000n, // $50 (1e6)
-        marginRatios: { min: 100000, max: 500000 }, // min ratio = 0.1
+        marginRatios: { min: 100000, max: 500000, liq: 50000 }, // min ratio = 0.1
       };
 
       const markPrice = 50;
@@ -434,7 +434,7 @@ describe("Position Calculation Functions", () => {
         margin: 500,
         entryPerpDelta: 10000000n, // 10 perp tokens (1e6)
         entryUsdDelta: 500000000n, // $50 each (1e6)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 50;
@@ -453,7 +453,7 @@ describe("Position Calculation Functions", () => {
         margin: 1000,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 10000000n, // $10 entry (1e6)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 10;
@@ -472,7 +472,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 100000000n, // $100 entry (1e6)
-        marginRatios: { min: 200000, max: 500000 }, // min ratio = 0.2 (20%)
+        marginRatios: { min: 200000, max: 500000, liq: 100000 }, // min ratio = 0.2 (20%), liq ratio = 0.1 (10%)
       };
 
       const markPrice = 100;
@@ -493,7 +493,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 50000000n, // $50 entry (1e6)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 60;
@@ -519,7 +519,7 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: -2000000n, // -2 perp tokens (1e6)
         entryUsdDelta: -100000000n, // $50 entry (1e6)
-        marginRatios: { min: 100000, max: 500000 },
+        marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
       const markPrice = 60; // Price went up, short is losing

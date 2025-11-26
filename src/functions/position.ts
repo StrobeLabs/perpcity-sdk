@@ -243,25 +243,25 @@ export function calculateLiquidationPrice(
     return null;
   }
 
-  // Min margin ratio is scaled by 1e6, convert to decimal
-  const minMarginRatio = rawData.marginRatios.min / 1e6;
+  // Liquidation margin ratio is scaled by 1e6, convert to decimal
+  const liqMarginRatio = rawData.marginRatios.liq / 1e6;
 
   // Entry notional value
   const entryNotional = positionSize * entryPrice;
 
   // Calculate price move that would trigger liquidation
-  // At liquidation: margin + pnl = minMarginRatio * notional
-  // For long: margin + (liqPrice - entryPrice) * size = minMarginRatio * liqPrice * size
-  // Solving: liqPrice = (margin + entryPrice * size) / (size * (1 + minMarginRatio))
-  // Simplified: liqPrice = entryPrice - (margin - minMarginRatio * entryNotional) / size
+  // At liquidation: margin + pnl = liqMarginRatio * notional
+  // For long: margin + (liqPrice - entryPrice) * size = liqMarginRatio * liqPrice * size
+  // Solving: liqPrice = (margin + entryPrice * size) / (size * (1 + liqMarginRatio))
+  // Simplified: liqPrice = entryPrice - (margin - liqMarginRatio * entryNotional) / size
 
   if (isLong) {
     // For longs, liquidation happens when price drops
-    const liqPrice = entryPrice - (rawData.margin - minMarginRatio * entryNotional) / positionSize;
+    const liqPrice = entryPrice - (rawData.margin - liqMarginRatio * entryNotional) / positionSize;
     return Math.max(0, liqPrice);
   } else {
     // For shorts, liquidation happens when price rises
-    const liqPrice = entryPrice + (rawData.margin - minMarginRatio * entryNotional) / positionSize;
+    const liqPrice = entryPrice + (rawData.margin - liqMarginRatio * entryNotional) / positionSize;
     return liqPrice;
   }
 }

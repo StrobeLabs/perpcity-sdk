@@ -259,6 +259,7 @@ describe("Context Integration Tests", () => {
       expect(rawData.marginRatios).toBeDefined();
       expect(rawData.marginRatios.min).toBeTypeOf("number");
       expect(rawData.marginRatios.max).toBeTypeOf("number");
+      expect(rawData.marginRatios.liq).toBeTypeOf("number");
     }, 30000);
 
     it("should have valid margin ratios", async () => {
@@ -273,13 +274,18 @@ describe("Context Integration Tests", () => {
       // Min margin ratio should be less than max margin ratio
       expect(rawData.marginRatios.min).toBeLessThan(rawData.marginRatios.max);
 
-      // Both should be positive
+      // Liquidation ratio should be less than or equal to min ratio
+      expect(rawData.marginRatios.liq).toBeLessThanOrEqual(rawData.marginRatios.min);
+
+      // All should be positive
       expect(rawData.marginRatios.min).toBeGreaterThan(0);
       expect(rawData.marginRatios.max).toBeGreaterThan(0);
+      expect(rawData.marginRatios.liq).toBeGreaterThan(0);
 
-      // Both should be scaled by 1e6 (between 0 and 1e6 for reasonable margin ratios)
+      // All should be scaled by 1e6 (between 0 and 1e6 for reasonable margin ratios)
       expect(rawData.marginRatios.min).toBeLessThanOrEqual(1000000);
       expect(rawData.marginRatios.max).toBeLessThanOrEqual(1000000);
+      expect(rawData.marginRatios.liq).toBeLessThanOrEqual(1000000);
     }, 30000);
 
     it("should have consistent entry deltas", async () => {

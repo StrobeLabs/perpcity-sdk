@@ -341,13 +341,11 @@ describe("Position Calculation Functions", () => {
         marginRatios: { min: 100000, max: 500000, liq: 50000 }, // min ratio = 0.1 (10%)
       };
 
-      const markPrice = 50;
-      const isLong = true;
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(rawData, true);
 
-      // For long: liqPrice = entryPrice - (margin - minRatio * entryNotional) / size
-      // entryPrice = 50, margin = 100, minRatio = 0.1, entryNotional = 1 * 50 = 50
-      // liqPrice = 50 - (100 - 0.1 * 50) / 1 = 50 - 95 = -45, but max(0, -45) = 0
+      // For long: liqPrice = entryPrice - (margin - liqRatio * entryNotional) / size
+      // entryPrice = 50, margin = 100, liqRatio = 0.05, entryNotional = 1 * 50 = 50
+      // liqPrice = 50 - (100 - 0.05 * 50) / 1 = 50 - 97.5 = -47.5, but max(0, -47.5) = 0
       expect(liqPrice).not.toBeNull();
       expect(liqPrice).toBeGreaterThanOrEqual(0);
     });
@@ -362,13 +360,11 @@ describe("Position Calculation Functions", () => {
         marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
-      const markPrice = 50;
-      const isLong = false;
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(rawData, false);
 
-      // For short: liqPrice = entryPrice + (margin - minRatio * entryNotional) / size
-      // entryPrice = 50, margin = 100, minRatio = 0.1, entryNotional = 1 * 50 = 50
-      // liqPrice = 50 + (100 - 0.1 * 50) / 1 = 50 + 95 = 145
+      // For short: liqPrice = entryPrice + (margin - liqRatio * entryNotional) / size
+      // entryPrice = 50, margin = 100, liqRatio = 0.05, entryNotional = 1 * 50 = 50
+      // liqPrice = 50 + (100 - 0.05 * 50) / 1 = 50 + 97.5 = 147.5
       expect(liqPrice).not.toBeNull();
       expect(liqPrice).toBeGreaterThan(50);
     });
@@ -383,9 +379,7 @@ describe("Position Calculation Functions", () => {
         marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
-      const markPrice = 50;
-      const isLong = true;
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(rawData, true);
 
       expect(liqPrice).toBeNull();
     });
@@ -400,9 +394,7 @@ describe("Position Calculation Functions", () => {
         marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
-      const markPrice = 50;
-      const isLong = true;
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(rawData, true);
 
       expect(liqPrice).toBeNull();
     });
@@ -414,12 +406,10 @@ describe("Position Calculation Functions", () => {
         margin: 10,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 50000000n, // $50 (1e6)
-        marginRatios: { min: 100000, max: 500000, liq: 50000 }, // min ratio = 0.1
+        marginRatios: { min: 100000, max: 500000, liq: 50000 }, // liq ratio = 0.05
       };
 
-      const markPrice = 50;
-      const isLong = true;
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(rawData, true);
 
       // For high leverage longs, liquidation price should be close to entry
       expect(liqPrice).not.toBeNull();
@@ -437,9 +427,7 @@ describe("Position Calculation Functions", () => {
         marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
-      const markPrice = 50;
-      const isLong = true;
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(rawData, true);
 
       // For low leverage longs, liquidation price should be well below entry
       expect(liqPrice).not.toBeNull();
@@ -456,9 +444,7 @@ describe("Position Calculation Functions", () => {
         marginRatios: { min: 100000, max: 500000, liq: 50000 },
       };
 
-      const markPrice = 10;
-      const isLong = true;
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(rawData, true);
 
       // Calculated liq price might be negative, but should return 0
       expect(liqPrice).not.toBeNull();
@@ -472,14 +458,12 @@ describe("Position Calculation Functions", () => {
         margin: 100,
         entryPerpDelta: 1000000n, // 1 perp token (1e6)
         entryUsdDelta: 100000000n, // $100 entry (1e6)
-        marginRatios: { min: 200000, max: 500000, liq: 100000 }, // min ratio = 0.2 (20%), liq ratio = 0.1 (10%)
+        marginRatios: { min: 200000, max: 500000, liq: 100000 }, // liq ratio = 0.1 (10%)
       };
 
-      const markPrice = 100;
-      const isLong = true;
-      const liqPrice = calculateLiquidationPrice(baseData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(baseData, true);
 
-      // Higher margin ratio means closer liquidation price to entry
+      // Higher liq ratio means closer liquidation price to entry
       expect(liqPrice).not.toBeNull();
       expect(liqPrice).toBeGreaterThanOrEqual(0);
     });
@@ -503,7 +487,7 @@ describe("Position Calculation Functions", () => {
       const size = calculatePositionSize(rawData);
       const value = calculatePositionValue(rawData, markPrice);
       const leverage = calculateLeverage(value, effectiveMargin);
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, true);
+      const liqPrice = calculateLiquidationPrice(rawData, true);
 
       expect(entryPrice).toBe(50);
       expect(size).toBe(1);
@@ -529,7 +513,7 @@ describe("Position Calculation Functions", () => {
       const size = calculatePositionSize(rawData);
       const value = calculatePositionValue(rawData, markPrice);
       const leverage = calculateLeverage(value, effectiveMargin);
-      const liqPrice = calculateLiquidationPrice(rawData, markPrice, false);
+      const liqPrice = calculateLiquidationPrice(rawData, false);
 
       expect(entryPrice).toBe(50);
       expect(size).toBe(-2);

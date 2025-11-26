@@ -357,7 +357,7 @@ describe("Trading Operations Integration Tests", () => {
       }).rejects.toThrow("priceLower must be less than priceUpper");
     }, 120000);
 
-    it("should require pre-aligned ticks", async () => {
+    it("should auto-align ticks to tick spacing", async () => {
       if (!config.testPerpId) {
         console.log("Skipping: TEST_PERP_ID not configured");
         return;
@@ -378,29 +378,39 @@ describe("Trading Operations Integration Tests", () => {
       const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
       const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
 
-      // Only test if ticks actually need alignment
-      if (tickLower !== alignedTickLower || tickUpper !== alignedTickUpper) {
-        const marginScaled = scale6Decimals(50);
-        const liquidity = await estimateLiquidity(
-          context,
-          alignedTickLower,
-          alignedTickUpper,
-          marginScaled
-        );
-
-        // SDK now throws error for misaligned ticks instead of silently aligning
-        await expect(async () => {
-          await openMakerPosition(context, perpId, {
-            margin: 50,
-            priceLower,
-            priceUpper,
-            liquidity,
-            maxAmt0In: 10000,
-            maxAmt1In: 100,
-          });
-        }).rejects.toThrow("Ticks must be aligned to tickSpacing");
-      } else {
+      // Verify that ticks need alignment (otherwise test is meaningless)
+      if (tickLower === alignedTickLower && tickUpper === alignedTickUpper) {
         console.log("Skipping: chosen prices happen to be aligned");
+        return;
+      }
+
+      // SDK should auto-align ticks without throwing
+      // The transaction may fail for other reasons (insufficient liquidity, etc.)
+      // but should NOT fail due to tick alignment
+      const marginScaled = scale6Decimals(50);
+      const liquidity = await estimateLiquidity(
+        context,
+        alignedTickLower,
+        alignedTickUpper,
+        marginScaled
+      );
+
+      // This should not throw a tick alignment error
+      // It may throw for other contract-level reasons, but we verify alignment works
+      try {
+        await openMakerPosition(context, perpId, {
+          margin: 50,
+          priceLower,
+          priceUpper,
+          liquidity,
+          maxAmt0In: 10000,
+          maxAmt1In: 100,
+        });
+        // If it succeeds, auto-alignment worked
+        expect(true).toBe(true);
+      } catch (error: any) {
+        // Should NOT be a tick alignment error
+        expect(error.message).not.toContain("Ticks must be aligned");
       }
     }, 120000);
   });

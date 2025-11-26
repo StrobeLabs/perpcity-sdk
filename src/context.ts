@@ -340,6 +340,12 @@ export class PerpCityContext {
 
       const [perpId, margin, entryPerpDelta, entryUsdDelta, , , , marginRatios] = resultArray;
 
+      // Check if position exists (non-existent positions have zero perpId)
+      const zeroPerpId = `0x${"0".repeat(64)}` as Hex;
+      if (perpId === zeroPerpId) {
+        throw new Error(`Position ${positionId} does not exist`);
+      }
+
       return {
         perpId,
         positionId,

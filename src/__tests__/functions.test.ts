@@ -212,9 +212,7 @@ describe("Position Calculation Functions", () => {
 
   describe("calculateLiquidationPrice", () => {
     it("should calculate liquidation price for position", () => {
-      const markPrice = 50;
-      const isLong = true;
-      const liqPrice = calculateLiquidationPrice(mockRawData, markPrice, isLong);
+      const liqPrice = calculateLiquidationPrice(mockRawData, true);
       expect(liqPrice).not.toBeNull();
       expect(typeof liqPrice).toBe("number");
     });

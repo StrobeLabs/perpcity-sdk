@@ -203,15 +203,8 @@ export async function openMakerPosition(
     const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
     const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
 
-    // Throw error if ticks need alignment - require users to provide pre-aligned prices
-    if (tickLower !== alignedTickLower || tickUpper !== alignedTickUpper) {
-      throw new Error(
-        `Ticks must be aligned to tickSpacing (${tickSpacing}). ` +
-          `Provided ticks: [${tickLower}, ${tickUpper}], ` +
-          `Required aligned ticks: [${alignedTickLower}, ${alignedTickUpper}]. ` +
-          `Adjust your priceLower/priceUpper to match the aligned tick values.`
-      );
-    }
+    // Auto-align ticks to tick spacing for contract compatibility
+    // (JavaScript floating point math cannot precisely match contract's Q96 integer math)
 
     // Prepare contract parameters - deployed contract requires holder address
     const contractParams = {

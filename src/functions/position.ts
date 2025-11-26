@@ -219,21 +219,16 @@ export function calculateLeverage(positionValue: number, effectiveMargin: number
 
 /**
  * Calculate the liquidation price for a position
- * Liquidation occurs when: effectiveMargin / positionValue <= minMarginRatio
- * For longs: liqPrice = entryPrice * (1 - (margin - fees) / positionValue * (1 - minRatio))
- * For shorts: liqPrice = entryPrice * (1 + (margin - fees) / positionValue * (1 - minRatio))
- *
- * Simplified approximation:
- * liquidationPrice = entryPrice * (1 +/- margin / notional * (1 - 1/maxLeverage))
+ * Liquidation occurs when: effectiveMargin / positionValue <= liqMarginRatio
+ * For longs: liqPrice = entryPrice - (margin - liqRatio * entryNotional) / size
+ * For shorts: liqPrice = entryPrice + (margin - liqRatio * entryNotional) / size
  *
  * @param rawData - The raw position data from the contract
- * @param markPrice - Current mark price (used for current notional)
  * @param isLong - Whether the position is long
  * @returns Liquidation price in USD, or null if cannot be calculated
  */
 export function calculateLiquidationPrice(
   rawData: PositionRawData,
-  _markPrice: number,
   isLong: boolean
 ): number | null {
   const entryPrice = calculateEntryPrice(rawData);

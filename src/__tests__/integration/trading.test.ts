@@ -69,31 +69,24 @@ describe("Trading Operations Integration Tests", () => {
 
       console.log(`Setting up liquidity for test perp at price ${currentPrice}...`);
 
-      // Margin ratio for makers must be between 90% and 200% (0.9 - 2.0)
-      // Requirement: 0.9 ≤ margin / notional ≤ 2.0
-      // Strategy: Use tight range ±5% with sufficient margin for trades
+      // Create liquidity range AROUND the current price so takers can trade
+      // Takers need liquidity at the current price to open positions
+      const marginAmount = 500; // 500 USDC margin
 
-      // Margin Ratios from MarginRatios.sol:
-      // MIN_MAKER_RATIO = 0.9 (90%), MAX_MAKER_RATIO = 2.0 (200%)
-      // Target: margin/notional ≈ 1.0-1.2 for safe middle ground
-
-      const marginAmount = 500; // Increased margin for more robust test liquidity
-
-      // Strategy: Work with ticks directly to avoid floating point precision issues
-      // Get current tick, then create aligned tick range around it
+      // Set range ±30% around current price to ensure it covers current tick
       const tickSpacing = perpData.tickSpacing;
-      const currentTick = priceToTick(currentPrice, true);
-      const currentTickAligned = Math.floor(currentTick / tickSpacing) * tickSpacing;
+      const tickLowerRaw = priceToTick(currentPrice * 0.7, true); // 30% below
+      const tickUpperRaw = priceToTick(currentPrice * 1.3, false); // 30% above
+      const alignedTickLower = Math.floor(tickLowerRaw / tickSpacing) * tickSpacing;
+      const alignedTickUpper = Math.ceil(tickUpperRaw / tickSpacing) * tickSpacing;
 
-      // Create ±5% range using tick spacing (35 ticks ≈ 3.5% per side)
-      const tickRange = 35 * tickSpacing; // 35 * 30 = 1050 ticks
-      const alignedTickLower = currentTickAligned - tickRange;
-      const alignedTickUpper = currentTickAligned + tickRange;
-
-      // Convert aligned ticks to prices
+      // Convert aligned ticks to prices for logging and SDK call
       const tightPriceLower = tickToPrice(alignedTickLower);
       const tightPriceUpper = tickToPrice(alignedTickUpper);
 
+      // Estimate liquidity based on margin - use smaller multiplier to maintain valid margin ratio
+      // Margin ratio = margin / (debt0 + debt1), must be between 0.9 and 2.0
+      // When range includes current price, exposure is higher - use lower multiplier
       const marginScaled = scale6Decimals(marginAmount);
       const baseLiquidity = await estimateLiquidity(
         context,
@@ -101,26 +94,26 @@ describe("Trading Operations Integration Tests", () => {
         alignedTickUpper,
         marginScaled
       );
-
-      // Use 200x multiplier for generous liquidity buffer
-      const liquidity = baseLiquidity * 200n;
+      // Use 40x multiplier - lower because range includes current price (higher debt exposure)
+      // 47.5% ratio with 100x -> need to roughly halve liquidity to get ~95% ratio
+      const liquidity = baseLiquidity * 40n;
 
       console.log(
         `Opening maker position with margin: ${marginAmount} USDC, liquidity: ${liquidity.toString()}`
       );
       console.log(
-        `Tight price range: ${tightPriceLower.toFixed(2)} - ${tightPriceUpper.toFixed(2)}`
+        `Price range: ${tightPriceLower.toFixed(2)} - ${tightPriceUpper.toFixed(2)} (current: ${currentPrice.toFixed(2)})`
       );
 
-      // SDK has been fixed to approve margin + maxAmt1In internally
-      // Open maker position to provide liquidity
+      // Open maker position to provide liquidity around current price
+      // Pass bigint values directly to bypass scale6Decimals limit
       const liquidityPosition = await openMakerPosition(context, perpId, {
         margin: marginAmount,
         priceLower: tightPriceLower,
         priceUpper: tightPriceUpper,
         liquidity,
-        maxAmt0In: 200000, // Max perp tokens (200x multiplier)
-        maxAmt1In: 500, // Max additional USDC
+        maxAmt0In: 200000000000000000n, // 2×10^17 raw (large slippage tolerance)
+        maxAmt1In: 500000000000000000n, // 5×10^17 raw (large slippage tolerance)
       });
 
       liquidityPositionId = liquidityPosition.positionId;

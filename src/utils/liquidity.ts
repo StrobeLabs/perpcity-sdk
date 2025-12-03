@@ -1,4 +1,5 @@
 import type { PerpCityContext } from "../context";
+import { sqrtPriceX96ToPrice, tickToPrice } from "./conversions";
 
 /**
  * Calculate liquidity from USDC amount (amount1) using Uniswap v3 formula
@@ -77,4 +78,98 @@ function getSqrtRatioAtTick(tick: number): bigint {
   if (tick > 0) ratio = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn / ratio;
 
   return ratio % (1n << 32n) > 0n ? (ratio >> 32n) + 1n : ratio >> 32n;
+}
+
+/**
+ * Calculate liquidity amount to achieve a target margin ratio for a maker position.
+ *
+ * For a Uniswap v3 style maker position:
+ * - Margin ratio = margin / total_debt
+ * - Total debt = USD value of LP exposure at current price
+ *
+ * When price P is within range [pL, pU]:
+ * - amount0 = liquidity * (1/sqrt(P) - 1/sqrt(pU))
+ * - amount1 = liquidity * (sqrt(P) - sqrt(pL))
+ * - total_debt = amount0 * P + amount1 (in USD terms)
+ *
+ * @param marginScaled - Margin in scaled units (6 decimals)
+ * @param tickLower - Lower tick of the range
+ * @param tickUpper - Upper tick of the range
+ * @param currentSqrtPriceX96 - Current sqrt price in Q96 format
+ * @param targetMarginRatio - Target margin ratio (e.g., 1.2 for 120%)
+ * @returns Liquidity amount as bigint
+ */
+export function calculateLiquidityForTargetRatio(
+  marginScaled: bigint,
+  tickLower: number,
+  tickUpper: number,
+  currentSqrtPriceX96: bigint,
+  targetMarginRatio: number
+): bigint {
+  // Validate inputs
+  if (tickLower >= tickUpper) {
+    throw new Error(
+      `Invalid tick range: tickLower (${tickLower}) must be less than tickUpper (${tickUpper})`
+    );
+  }
+
+  if (marginScaled === 0n) {
+    return 0n;
+  }
+
+  if (targetMarginRatio <= 0) {
+    throw new Error(`Invalid target margin ratio: ${targetMarginRatio} must be positive`);
+  }
+
+  // Get prices from ticks
+  const priceLower = tickToPrice(tickLower);
+  const priceUpper = tickToPrice(tickUpper);
+
+  // Current price from sqrtPriceX96
+  const currentPrice = sqrtPriceX96ToPrice(currentSqrtPriceX96);
+
+  // Calculate sqrt prices
+  const sqrtCurrentPrice = Math.sqrt(currentPrice);
+  const sqrtPriceLower = Math.sqrt(priceLower);
+  const sqrtPriceUpper = Math.sqrt(priceUpper);
+
+  // Debt per unit liquidity (in USD terms)
+  // When price is within range:
+  // amount0_per_L = (1/sqrtP - 1/sqrtPU) [perp tokens per unit liquidity]
+  // amount1_per_L = (sqrtP - sqrtPL) [USD per unit liquidity]
+  // debt_per_L = amount0_per_L * P + amount1_per_L [total USD value per unit liquidity]
+  let debtPerL: number;
+
+  if (currentPrice <= priceLower) {
+    // Price below range: only token0 exposure
+    // amount0_per_L = (1/sqrtPL - 1/sqrtPU)
+    const amount0PerL = 1 / sqrtPriceLower - 1 / sqrtPriceUpper;
+    debtPerL = amount0PerL * currentPrice;
+  } else if (currentPrice >= priceUpper) {
+    // Price above range: only token1 exposure
+    // amount1_per_L = (sqrtPU - sqrtPL)
+    debtPerL = sqrtPriceUpper - sqrtPriceLower;
+  } else {
+    // Price within range: both token0 and token1 exposure
+    const amount0PerL = 1 / sqrtCurrentPrice - 1 / sqrtPriceUpper;
+    const amount1PerL = sqrtCurrentPrice - sqrtPriceLower;
+    debtPerL = amount0PerL * currentPrice + amount1PerL;
+  }
+
+  if (debtPerL <= 0) {
+    throw new Error("Calculated debt per unit liquidity is zero or negative");
+  }
+
+  // Target debt = margin / targetRatio
+  const margin = Number(marginScaled) / 1e6;
+  const targetDebt = margin / targetMarginRatio;
+
+  // Liquidity = targetDebt / debtPerL
+  const liquidity = targetDebt / debtPerL;
+
+  if (liquidity <= 0) {
+    throw new Error("Calculated liquidity is zero or negative");
+  }
+
+  return BigInt(Math.floor(liquidity));
 }

@@ -84,19 +84,33 @@ describe("Trading Operations Integration Tests", () => {
       const tightPriceLower = tickToPrice(alignedTickLower);
       const tightPriceUpper = tickToPrice(alignedTickUpper);
 
-      // Estimate liquidity based on margin - use smaller multiplier to maintain valid margin ratio
+      // Calculate liquidity dynamically to achieve target margin ratio
       // Margin ratio = margin / (debt0 + debt1), must be between 0.9 and 2.0
-      // When range includes current price, exposure is higher - use lower multiplier
+      // Target 120% margin ratio to be safely within the valid range
       const marginScaled = scale6Decimals(marginAmount);
+      const targetMarginRatio = 1.2; // 120% - safely in 90-200% range
+
+      // Get base liquidity estimate for the margin amount
+      // This assumes single-sided exposure, so actual ratio will be lower due to token0 exposure
       const baseLiquidity = await estimateLiquidity(
         context,
         alignedTickLower,
         alignedTickUpper,
         marginScaled
       );
-      // Use 40x multiplier - lower because range includes current price (higher debt exposure)
-      // 47.5% ratio with 100x -> need to roughly halve liquidity to get ~95% ratio
-      const liquidity = baseLiquidity * 40n;
+
+      // Adjust liquidity for target margin ratio
+      // margin_ratio = margin / debt, where debt = f(liquidity)
+      // Higher liquidity = more debt = lower margin ratio
+      // We need to multiply base liquidity to get enough debt for target ratio
+      // Target ratio ~1.2 means debt = margin/1.2 ≈ 0.83 * margin
+      // Base liquidity estimate assumes single-sided exposure; when in range, we need more
+      const multiplier = 1 / targetMarginRatio; // How much debt we want relative to margin
+      const inRangeFactor = 40; // Empirical factor for in-range positions (accounts for both sides)
+      const liquidity = BigInt(Math.floor(Number(baseLiquidity) * multiplier * inRangeFactor));
+
+      console.log(`Target margin ratio: ${(targetMarginRatio * 100).toFixed(0)}%`);
+      console.log(`Base liquidity: ${baseLiquidity.toString()}, Adjusted: ${liquidity.toString()}`);
 
       console.log(
         `Opening maker position with margin: ${marginAmount} USDC, liquidity: ${liquidity.toString()}`

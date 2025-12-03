@@ -78,9 +78,13 @@ export class OpenPosition {
               eventName: "PositionOpened",
             });
 
-            // Match the perpId and extract the new position ID
-            if (openedDecoded.args.perpId === this.perpId) {
-              newPositionId = openedDecoded.args.posId as bigint;
+            // Match the perpId (case-insensitive) and extract the new position ID
+            // For partial closes, a NEW position is created with a DIFFERENT posId
+            const eventPerpId = (openedDecoded.args.perpId as string).toLowerCase();
+            const eventPosId = openedDecoded.args.posId as bigint;
+
+            if (eventPerpId === this.perpId.toLowerCase() && eventPosId !== this.positionId) {
+              newPositionId = eventPosId;
               break;
             }
           } catch (_e) {
@@ -93,9 +97,10 @@ export class OpenPosition {
                 eventName: "PositionClosed",
               });
 
-              // If this position was fully closed, mark it
+              // If this position was fully closed, mark it (case-insensitive perpId comparison)
+              const closedPerpId = (closedDecoded.args.perpId as string).toLowerCase();
               if (
-                closedDecoded.args.perpId === this.perpId &&
+                closedPerpId === this.perpId.toLowerCase() &&
                 closedDecoded.args.posId === this.positionId
               ) {
                 _wasFullyClosed = true;

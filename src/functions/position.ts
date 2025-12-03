@@ -97,15 +97,19 @@ export async function closePosition(
           eventName: "PositionOpened",
         });
 
-        // Match the perpId and extract the new position ID
-        if (decoded.args.perpId === perpId) {
-          newPositionId = decoded.args.posId as bigint;
+        // Match the perpId (case-insensitive) and extract the new position ID
+        // For partial closes, a NEW position is created with a DIFFERENT posId
+        const eventPerpId = (decoded.args.perpId as string).toLowerCase();
+        const eventPosId = decoded.args.posId as bigint;
+
+        if (eventPerpId === perpId.toLowerCase() && eventPosId !== positionId) {
+          newPositionId = eventPosId;
           break;
         }
       } catch (_e) {}
     }
 
-    // If no PositionOpened event found, this was a full close - return null
+    // If no PositionOpened event found with a new posId, this was a full close - return null
     if (!newPositionId) {
       return { position: null, txHash };
     }

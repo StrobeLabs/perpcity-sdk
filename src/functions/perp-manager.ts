@@ -186,10 +186,16 @@ export async function openMakerPosition(
     // Convert margin to 6-decimal scaled bigint
     const marginScaled = scale6Decimals(params.margin);
 
-    // Approve USDC spending - need to approve margin + maxAmt1In
-    // because the contract may need to pull additional USDC for LP position
-    const totalApprovalNeeded = marginScaled + scale6Decimals(params.maxAmt1In);
-    await approveUsdc(context, totalApprovalNeeded);
+    // Handle maxAmt values - can be number (human units) or bigint (raw value)
+    const maxAmt0InScaled =
+      typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
+    const maxAmt1InScaled =
+      typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
+
+    // Approve USDC spending - approve margin only
+    // maxAmt1In is a slippage limit, not the actual amount needed
+    // For positions below current price, only margin is deposited
+    await approveUsdc(context, marginScaled);
 
     // Get perp data to determine tick spacing
     const perpData = await context.getPerpData(perpId);
@@ -213,8 +219,8 @@ export async function openMakerPosition(
       liquidity: params.liquidity,
       tickLower: alignedTickLower,
       tickUpper: alignedTickUpper,
-      maxAmt0In: scale6Decimals(params.maxAmt0In),
-      maxAmt1In: scale6Decimals(params.maxAmt1In),
+      maxAmt0In: maxAmt0InScaled,
+      maxAmt1In: maxAmt1InScaled,
     };
 
     // Simulate transaction - deployed contract uses openMakerPos

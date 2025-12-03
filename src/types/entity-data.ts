@@ -46,8 +46,8 @@ export type OpenMakerPositionParams = {
   priceLower: number; // Lower price bound
   priceUpper: number; // Upper price bound
   liquidity: bigint; // Liquidity amount (calculated externally)
-  maxAmt0In: number; // Max perp tokens
-  maxAmt1In: number; // Max USDC
+  maxAmt0In: number | bigint; // Max perp tokens (number = human units, bigint = raw)
+  maxAmt1In: number | bigint; // Max USDC (number = human units, bigint = raw)
 };
 
 export type CreatePerpParams = {

@@ -6,6 +6,11 @@ export const PERP_MANAGER_ABI = [
         name: "owner",
         type: "address",
       },
+      {
+        internalType: "contract IBeaconRegistry",
+        name: "beaconRegistry",
+        type: "address",
+      },
     ],
     stateMutability: "nonpayable",
     type: "constructor",
@@ -27,17 +32,7 @@ export const PERP_MANAGER_ABI = [
   },
   {
     inputs: [],
-    name: "TransferFromFailed",
-    type: "error",
-  },
-  {
-    inputs: [],
-    name: "TransferFailed",
-    type: "error",
-  },
-  {
-    inputs: [],
-    name: "ApproveFailed",
+    name: "BeaconNotRegistered",
     type: "error",
   },
   {
@@ -91,6 +86,11 @@ export const PERP_MANAGER_ABI = [
       },
     ],
     name: "InvalidMarginRatio",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "InvalidStartingSqrtPriceX96",
     type: "error",
   },
   {
@@ -157,17 +157,17 @@ export const PERP_MANAGER_ABI = [
   },
   {
     inputs: [],
-    name: "NoLiquidityToReceiveFees",
-    type: "error",
-  },
-  {
-    inputs: [],
     name: "NotOwnerNorApproved",
     type: "error",
   },
   {
     inputs: [],
     name: "NotPoolManager",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "PerpDoesNotExist",
     type: "error",
   },
   {
@@ -484,6 +484,12 @@ export const PERP_MANAGER_ABI = [
       {
         indexed: false,
         internalType: "bool",
+        name: "wasMaker",
+        type: "bool",
+      },
+      {
+        indexed: false,
+        internalType: "bool",
         name: "wasLiquidated",
         type: "bool",
       },
@@ -492,6 +498,30 @@ export const PERP_MANAGER_ABI = [
         internalType: "bool",
         name: "wasPartialClose",
         type: "bool",
+      },
+      {
+        indexed: false,
+        internalType: "int256",
+        name: "perpDelta",
+        type: "int256",
+      },
+      {
+        indexed: false,
+        internalType: "int256",
+        name: "usdDelta",
+        type: "int256",
+      },
+      {
+        indexed: false,
+        internalType: "int24",
+        name: "tickLower",
+        type: "int24",
+      },
+      {
+        indexed: false,
+        internalType: "int24",
+        name: "tickUpper",
+        type: "int24",
       },
     ],
     name: "PositionClosed",
@@ -539,8 +569,26 @@ export const PERP_MANAGER_ABI = [
       {
         indexed: false,
         internalType: "int256",
-        name: "entryPerpDelta",
+        name: "perpDelta",
         type: "int256",
+      },
+      {
+        indexed: false,
+        internalType: "int256",
+        name: "usdDelta",
+        type: "int256",
+      },
+      {
+        indexed: false,
+        internalType: "int24",
+        name: "tickLower",
+        type: "int24",
+      },
+      {
+        indexed: false,
+        internalType: "int24",
+        name: "tickUpper",
+        type: "int24",
       },
     ],
     name: "PositionOpened",
@@ -583,6 +631,19 @@ export const PERP_MANAGER_ABI = [
     ],
     name: "Transfer",
     type: "event",
+  },
+  {
+    inputs: [],
+    name: "BEACON_REGISTRY",
+    outputs: [
+      {
+        internalType: "contract IBeaconRegistry",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
   },
   {
     inputs: [],
@@ -931,6 +992,25 @@ export const PERP_MANAGER_ABI = [
   {
     inputs: [
       {
+        internalType: "PoolId",
+        name: "perpId",
+        type: "bytes32",
+      },
+    ],
+    name: "fundingPerSecondX96",
+    outputs: [
+      {
+        internalType: "int256",
+        name: "",
+        type: "int256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
         internalType: "uint256",
         name: "id",
         type: "uint256",
@@ -963,6 +1043,25 @@ export const PERP_MANAGER_ABI = [
     name: "increaseCardinalityCap",
     outputs: [],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "PoolId",
+        name: "perpId",
+        type: "bytes32",
+      },
+    ],
+    name: "insurance",
+    outputs: [
+      {
+        internalType: "uint128",
+        name: "",
+        type: "uint128",
+      },
+    ],
+    stateMutability: "view",
     type: "function",
   },
   {
@@ -1106,14 +1205,14 @@ export const PERP_MANAGER_ABI = [
             type: "address",
           },
           {
-            internalType: "uint256",
+            internalType: "uint128",
             name: "margin",
-            type: "uint256",
+            type: "uint128",
           },
           {
-            internalType: "uint128",
+            internalType: "uint120",
             name: "liquidity",
-            type: "uint128",
+            type: "uint120",
           },
           {
             internalType: "int24",
@@ -1172,9 +1271,9 @@ export const PERP_MANAGER_ABI = [
             type: "bool",
           },
           {
-            internalType: "uint256",
+            internalType: "uint128",
             name: "margin",
-            type: "uint256",
+            type: "uint128",
           },
           {
             internalType: "uint256",
@@ -1434,14 +1533,14 @@ export const PERP_MANAGER_ABI = [
             type: "address",
           },
           {
-            internalType: "uint256",
+            internalType: "uint128",
             name: "margin",
-            type: "uint256",
+            type: "uint128",
           },
           {
-            internalType: "uint128",
+            internalType: "uint120",
             name: "liquidity",
-            type: "uint128",
+            type: "uint120",
           },
           {
             internalType: "int24",
@@ -1510,9 +1609,9 @@ export const PERP_MANAGER_ABI = [
             type: "bool",
           },
           {
-            internalType: "uint256",
+            internalType: "uint128",
             name: "margin",
-            type: "uint256",
+            type: "uint128",
           },
           {
             internalType: "uint256",
@@ -1851,6 +1950,25 @@ export const PERP_MANAGER_ABI = [
       },
     ],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "PoolId",
+        name: "perpId",
+        type: "bytes32",
+      },
+    ],
+    name: "utilFeePerSecX96",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
     type: "function",
   },
 ] as const;

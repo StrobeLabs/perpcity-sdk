@@ -4,6 +4,7 @@ export type Bounds = {
   minMargin: number;
   minTakerLeverage: number;
   maxTakerLeverage: number;
+  liquidationTakerRatio: number;
 };
 
 export type Fees = {

@@ -142,39 +142,51 @@ export class PerpCityContext {
       }
 
       // Fetch bounds and fees from module contracts in parallel
-      const [minTakerRatio, maxTakerRatio, creatorFee, insuranceFee, lpFee, liquidationFee] =
-        await Promise.all([
-          this.walletClient.readContract({
-            address: cfg.marginRatios,
-            abi: MARGIN_RATIOS_ABI,
-            functionName: "MIN_TAKER_RATIO",
-          }),
-          this.walletClient.readContract({
-            address: cfg.marginRatios,
-            abi: MARGIN_RATIOS_ABI,
-            functionName: "MAX_TAKER_RATIO",
-          }),
-          this.walletClient.readContract({
-            address: cfg.fees,
-            abi: FEES_ABI,
-            functionName: "CREATOR_FEE",
-          }),
-          this.walletClient.readContract({
-            address: cfg.fees,
-            abi: FEES_ABI,
-            functionName: "INSURANCE_FEE",
-          }),
-          this.walletClient.readContract({
-            address: cfg.fees,
-            abi: FEES_ABI,
-            functionName: "LP_FEE",
-          }),
-          this.walletClient.readContract({
-            address: cfg.fees,
-            abi: FEES_ABI,
-            functionName: "LIQUIDATION_FEE",
-          }),
-        ]);
+      const [
+        minTakerRatio,
+        maxTakerRatio,
+        liquidationTakerRatio,
+        creatorFee,
+        insuranceFee,
+        lpFee,
+        liquidationFee,
+      ] = await Promise.all([
+        this.walletClient.readContract({
+          address: cfg.marginRatios,
+          abi: MARGIN_RATIOS_ABI,
+          functionName: "MIN_TAKER_RATIO",
+        }),
+        this.walletClient.readContract({
+          address: cfg.marginRatios,
+          abi: MARGIN_RATIOS_ABI,
+          functionName: "MAX_TAKER_RATIO",
+        }),
+        this.walletClient.readContract({
+          address: cfg.marginRatios,
+          abi: MARGIN_RATIOS_ABI,
+          functionName: "LIQUIDATION_TAKER_RATIO",
+        }),
+        this.walletClient.readContract({
+          address: cfg.fees,
+          abi: FEES_ABI,
+          functionName: "CREATOR_FEE",
+        }),
+        this.walletClient.readContract({
+          address: cfg.fees,
+          abi: FEES_ABI,
+          functionName: "INSURANCE_FEE",
+        }),
+        this.walletClient.readContract({
+          address: cfg.fees,
+          abi: FEES_ABI,
+          functionName: "LP_FEE",
+        }),
+        this.walletClient.readContract({
+          address: cfg.fees,
+          abi: FEES_ABI,
+          functionName: "LIQUIDATION_FEE",
+        }),
+      ]);
 
       // Convert margin ratios to leverage bounds
       // Margin ratio is scaled by 1e6, where ratio = margin / notional
@@ -192,6 +204,7 @@ export class PerpCityContext {
           minMargin: 10, // Still hardcoded - not available from margin ratios module
           minTakerLeverage,
           maxTakerLeverage,
+          liquidationTakerRatio: Number(liquidationTakerRatio) / 1e6,
         },
         fees: {
           creatorFee: scaleFee(Number(creatorFee)),

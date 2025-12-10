@@ -192,6 +192,11 @@ export const PERP_MANAGER_ABI = [
   },
   {
     inputs: [],
+    name: "TransferFromFailed",
+    type: "error",
+  },
+  {
+    inputs: [],
     name: "TransferFromIncorrectOwner",
     type: "error",
   },

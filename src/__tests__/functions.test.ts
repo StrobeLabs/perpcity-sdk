@@ -30,6 +30,7 @@ describe("Perp Functions", () => {
       minMargin: 100,
       minTakerLeverage: 1,
       maxTakerLeverage: 10,
+      liquidationTakerRatio: 0.05,
     },
     fees: {
       creatorFee: 0.001,
@@ -52,6 +53,7 @@ describe("Perp Functions", () => {
       minMargin: 100,
       minTakerLeverage: 1,
       maxTakerLeverage: 10,
+      liquidationTakerRatio: 0.05,
     });
   });
 

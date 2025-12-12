@@ -314,14 +314,12 @@ describe("Trading Operations Integration Tests", () => {
       const priceUpper = tickToPrice(alignedTickUpper);
 
       const marginScaled = scale6Decimals(50); // 50 USDC
-      const baseLiquidity = await estimateLiquidity(
+      const liquidity = await estimateLiquidity(
         context,
         alignedTickLower,
         alignedTickUpper,
         marginScaled
       );
-      // Use 40x multiplier like setup (scales with margin: 50/500 = 10% of setup margin)
-      const liquidity = baseLiquidity * 40n;
 
       const position = await openMakerPosition(context, perpId, {
         margin: 50, // 50 USDC

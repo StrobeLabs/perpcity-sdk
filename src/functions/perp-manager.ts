@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import { decodeEventLog, publicActions } from "viem";
+import { decodeEventLog } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import type { PerpCityContext } from "../context";
 import type {
@@ -37,7 +37,7 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
       startingSqrtPriceX96: sqrtPriceX96,
     };
 
-    const { request } = await context.walletClient.simulateContract({
+    const { request } = await context.publicClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: "createPerp",
@@ -49,8 +49,7 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for transaction confirmation
-    const publicClient = context.walletClient.extend(publicActions);
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
 
     // Check if transaction was successful
     if (receipt.status === "reverted") {
@@ -115,7 +114,7 @@ export async function openTakerPosition(
     };
 
     // Simulate transaction - deployed contract uses openTakerPos
-    const { request } = await context.walletClient.simulateContract({
+    const { request } = await context.publicClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: "openTakerPos" as any,
@@ -127,8 +126,7 @@ export async function openTakerPosition(
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for confirmation
-    const publicClient = context.walletClient.extend(publicActions);
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
 
     // Verify success
     if (receipt.status === "reverted") {
@@ -224,7 +222,7 @@ export async function openMakerPosition(
     };
 
     // Simulate transaction - deployed contract uses openMakerPos
-    const { request } = await context.walletClient.simulateContract({
+    const { request } = await context.publicClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: "openMakerPos" as any,
@@ -236,8 +234,7 @@ export async function openMakerPosition(
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for confirmation
-    const publicClient = context.walletClient.extend(publicActions);
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
 
     // Verify success
     if (receipt.status === "reverted") {

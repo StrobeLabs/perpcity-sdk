@@ -22,6 +22,7 @@ describe("Liquidity Calculations", () => {
 
     mockContext = new PerpCityContext({
       walletClient,
+      rpcUrl: "https://sepolia.base.org",
       deployments: {
         perpManager: "0x0000000000000000000000000000000000000000",
         usdc: "0x0000000000000000000000000000000000000000",

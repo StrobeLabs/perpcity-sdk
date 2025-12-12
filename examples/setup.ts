@@ -34,6 +34,7 @@ export function setup(): { context: PerpCityContext; perpId: Hex } {
 
   const context = new PerpCityContext({
     walletClient: walletClient,
+    rpcUrl: rpcUrl,
     deployments: {
       perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
       usdc: process.env.USDC_ADDRESS as `0x${string}`,

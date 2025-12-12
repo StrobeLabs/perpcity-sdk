@@ -10,7 +10,7 @@ export async function approveUsdc(
 ) {
   const deployments = context.deployments();
 
-  const { request } = await context.walletClient.simulateContract({
+  const { request } = await context.publicClient.simulateContract({
     address: deployments.usdc,
     abi: erc20Abi,
     functionName: "approve",
@@ -20,7 +20,7 @@ export async function approveUsdc(
 
   const hash = await context.walletClient.writeContract(request);
 
-  await context.walletClient.waitForTransactionReceipt({
+  await context.publicClient.waitForTransactionReceipt({
     confirmations: confirmations,
     hash,
   });

@@ -1,4 +1,4 @@
-import { decodeEventLog, formatUnits, type Hex, publicActions } from "viem";
+import { decodeEventLog, formatUnits, type Hex } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import type { PerpCityContext } from "../context";
 import type {
@@ -63,7 +63,7 @@ export async function closePosition(
       maxAmt1In: scale6Decimals(params.maxAmt1In),
     };
 
-    const { request } = await context.walletClient.extend(publicActions).simulateContract({
+    const { request } = await context.publicClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: "closePosition",
@@ -75,8 +75,7 @@ export async function closePosition(
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for transaction confirmation
-    const publicClient = context.walletClient.extend(publicActions);
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
 
     // Check if transaction was successful
     if (receipt.status === "reverted") {
@@ -133,7 +132,7 @@ export async function getPositionLiveDetailsFromContract(
 ): Promise<LiveDetails> {
   return withErrorHandling(async () => {
     // Use quoteClosePosition which provides live position details
-    const result = (await context.walletClient.readContract({
+    const result = (await context.publicClient.readContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: "quoteClosePosition" as any,

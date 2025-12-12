@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import { decodeEventLog, formatUnits, publicActions } from "viem";
+import { decodeEventLog, formatUnits } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import type { PerpCityContext } from "../context";
 import type { ClosePositionParams, ClosePositionResult, LiveDetails } from "../types/entity-data";
@@ -41,7 +41,7 @@ export class OpenPosition {
         };
 
         // Simulate the transaction first - this will catch contract errors early
-        const { request } = await this.context.walletClient.extend(publicActions).simulateContract({
+        const { request } = await this.context.publicClient.simulateContract({
           address: this.context.deployments().perpManager,
           abi: PERP_MANAGER_ABI,
           functionName: "closePosition",
@@ -54,8 +54,7 @@ export class OpenPosition {
         const txHash = await this.context.walletClient.writeContract(request);
 
         // Wait for transaction confirmation
-        const publicClient = this.context.walletClient.extend(publicActions);
-        const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+        const receipt = await this.context.publicClient.waitForTransactionReceipt({ hash: txHash });
 
         // Check if transaction was successful
         if (receipt.status === "reverted") {
@@ -135,7 +134,7 @@ export class OpenPosition {
   async liveDetails(): Promise<LiveDetails> {
     return withErrorHandling(async () => {
       // Use quoteClosePosition which provides live position details
-      const result = (await this.context.walletClient.readContract({
+      const result = (await this.context.publicClient.readContract({
         address: this.context.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
         functionName: "quoteClosePosition" as any,

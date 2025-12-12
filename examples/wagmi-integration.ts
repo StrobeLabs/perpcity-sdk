@@ -29,6 +29,14 @@ function getDeployments(chainId: number) {
   return deployments[chainId] || deployments[84532];
 }
 
+function getRpcUrl(chainId: number): string {
+  const rpcUrls: Record<number, string> = {
+    84532: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
+    8453: process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org',
+  };
+  return rpcUrls[chainId] || rpcUrls[84532];
+}
+
 // ============================================================================
 // React Hook: Get SDK Context from Wagmi
 // ============================================================================
@@ -52,6 +60,7 @@ export function usePerpCity(): PerpCityContext | null {
     // Wagmi's WalletClient is viem-compatible - works directly with SDK!
     return new PerpCityContext({
       walletClient,
+      rpcUrl: getRpcUrl(chainId),
       deployments: getDeployments(chainId),
     });
   }, [walletClient, chainId]);

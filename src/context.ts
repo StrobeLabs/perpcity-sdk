@@ -1,5 +1,13 @@
 import TTLCache from "@isaacs/ttlcache";
-import { type Address, erc20Abi, formatUnits, type Hex, publicActions } from "viem";
+import {
+  type Address,
+  createPublicClient,
+  erc20Abi,
+  formatUnits,
+  type Hex,
+  http,
+  type PublicClient,
+} from "viem";
 import { FEES_ABI } from "./abis/fees";
 import { MARGIN_RATIOS_ABI } from "./abis/margin-ratios";
 import { PERP_MANAGER_ABI } from "./abis/perp-manager";
@@ -19,13 +27,17 @@ import { withErrorHandling } from "./utils/errors";
 
 export class PerpCityContext {
   public readonly walletClient;
+  public readonly publicClient: PublicClient;
   private readonly _deployments: PerpCityDeployments;
   private readonly configCache: TTLCache<Hex, PerpConfig>;
 
   constructor(config: PerpCityContextConfig) {
-    // Cache perp configs for 5 minutes to reduce RPC calls
     this.configCache = new TTLCache({ ttl: 5 * 60 * 1000 });
-    this.walletClient = config.walletClient.extend(publicActions);
+    this.walletClient = config.walletClient;
+    this.publicClient = createPublicClient({
+      chain: config.walletClient.chain,
+      transport: http(config.rpcUrl),
+    });
     this._deployments = config.deployments;
   }
 
@@ -66,7 +78,7 @@ export class PerpCityContext {
     }
 
     // Fetch from contract
-    const result = await this.walletClient.readContract({
+    const result = await this.publicClient.readContract({
       address: this.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: "cfgs",
@@ -133,7 +145,7 @@ export class PerpCityContext {
         sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * 2 ** 96));
       } else {
         // Fallback to TWAP with 1 second lookback
-        sqrtPriceX96 = (await this.walletClient.readContract({
+        sqrtPriceX96 = (await this.publicClient.readContract({
           address: this.deployments().perpManager,
           abi: PERP_MANAGER_ABI,
           functionName: "timeWeightedAvgSqrtPriceX96",
@@ -151,37 +163,37 @@ export class PerpCityContext {
         lpFee,
         liquidationFee,
       ] = await Promise.all([
-        this.walletClient.readContract({
+        this.publicClient.readContract({
           address: cfg.marginRatios,
           abi: MARGIN_RATIOS_ABI,
           functionName: "MIN_TAKER_RATIO",
         }),
-        this.walletClient.readContract({
+        this.publicClient.readContract({
           address: cfg.marginRatios,
           abi: MARGIN_RATIOS_ABI,
           functionName: "MAX_TAKER_RATIO",
         }),
-        this.walletClient.readContract({
+        this.publicClient.readContract({
           address: cfg.marginRatios,
           abi: MARGIN_RATIOS_ABI,
           functionName: "LIQUIDATION_TAKER_RATIO",
         }),
-        this.walletClient.readContract({
+        this.publicClient.readContract({
           address: cfg.fees,
           abi: FEES_ABI,
           functionName: "CREATOR_FEE",
         }),
-        this.walletClient.readContract({
+        this.publicClient.readContract({
           address: cfg.fees,
           abi: FEES_ABI,
           functionName: "INSURANCE_FEE",
         }),
-        this.walletClient.readContract({
+        this.publicClient.readContract({
           address: cfg.fees,
           abi: FEES_ABI,
           functionName: "LP_FEE",
         }),
-        this.walletClient.readContract({
+        this.publicClient.readContract({
           address: cfg.fees,
           abi: FEES_ABI,
           functionName: "LIQUIDATION_FEE",
@@ -227,7 +239,7 @@ export class PerpCityContext {
     userAddress: Hex,
     positions: Array<{ perpId: Hex; positionId: bigint; isLong: boolean; isMaker: boolean }>
   ): Promise<UserData> {
-    const usdcBalance = await this.walletClient.readContract({
+    const usdcBalance = await this.publicClient.readContract({
       address: this.deployments().usdc,
       abi: erc20Abi,
       functionName: "balanceOf",
@@ -261,7 +273,7 @@ export class PerpCityContext {
   ): Promise<LiveDetails> {
     return withErrorHandling(async () => {
       // Use quoteClosePosition which provides live position details
-      const result = (await this.walletClient.readContract({
+      const result = (await this.publicClient.readContract({
         address: this.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
         functionName: "quoteClosePosition" as any,
@@ -329,7 +341,7 @@ export class PerpCityContext {
    */
   async getPositionRawData(positionId: bigint): Promise<PositionRawData> {
     return withErrorHandling(async () => {
-      const result = await this.walletClient.readContract({
+      const result = await this.publicClient.readContract({
         address: this.deployments().perpManager,
         abi: PERP_MANAGER_ABI,
         functionName: "positions",

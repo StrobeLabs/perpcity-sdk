@@ -13,5 +13,6 @@ export interface PerpCityDeployments {
 
 export interface PerpCityContextConfig {
   walletClient: WalletClient;
+  rpcUrl: string;
   deployments: PerpCityDeployments;
 }

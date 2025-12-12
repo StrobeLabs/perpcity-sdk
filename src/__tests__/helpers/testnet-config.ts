@@ -79,6 +79,7 @@ export function createTestContext() {
 
   return new PerpCityContext({
     walletClient,
+    rpcUrl: config.rpcUrl,
     deployments: {
       perpManager: config.perpManagerAddress,
       usdc: config.usdcAddress,

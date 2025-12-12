@@ -34,11 +34,40 @@ export class PerpCityContext {
   constructor(config: PerpCityContextConfig) {
     this.configCache = new TTLCache({ ttl: 5 * 60 * 1000 });
     this.walletClient = config.walletClient;
+
+    // Validate walletClient.chain exists
+    if (!config.walletClient.chain?.id) {
+      throw new Error(
+        "PerpCityContext: walletClient.chain must be defined with a numeric id. " +
+          "Ensure your walletClient was created with a chain parameter."
+      );
+    }
+
+    // Create publicClient with HTTP transport and batching enabled
     this.publicClient = createPublicClient({
       chain: config.walletClient.chain,
-      transport: http(config.rpcUrl),
+      transport: http(config.rpcUrl, { batch: true }),
     });
+
     this._deployments = config.deployments;
+  }
+
+  /**
+   * Validates that the RPC endpoint matches the expected chain.
+   * Call this after construction to verify configuration.
+   * @throws Error if RPC chain ID doesn't match walletClient chain ID
+   */
+  async validateChainId(): Promise<void> {
+    const rpcChainId = await this.publicClient.getChainId();
+    const expectedChainId = this.walletClient.chain!.id;
+
+    if (rpcChainId !== expectedChainId) {
+      throw new Error(
+        `PerpCityContext: RPC chain mismatch. ` +
+          `RPC returned chain ID ${rpcChainId}, but walletClient expects chain ID ${expectedChainId}. ` +
+          `Ensure rpcUrl corresponds to the correct network.`
+      );
+    }
   }
 
   deployments(): PerpCityDeployments {

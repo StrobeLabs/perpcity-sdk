@@ -1,4 +1,5 @@
-import { BaseError, ContractFunctionRevertedError } from "viem";
+import { BaseError, ContractFunctionRevertedError, decodeErrorResult, type Hex } from "viem";
+import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 
 /**
  * Error category classification
@@ -101,6 +102,74 @@ export class ValidationError extends PerpCityError {
 }
 
 /**
+ * Extract error data from raw JSON-RPC error message
+ * Handles the format: body="{\"jsonrpc\":\"2.0\",\"id\":N,\"error\":{\"code\":3,\"message\":\"...\",\"data\":\"0x...\"}}"
+ */
+function extractErrorDataFromMessage(message: string): Hex | null {
+  // Try multiple patterns for JSON-RPC error body
+
+  // Pattern 1: Look for data field directly with hex value (most reliable)
+  // Matches: "data":"0x..." or data":"0x... or "data\":"0x...
+  const dataMatch = message.match(/"?data"?\s*[:\\]?\s*"?(0x[a-fA-F0-9]{8,})"?/);
+  if (dataMatch) {
+    return dataMatch[1] as Hex;
+  }
+
+  // Pattern 2: body="..." format - extract and parse JSON
+  // Need to handle escaped quotes in the body
+  const bodyMatch = message.match(/body="((?:[^"\\]|\\.)*)"/);
+  if (bodyMatch) {
+    try {
+      // Unescape the JSON string and remove pipe characters
+      const jsonStr = bodyMatch[1]
+        .replace(/\|/g, "") // Remove pipe truncation markers
+        .replace(/\\"/g, '"') // Unescape quotes
+        .replace(/\\\\/g, "\\"); // Unescape backslashes
+
+      const body = JSON.parse(jsonStr);
+      if (body?.error?.data && typeof body.error.data === "string") {
+        return body.error.data as Hex;
+      }
+    } catch {
+      // Continue to other patterns
+    }
+  }
+
+  // Pattern 3: execution reverted: 0x... format
+  const revertMatch = message.match(/(?:reverted|revert)[:\s]+.*?(0x[a-fA-F0-9]{8,})/i);
+  if (revertMatch) {
+    return revertMatch[1] as Hex;
+  }
+
+  return null;
+}
+
+/**
+ * Decode contract error data using known ABIs
+ * Returns error name and args if decoded, null otherwise
+ */
+function decodeContractErrorData(
+  data: Hex
+): { errorName: string; args: readonly unknown[] } | null {
+  // Try decoding with PERP_MANAGER_ABI (includes most contract errors)
+  try {
+    const decoded = decodeErrorResult({
+      abi: PERP_MANAGER_ABI,
+      data,
+    });
+    return {
+      errorName: decoded.errorName,
+      args: decoded.args ?? [],
+    };
+  } catch {
+    // ABI doesn't contain this error selector
+  }
+
+  // Could add more ABIs here if needed (e.g., PoolManager ABI)
+  return null;
+}
+
+/**
  * Parse and format a contract error into a user-friendly message
  */
 export function parseContractError(error: unknown): PerpCityError {
@@ -116,9 +185,23 @@ export function parseContractError(error: unknown): PerpCityError {
       const errorName = revertError.data?.errorName ?? "Unknown";
       const args = revertError.data?.args ?? [];
 
-      // Map known contract errors to user-friendly messages
-      const { message, debug } = formatContractError(errorName, args);
-      return new ContractError(message, errorName, args, debug, error as Error);
+      // If viem successfully parsed the error, use it
+      if (errorName !== "Unknown") {
+        const { message, debug } = formatContractError(errorName, args);
+        return new ContractError(message, errorName, args, debug, error as Error);
+      }
+    }
+
+    // Try to extract and decode raw error data from the message
+    // This handles cases where viem couldn't decode (e.g., raw JSON-RPC errors from wallets)
+    const errorMessage = error.message || error.shortMessage || "";
+    const rawErrorData = extractErrorDataFromMessage(errorMessage);
+    if (rawErrorData) {
+      const decoded = decodeContractErrorData(rawErrorData);
+      if (decoded) {
+        const { message, debug } = formatContractError(decoded.errorName, decoded.args);
+        return new ContractError(message, decoded.errorName, decoded.args, debug, error as Error);
+      }
     }
 
     // Check for user rejection
@@ -134,8 +217,16 @@ export function parseContractError(error: unknown): PerpCityError {
     return new PerpCityError(error.shortMessage || error.message, error as Error);
   }
 
-  // Handle generic errors
+  // Handle generic errors - also try to decode raw error data
   if (error instanceof Error) {
+    const rawErrorData = extractErrorDataFromMessage(error.message);
+    if (rawErrorData) {
+      const decoded = decodeContractErrorData(rawErrorData);
+      if (decoded) {
+        const { message, debug } = formatContractError(decoded.errorName, decoded.args);
+        return new ContractError(message, decoded.errorName, decoded.args, debug, error);
+      }
+    }
     return new PerpCityError(error.message, error);
   }
 

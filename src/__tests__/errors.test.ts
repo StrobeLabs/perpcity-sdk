@@ -676,3 +676,114 @@ describe("PerpManager Position/Trading Errors", () => {
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
   });
 });
+
+describe("Raw JSON-RPC Error Parsing", () => {
+  // Using selectors from actual deployed contracts (perpcity-indexer/abis/PerpManager.json)
+  // InvalidMargin() selector: 0x3a29e65e
+  // InvalidMarginRatio(uint256) selector: 0xfce16dd4
+  // MaximumAmountExceeded(uint256,uint256) selector: 0xfbf41624
+  // TokenDoesNotExist() selector: 0xceea21b6
+
+  it("should decode error from JSON-RPC body format", () => {
+    // Simulate the error format from issue #140
+    // InvalidMargin() - no args - selector 0x3a29e65e
+    const mockErrorMessage = `processing response error (body="{\\"jsonrpc\\":\\"2.0\\",\\"id\\":93,\\"error\\":{\\"code\\":3,\\"message\\":\\"execution reverted\\",\\"data\\":\\"0x3a29e65e\\"}}")`;
+
+    const mockError = new Error(mockErrorMessage);
+    const result = parseContractError(mockError);
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("InvalidMargin");
+    expect(result.message).toContain("Invalid margin amount");
+  });
+
+  it("should decode InvalidMarginRatio with args from JSON-RPC body", () => {
+    // InvalidMarginRatio(uint256) selector: 0xfce16dd4
+    // Args: marginRatio=150 (0x96 in hex)
+    const mockErrorMessage = `processing response error (body="{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1,\\"error\\":{\\"code\\":3,\\"message\\":\\"execution reverted\\",\\"data\\":\\"0xfce16dd40000000000000000000000000000000000000000000000000000000000000096\\"}}")`;
+
+    const mockError = new Error(mockErrorMessage);
+    const result = parseContractError(mockError);
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("InvalidMarginRatio");
+    expect(result.message).toContain("Invalid margin ratio");
+    expect(result.message).toContain("150");
+  });
+
+  it("should handle pipe characters in truncated messages", () => {
+    // Format with pipe characters inserted during truncation
+    // InvalidMargin() - selector 0x3a29e65e
+    const mockErrorMessage = `openTakerPosition: Execution reverted with reason: processing response error (body="{\\"|jsonrpc\\":\\"2.0\\",\\"id|\\": 93,\\"error|\\": {\\"code\\":3,\\"message\\":\\"execution reverted\\",\\"data\\":\\"0x3a29e65e\\"}}")`;
+
+    const mockError = new Error(mockErrorMessage);
+    const result = parseContractError(mockError);
+
+    // Should still be able to parse despite pipe characters
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("InvalidMargin");
+  });
+
+  it("should decode error from direct hex data in message", () => {
+    // Sometimes errors contain raw hex data directly
+    // TokenDoesNotExist() - selector 0xceea21b6
+    const mockErrorMessage = `execution reverted: data=0xceea21b6`;
+
+    const mockError = new Error(mockErrorMessage);
+    const result = parseContractError(mockError);
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("TokenDoesNotExist");
+    expect(result.message).toContain("does not exist");
+  });
+
+  it("should fall back to PerpCityError for unknown error selectors", () => {
+    // Unknown error selector
+    const mockErrorMessage = `processing response error (body="{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1,\\"error\\":{\\"code\\":3,\\"message\\":\\"execution reverted\\",\\"data\\":\\"0xdeadbeef\\"}}")`;
+
+    const mockError = new Error(mockErrorMessage);
+    const result = parseContractError(mockError);
+
+    // Should fall back to PerpCityError since selector is unknown
+    expect(result).toBeInstanceOf(PerpCityError);
+    expect(result).not.toBeInstanceOf(ContractError);
+  });
+
+  it("should handle malformed JSON gracefully", () => {
+    const mockErrorMessage = `processing response error (body="not valid json")`;
+
+    const mockError = new Error(mockErrorMessage);
+    const result = parseContractError(mockError);
+
+    // Should fall back to PerpCityError
+    expect(result).toBeInstanceOf(PerpCityError);
+    expect(result.message).toContain("processing response error");
+  });
+
+  it("should decode MaximumAmountExceeded error with args", () => {
+    // MaximumAmountExceeded(uint256,uint256) selector: 0xfbf41624
+    // Args: maximumAmount=1000 (0x3e8), amountRequested=2000 (0x7d0)
+    const mockErrorMessage = `processing response error (body="{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1,\\"error\\":{\\"code\\":3,\\"message\\":\\"execution reverted\\",\\"data\\":\\"0xfbf4162400000000000000000000000000000000000000000000000000000000000003e800000000000000000000000000000000000000000000000000000000000007d0\\"}}")`;
+
+    const mockError = new Error(mockErrorMessage);
+    const result = parseContractError(mockError);
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("MaximumAmountExceeded");
+    expect(result.message).toContain("Maximum");
+    expect(result.message).toContain("1000");
+    expect(result.message).toContain("2000");
+  });
+
+  it("should decode ZeroDelta error", () => {
+    // ZeroDelta() - no args - selector 0x6f0f5899
+    const mockErrorMessage = `processing response error (body="{\\"jsonrpc\\":\\"2.0\\",\\"id\\":1,\\"error\\":{\\"code\\":3,\\"message\\":\\"execution reverted\\",\\"data\\":\\"0x6f0f5899\\"}}")`;
+
+    const mockError = new Error(mockErrorMessage);
+    const result = parseContractError(mockError);
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("ZeroDelta");
+    expect(result.message).toContain("zero size");
+  });
+});

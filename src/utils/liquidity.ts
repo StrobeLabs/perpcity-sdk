@@ -48,7 +48,7 @@ export async function estimateLiquidity(
 }
 
 /**
- * Get sqrt price at tick using Uniswap v3 formula
+ * Get sqrt price at tick using Uniswap v4 formula
  * sqrtPriceX96 = sqrt(1.0001^tick) * 2^96
  */
 function getSqrtRatioAtTick(tick: number): bigint {

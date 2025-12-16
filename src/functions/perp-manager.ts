@@ -7,7 +7,7 @@ import type {
   OpenMakerPositionParams,
   OpenTakerPositionParams,
 } from "../types/entity-data";
-import { priceToSqrtPriceX96, priceToTick, scale6Decimals, scaleToX96 } from "../utils";
+import { NUMBER_1E6, priceToSqrtPriceX96, priceToTick, scale6Decimals } from "../utils";
 import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
 import { OpenPosition } from "./open-position";
@@ -95,8 +95,8 @@ export async function openTakerPosition(
     // Approve USDC spending
     await approveUsdc(context, marginScaled);
 
-    // Convert leverage to X96 format: leverage * 2^96
-    const levX96 = scaleToX96(params.leverage);
+    // Calculate margin ratio by inverting leverage
+    const marginRatio = Math.floor(NUMBER_1E6 / params.leverage);
 
     // Handle unspecifiedAmountLimit - can be number (human units) or bigint (raw value)
     const unspecifiedAmountLimit =
@@ -109,7 +109,7 @@ export async function openTakerPosition(
       holder: context.walletClient.account!.address,
       isLong: params.isLong,
       margin: marginScaled,
-      levX96,
+      marginRatio: marginRatio,
       unspecifiedAmountLimit,
     };
 

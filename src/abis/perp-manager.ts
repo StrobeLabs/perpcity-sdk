@@ -37,6 +37,11 @@ export const PERP_MANAGER_ABI = [
   },
   {
     inputs: [],
+    name: "CouldNotFullyFill",
+    type: "error",
+  },
+  {
+    inputs: [],
     name: "FeeTooLarge",
     type: "error",
   },
@@ -62,13 +67,7 @@ export const PERP_MANAGER_ABI = [
     type: "error",
   },
   {
-    inputs: [
-      {
-        internalType: "uint128",
-        name: "liquidity",
-        type: "uint128",
-      },
-    ],
+    inputs: [],
     name: "InvalidLiquidity",
     type: "error",
   },
@@ -78,19 +77,8 @@ export const PERP_MANAGER_ABI = [
     type: "error",
   },
   {
-    inputs: [
-      {
-        internalType: "uint256",
-        name: "marginRatio",
-        type: "uint256",
-      },
-    ],
-    name: "InvalidMarginRatio",
-    type: "error",
-  },
-  {
     inputs: [],
-    name: "InvalidStartingSqrtPriceX96",
+    name: "InvalidMarginRatio",
     type: "error",
   },
   {
@@ -109,34 +97,12 @@ export const PERP_MANAGER_ABI = [
     type: "error",
   },
   {
-    inputs: [
-      {
-        internalType: "uint256",
-        name: "maximumAmount",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "amountRequested",
-        type: "uint256",
-      },
-    ],
+    inputs: [],
     name: "MaximumAmountExceeded",
     type: "error",
   },
   {
-    inputs: [
-      {
-        internalType: "uint256",
-        name: "minimumAmount",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "amountReceived",
-        type: "uint256",
-      },
-    ],
+    inputs: [],
     name: "MinimumAmountInsufficient",
     type: "error",
   },
@@ -182,17 +148,22 @@ export const PERP_MANAGER_ABI = [
   },
   {
     inputs: [],
+    name: "StartingSqrtPriceTooHigh",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "StartingSqrtPriceTooLow",
+    type: "error",
+  },
+  {
+    inputs: [],
     name: "TokenAlreadyExists",
     type: "error",
   },
   {
     inputs: [],
     name: "TokenDoesNotExist",
-    type: "error",
-  },
-  {
-    inputs: [],
-    name: "TransferFromFailed",
     type: "error",
   },
   {
@@ -1281,9 +1252,9 @@ export const PERP_MANAGER_ABI = [
             type: "uint128",
           },
           {
-            internalType: "uint256",
-            name: "levX96",
-            type: "uint256",
+            internalType: "uint24",
+            name: "marginRatio",
+            type: "uint24",
           },
           {
             internalType: "uint128",
@@ -1495,9 +1466,9 @@ export const PERP_MANAGER_ABI = [
     name: "quoteClosePosition",
     outputs: [
       {
-        internalType: "bool",
-        name: "success",
-        type: "bool",
+        internalType: "bytes",
+        name: "unexpectedReason",
+        type: "bytes",
       },
       {
         internalType: "int256",
@@ -1576,9 +1547,9 @@ export const PERP_MANAGER_ABI = [
     name: "quoteOpenMakerPosition",
     outputs: [
       {
-        internalType: "bool",
-        name: "success",
-        type: "bool",
+        internalType: "bytes",
+        name: "unexpectedReason",
+        type: "bytes",
       },
       {
         internalType: "int256",
@@ -1619,9 +1590,9 @@ export const PERP_MANAGER_ABI = [
             type: "uint128",
           },
           {
-            internalType: "uint256",
-            name: "levX96",
-            type: "uint256",
+            internalType: "uint24",
+            name: "marginRatio",
+            type: "uint24",
           },
           {
             internalType: "uint128",
@@ -1637,9 +1608,9 @@ export const PERP_MANAGER_ABI = [
     name: "quoteOpenTakerPosition",
     outputs: [
       {
-        internalType: "bool",
-        name: "success",
-        type: "bool",
+        internalType: "bytes",
+        name: "unexpectedReason",
+        type: "bytes",
       },
       {
         internalType: "int256",

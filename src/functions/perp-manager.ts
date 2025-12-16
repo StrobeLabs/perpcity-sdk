@@ -7,7 +7,7 @@ import type {
   OpenMakerPositionParams,
   OpenTakerPositionParams,
 } from "../types/entity-data";
-import { NUMBER_1E6, priceToSqrtPriceX96, priceToTick, scale6Decimals, scaleToX96 } from "../utils";
+import { NUMBER_1E6, priceToSqrtPriceX96, priceToTick, scale6Decimals } from "../utils";
 import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
 import { OpenPosition } from "./open-position";

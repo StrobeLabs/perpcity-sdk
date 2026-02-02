@@ -139,12 +139,12 @@ export class OpenPosition {
         abi: PERP_MANAGER_ABI,
         functionName: "quoteClosePosition" as any,
         args: [this.positionId],
-      })) as unknown as readonly [boolean, bigint, bigint, bigint, boolean];
+      })) as unknown as readonly [Hex, bigint, bigint, bigint, boolean];
 
-      // The result is a tuple: [success, pnl, funding, netMargin, wasLiquidated]
-      const [success, pnl, funding, netMargin, wasLiquidated] = result;
+      // The result is a tuple: [unexpectedReason, pnl, funding, netMargin, wasLiquidated]
+      const [unexpectedReason, pnl, funding, netMargin, wasLiquidated] = result;
 
-      if (!success) {
+      if (unexpectedReason !== "0x") {
         throw new Error(
           `Failed to quote position ${this.positionId} - position may be invalid or already closed`
         );

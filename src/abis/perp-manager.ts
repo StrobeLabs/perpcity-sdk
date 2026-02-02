@@ -68,11 +68,6 @@ export const PERP_MANAGER_ABI = [
   },
   {
     inputs: [],
-    name: "InvalidLiquidity",
-    type: "error",
-  },
-  {
-    inputs: [],
     name: "InvalidMargin",
     type: "error",
   },
@@ -104,11 +99,6 @@ export const PERP_MANAGER_ABI = [
   {
     inputs: [],
     name: "MinimumAmountInsufficient",
-    type: "error",
-  },
-  {
-    inputs: [],
-    name: "ModuleAlreadyRegistered",
     type: "error",
   },
   {
@@ -158,6 +148,11 @@ export const PERP_MANAGER_ABI = [
   },
   {
     inputs: [],
+    name: "TicksOutOfBounds",
+    type: "error",
+  },
+  {
+    inputs: [],
     name: "TokenAlreadyExists",
     type: "error",
   },
@@ -189,6 +184,16 @@ export const PERP_MANAGER_ABI = [
   {
     inputs: [],
     name: "ZeroDelta",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "ZeroLiquidity",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "ZeroNotional",
     type: "error",
   },
   {
@@ -770,6 +775,25 @@ export const PERP_MANAGER_ABI = [
     name: "cancelOwnershipHandover",
     outputs: [],
     stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "PoolId",
+        name: "perpId",
+        type: "bytes32",
+      },
+    ],
+    name: "cardinalityCap",
+    outputs: [
+      {
+        internalType: "uint16",
+        name: "",
+        type: "uint16",
+      },
+    ],
+    stateMutability: "view",
     type: "function",
   },
   {

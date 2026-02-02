@@ -2,54 +2,47 @@ export const BEACON_ABI = [
   {
     inputs: [
       {
-        internalType: "contract IVerifierWrapper",
-        name: "verifierWrapper",
+        internalType: "address",
+        name: "owner",
+        type: "address",
+      },
+      {
+        internalType: "contract IVerifierAdapter",
+        name: "adapter",
+        type: "address",
+      },
+      {
+        internalType: "contract IIndexEngine",
+        name: "engine",
         type: "address",
       },
       {
         internalType: "uint256",
-        name: "initialData",
+        name: "initialIndex",
         type: "uint256",
-      },
-      {
-        internalType: "uint32",
-        name: "initialCardinalityNext",
-        type: "uint32",
       },
     ],
     stateMutability: "nonpayable",
     type: "constructor",
   },
   {
-    inputs: [
-      {
-        internalType: "bytes",
-        name: "proof",
-        type: "bytes",
-      },
-      {
-        internalType: "bytes",
-        name: "publicSignals",
-        type: "bytes",
-      },
-    ],
-    name: "InvalidProof",
+    inputs: [],
+    name: "AlreadyInitialized",
     type: "error",
   },
   {
-    inputs: [
-      {
-        internalType: "bytes",
-        name: "proof",
-        type: "bytes",
-      },
-      {
-        internalType: "bytes",
-        name: "publicSignals",
-        type: "bytes",
-      },
-    ],
-    name: "ProofAlreadyUsed",
+    inputs: [],
+    name: "NewOwnerIsZeroAddress",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "NoHandoverRequest",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "Unauthorized",
     type: "error",
   },
   {
@@ -58,21 +51,99 @@ export const BEACON_ABI = [
       {
         indexed: false,
         internalType: "uint256",
-        name: "data",
+        name: "index",
         type: "uint256",
       },
     ],
-    name: "DataUpdated",
+    name: "IndexUpdated",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "pendingOwner",
+        type: "address",
+      },
+    ],
+    name: "OwnershipHandoverCanceled",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "pendingOwner",
+        type: "address",
+      },
+    ],
+    name: "OwnershipHandoverRequested",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "oldOwner",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "newOwner",
+        type: "address",
+      },
+    ],
+    name: "OwnershipTransferred",
     type: "event",
   },
   {
     inputs: [],
-    name: "MAX_DATA",
+    name: "cancelOwnershipHandover",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "pendingOwner",
+        type: "address",
+      },
+    ],
+    name: "completeOwnershipHandover",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "uint16",
+        name: "newCap",
+        type: "uint16",
+      },
+    ],
+    name: "increaseCardinalityCap",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "index",
     outputs: [
       {
-        internalType: "int256",
+        internalType: "uint256",
         name: "",
-        type: "int256",
+        type: "uint256",
       },
     ],
     stateMutability: "view",
@@ -80,23 +151,10 @@ export const BEACON_ABI = [
   },
   {
     inputs: [],
-    name: "MIN_DATA",
+    name: "indexEngine",
     outputs: [
       {
-        internalType: "int256",
-        name: "",
-        type: "int256",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "VERIFIER_WRAPPER",
-    outputs: [
-      {
-        internalType: "contract IVerifierWrapper",
+        internalType: "contract IIndexEngine",
         name: "",
         type: "address",
       },
@@ -106,11 +164,30 @@ export const BEACON_ABI = [
   },
   {
     inputs: [],
-    name: "data",
+    name: "owner",
+    outputs: [
+      {
+        internalType: "address",
+        name: "result",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "pendingOwner",
+        type: "address",
+      },
+    ],
+    name: "ownershipHandoverExpiresAt",
     outputs: [
       {
         internalType: "uint256",
-        name: "",
+        name: "result",
         type: "uint256",
       },
     ],
@@ -119,68 +196,66 @@ export const BEACON_ABI = [
   },
   {
     inputs: [],
-    name: "getData",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-    ],
-    stateMutability: "view",
+    name: "renounceOwnership",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "requestOwnershipHandover",
+    outputs: [],
+    stateMutability: "payable",
     type: "function",
   },
   {
     inputs: [
       {
-        internalType: "uint32",
-        name: "twapSecondsAgo",
-        type: "uint32",
+        internalType: "contract IIndexEngine",
+        name: "newIndexEngine",
+        type: "address",
       },
     ],
-    name: "getTwap",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "twapPrice",
-        type: "uint256",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint32",
-        name: "cardinalityNext",
-        type: "uint32",
-      },
-    ],
-    name: "increaseCardinalityNext",
-    outputs: [
-      {
-        internalType: "uint32",
-        name: "cardinalityNextOld",
-        type: "uint32",
-      },
-      {
-        internalType: "uint32",
-        name: "cardinalityNextNew",
-        type: "uint32",
-      },
-    ],
+    name: "setIndexEngine",
+    outputs: [],
     stateMutability: "nonpayable",
     type: "function",
   },
   {
-    inputs: [],
-    name: "timestamp",
+    inputs: [
+      {
+        internalType: "contract IVerifierAdapter",
+        name: "newVerifierAdapter",
+        type: "address",
+      },
+    ],
+    name: "setVerifierAdapter",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "newOwner",
+        type: "address",
+      },
+    ],
+    name: "transferOwnership",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "uint32",
+        name: "secondsAgo",
+        type: "uint32",
+      },
+    ],
+    name: "twAvg",
     outputs: [
       {
         internalType: "uint256",
@@ -193,22 +268,22 @@ export const BEACON_ABI = [
   },
   {
     inputs: [],
-    name: "twapState",
+    name: "twAvgState",
     outputs: [
       {
-        internalType: "uint32",
+        internalType: "uint16",
         name: "index",
-        type: "uint32",
+        type: "uint16",
       },
       {
-        internalType: "uint32",
+        internalType: "uint16",
         name: "cardinality",
-        type: "uint32",
+        type: "uint16",
       },
       {
-        internalType: "uint32",
-        name: "cardinalityNext",
-        type: "uint32",
+        internalType: "uint16",
+        name: "cardinalityCap",
+        type: "uint16",
       },
     ],
     stateMutability: "view",
@@ -223,29 +298,23 @@ export const BEACON_ABI = [
       },
       {
         internalType: "bytes",
-        name: "publicSignals",
+        name: "inputs",
         type: "bytes",
       },
     ],
-    name: "updateData",
+    name: "updateIndex",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
   },
   {
-    inputs: [
-      {
-        internalType: "bytes",
-        name: "",
-        type: "bytes",
-      },
-    ],
-    name: "usedProofs",
+    inputs: [],
+    name: "verifierAdapter",
     outputs: [
       {
-        internalType: "bool",
+        internalType: "contract IVerifierAdapter",
         name: "",
-        type: "bool",
+        type: "address",
       },
     ],
     stateMutability: "view",

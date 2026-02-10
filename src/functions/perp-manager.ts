@@ -92,11 +92,26 @@ export async function openTakerPosition(
     // Convert margin to 6-decimal scaled bigint
     const marginScaled = scale6Decimals(params.margin);
 
-    // Approve USDC spending
-    await approveUsdc(context, marginScaled);
-
     // Calculate margin ratio by inverting leverage
     const marginRatio = Math.floor(NUMBER_1E6 / params.leverage);
+
+    // Calculate total approval amount: margin + fees
+    // Fees are percentages of notional (= margin * leverage)
+    const perpData = await context.getPerpData(perpId);
+    const { creatorFee, insuranceFee, lpFee } = perpData.fees;
+
+    const protocolFeeRaw = await context.publicClient.readContract({
+      address: context.deployments().perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: "protocolFee",
+    });
+    const protocolFeeRate = Number(protocolFeeRaw) / NUMBER_1E6;
+
+    const notional = (marginScaled * BigInt(NUMBER_1E6)) / BigInt(marginRatio);
+    const totalFeeRate = creatorFee + insuranceFee + lpFee + protocolFeeRate;
+    const totalFees = BigInt(Math.ceil(Number(notional) * totalFeeRate));
+
+    await approveUsdc(context, marginScaled + totalFees);
 
     // Handle unspecifiedAmountLimit - can be number (human units) or bigint (raw value)
     const unspecifiedAmountLimit =

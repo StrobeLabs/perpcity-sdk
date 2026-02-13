@@ -117,6 +117,7 @@ export async function openTakerPosition(
       abi: erc20Abi,
       functionName: "allowance",
       args: [context.walletClient.account!.address, context.deployments().perpManager],
+      blockTag: "latest",
     });
     if (currentAllowance < requiredAmount) {
       await approveUsdc(context, requiredAmount);
@@ -222,6 +223,7 @@ export async function openMakerPosition(
       abi: erc20Abi,
       functionName: "allowance",
       args: [context.walletClient.account!.address, context.deployments().perpManager],
+      blockTag: "latest",
     });
     if (currentAllowance < marginScaled) {
       await approveUsdc(context, marginScaled);

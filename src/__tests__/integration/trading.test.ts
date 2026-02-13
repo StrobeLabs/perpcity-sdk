@@ -119,11 +119,33 @@ describe("Trading Operations Integration Tests", () => {
       liquidityPositionId = liquidityPosition.positionId;
       console.log(`Liquidity position opened: ${liquidityPositionId.toString()}`);
       console.log(`Price range: ${tightPriceLower.toFixed(2)} - ${tightPriceUpper.toFixed(2)}`);
+
+      // Wait for all setup transactions to fully settle before tests begin
+      // This prevents stale allowance reads from causing approve skips
+      console.log("Waiting for setup transactions to settle...");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      const walletAddress = context.walletClient.account!.address;
+      let settled = false;
+      for (let i = 0; i < 3; i++) {
+        const n1 = await publicClient.getTransactionCount({ address: walletAddress, blockTag: "latest" });
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const n2 = await publicClient.getTransactionCount({ address: walletAddress, blockTag: "latest" });
+        if (n1 === n2) {
+          settled = true;
+          break;
+        }
+        console.log(`Nonce still changing (${n1} -> ${n2}), waiting...`);
+      }
+      if (!settled) {
+        console.warn("Nonce did not stabilize after retries, proceeding anyway");
+      }
+      console.log("Setup transactions settled, starting tests");
     } catch (error) {
       console.error("Failed to set up liquidity:", error);
       throw error;
     }
-  }, 180000); // 3 minutes for setup
+  }, 240000); // 4 minutes for setup + settling
 
   afterAll(async () => {
     if (!config.testPerpId || !liquidityPositionId) return;
@@ -150,7 +172,7 @@ describe("Trading Operations Integration Tests", () => {
       testPositions.length = 0; // Clear array
 
       // Wait for cleanup to settle
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }, 60000);
 
     it("should open a long taker position", async () => {
@@ -158,6 +180,9 @@ describe("Trading Operations Integration Tests", () => {
         console.log("Skipping: TEST_PERP_ID not configured");
         return;
       }
+
+      // Wait for any prior transactions (from beforeAll setup) to settle
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       const perpId = config.testPerpId as `0x${string}`;
 
@@ -280,6 +305,9 @@ describe("Trading Operations Integration Tests", () => {
         console.log("Skipping: TEST_PERP_ID not configured");
         return;
       }
+
+      // Wait for any prior taker test transactions to settle
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       const perpId = config.testPerpId as `0x${string}`;
 
@@ -718,7 +746,7 @@ describe("Trading Operations Integration Tests", () => {
       testPositions.length = 0; // Clear array
 
       // Wait for cleanup to settle
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }, 60000);
 
     it("should expose transaction hash on OpenPosition for gas measurement", async () => {

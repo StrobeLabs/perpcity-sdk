@@ -128,9 +128,15 @@ describe("Trading Operations Integration Tests", () => {
       const walletAddress = context.walletClient.account!.address;
       let settled = false;
       for (let i = 0; i < 3; i++) {
-        const n1 = await publicClient.getTransactionCount({ address: walletAddress, blockTag: "latest" });
+        const n1 = await publicClient.getTransactionCount({
+          address: walletAddress,
+          blockTag: "latest",
+        });
         await new Promise((resolve) => setTimeout(resolve, 3000));
-        const n2 = await publicClient.getTransactionCount({ address: walletAddress, blockTag: "latest" });
+        const n2 = await publicClient.getTransactionCount({
+          address: walletAddress,
+          blockTag: "latest",
+        });
         if (n1 === n2) {
           settled = true;
           break;

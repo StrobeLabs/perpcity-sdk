@@ -648,9 +648,15 @@ describe("Trading Operations Integration Tests", () => {
       await new Promise((resolve) => setTimeout(resolve, 5000));
 
       // Ensure nonce is stable before proceeding
-      const n1 = await publicClient.getTransactionCount({ address: walletAddress, blockTag: "latest" });
+      const n1 = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      const n2 = await publicClient.getTransactionCount({ address: walletAddress, blockTag: "latest" });
+      const n2 = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
       if (n1 !== n2) {
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }

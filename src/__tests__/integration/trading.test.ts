@@ -1,8 +1,10 @@
+import { erc20Abi } from "viem";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { PerpCityContext } from "../../context";
 import { openMakerPosition, openTakerPosition } from "../../functions/perp-manager";
 import { closePosition } from "../../functions/position";
 import { priceToTick, scale6Decimals, tickToPrice } from "../../utils";
+import { approveUsdc } from "../../utils/approve";
 import { estimateLiquidity } from "../../utils/liquidity";
 import {
   createTestContext,
@@ -117,11 +119,39 @@ describe("Trading Operations Integration Tests", () => {
       liquidityPositionId = liquidityPosition.positionId;
       console.log(`Liquidity position opened: ${liquidityPositionId.toString()}`);
       console.log(`Price range: ${tightPriceLower.toFixed(2)} - ${tightPriceUpper.toFixed(2)}`);
+
+      // Wait for all setup transactions to fully settle before tests begin
+      // This prevents stale allowance reads from causing approve skips
+      console.log("Waiting for setup transactions to settle...");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      const walletAddress = context.walletClient.account!.address;
+      let settled = false;
+      for (let i = 0; i < 3; i++) {
+        const n1 = await publicClient.getTransactionCount({
+          address: walletAddress,
+          blockTag: "latest",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const n2 = await publicClient.getTransactionCount({
+          address: walletAddress,
+          blockTag: "latest",
+        });
+        if (n1 === n2) {
+          settled = true;
+          break;
+        }
+        console.log(`Nonce still changing (${n1} -> ${n2}), waiting...`);
+      }
+      if (!settled) {
+        console.warn("Nonce did not stabilize after retries, proceeding anyway");
+      }
+      console.log("Setup transactions settled, starting tests");
     } catch (error) {
       console.error("Failed to set up liquidity:", error);
       throw error;
     }
-  }, 180000); // 3 minutes for setup
+  }, 240000); // 4 minutes for setup + settling
 
   afterAll(async () => {
     if (!config.testPerpId || !liquidityPositionId) return;
@@ -148,7 +178,7 @@ describe("Trading Operations Integration Tests", () => {
       testPositions.length = 0; // Clear array
 
       // Wait for cleanup to settle
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }, 60000);
 
     it("should open a long taker position", async () => {
@@ -156,6 +186,9 @@ describe("Trading Operations Integration Tests", () => {
         console.log("Skipping: TEST_PERP_ID not configured");
         return;
       }
+
+      // Wait for any prior transactions (from beforeAll setup) to settle
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       const perpId = config.testPerpId as `0x${string}`;
 
@@ -278,6 +311,9 @@ describe("Trading Operations Integration Tests", () => {
         console.log("Skipping: TEST_PERP_ID not configured");
         return;
       }
+
+      // Wait for any prior taker test transactions to settle
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       const perpId = config.testPerpId as `0x${string}`;
 
@@ -499,6 +535,209 @@ describe("Trading Operations Integration Tests", () => {
     }, 120000);
   });
 
+  describe("Allowance-based approval skip", () => {
+    const testPositions: bigint[] = [];
+
+    afterEach(async () => {
+      if (!config.testPerpId) return;
+      const perpId = config.testPerpId as `0x${string}`;
+
+      for (const posId of testPositions) {
+        await cleanupPosition(posId, perpId);
+      }
+      testPositions.length = 0;
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }, 60000);
+
+    it("should skip approve when allowance is sufficient (taker)", async () => {
+      if (!config.testPerpId) {
+        console.log("Skipping: TEST_PERP_ID not configured");
+        return;
+      }
+
+      const perpId = config.testPerpId as `0x${string}`;
+      const walletAddress = context.walletClient.account!.address;
+
+      // Wait for setup transactions to fully settle
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Pre-approve max uint256 so the per-trade approve is redundant
+      await approveUsdc(context, 2n ** 256n - 1n, 1);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Record nonce before opening position
+      const nonceBefore = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
+
+      const position = await openTakerPosition(context, perpId, {
+        isLong: true,
+        margin: 10,
+        leverage: 2,
+        unspecifiedAmountLimit: 0,
+      });
+
+      testPositions.push(position.positionId);
+
+      // Wait for transaction to settle
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      const nonceAfter = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
+
+      // Nonce should increase by exactly 1 (trade only, no approve)
+      expect(nonceAfter - nonceBefore).toBe(1);
+      expect(position.positionId).toBeGreaterThan(0n);
+
+      console.log(
+        `Approval skipped: nonce ${nonceBefore} -> ${nonceAfter} (delta: ${nonceAfter - nonceBefore})`
+      );
+    }, 120000);
+
+    it("should skip approve when allowance is sufficient (maker)", async () => {
+      if (!config.testPerpId) {
+        console.log("Skipping: TEST_PERP_ID not configured");
+        return;
+      }
+
+      const perpId = config.testPerpId as `0x${string}`;
+      const walletAddress = context.walletClient.account!.address;
+
+      // Wait for previous test's cleanup transactions to settle
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Pre-approve max uint256
+      await approveUsdc(context, 2n ** 256n - 1n, 1);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Get current market price to set range
+      const perpData = await context.getPerpData(perpId);
+      const currentPrice = perpData.mark;
+      const tickSpacing = perpData.tickSpacing;
+      const tickLowerRaw = priceToTick(currentPrice * 0.7, true);
+      const tickUpperRaw = priceToTick(currentPrice * 1.3, false);
+      const alignedTickLower = Math.floor(tickLowerRaw / tickSpacing) * tickSpacing;
+      const alignedTickUpper = Math.ceil(tickUpperRaw / tickSpacing) * tickSpacing;
+      const priceLower = tickToPrice(alignedTickLower);
+      const priceUpper = tickToPrice(alignedTickUpper);
+
+      const marginScaled = scale6Decimals(50);
+      const liquidity = await estimateLiquidity(
+        context,
+        alignedTickLower,
+        alignedTickUpper,
+        marginScaled
+      );
+
+      // Record nonce before opening position
+      const nonceBefore = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
+
+      const position = await openMakerPosition(context, perpId, {
+        margin: 50,
+        priceLower,
+        priceUpper,
+        liquidity,
+        maxAmt0In: 200000000000000000n,
+        maxAmt1In: 500000000000000000n,
+      });
+
+      // Wait for transaction to settle
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      const nonceAfter = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
+
+      // Nonce should increase by exactly 1 (trade only, no approve)
+      expect(nonceAfter - nonceBefore).toBe(1);
+      expect(position.positionId).toBeGreaterThan(0n);
+
+      console.log(
+        `Approval skipped: nonce ${nonceBefore} -> ${nonceAfter} (delta: ${nonceAfter - nonceBefore})`
+      );
+    }, 120000);
+
+    it("should still approve when allowance is zero", async () => {
+      if (!config.testPerpId) {
+        console.log("Skipping: TEST_PERP_ID not configured");
+        return;
+      }
+
+      const perpId = config.testPerpId as `0x${string}`;
+      const walletAddress = context.walletClient.account!.address;
+
+      // Wait for previous test's transactions to settle
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Revoke allowance and wait for nonce to stabilize
+      await approveUsdc(context, 0n, 1);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Ensure nonce is stable before proceeding
+      const n1 = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const n2 = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
+      if (n1 !== n2) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+
+      // Verify allowance is 0
+      const allowance = await publicClient.readContract({
+        address: context.deployments().usdc,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [walletAddress, context.deployments().perpManager],
+        blockTag: "latest",
+      });
+      expect(allowance).toBe(0n);
+
+      // Record nonce before opening position
+      const nonceBefore = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
+
+      const position = await openTakerPosition(context, perpId, {
+        isLong: true,
+        margin: 10,
+        leverage: 2,
+        unspecifiedAmountLimit: 0,
+      });
+
+      testPositions.push(position.positionId);
+
+      // Wait for transaction to settle
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      const nonceAfter = await publicClient.getTransactionCount({
+        address: walletAddress,
+        blockTag: "latest",
+      });
+
+      // Nonce should increase by 2 (approve + trade)
+      expect(nonceAfter - nonceBefore).toBe(2);
+      expect(position.positionId).toBeGreaterThan(0n);
+
+      console.log(
+        `Approval triggered: nonce ${nonceBefore} -> ${nonceAfter} (delta: ${nonceAfter - nonceBefore})`
+      );
+    }, 120000);
+  });
+
   describe("Transaction Hash Access", () => {
     const testPositions: bigint[] = [];
 
@@ -513,7 +752,7 @@ describe("Trading Operations Integration Tests", () => {
       testPositions.length = 0; // Clear array
 
       // Wait for cleanup to settle
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }, 60000);
 
     it("should expose transaction hash on OpenPosition for gas measurement", async () => {

@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import { decodeEventLog } from "viem";
+import { decodeEventLog, erc20Abi } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import type { PerpCityContext } from "../context";
 import type {
@@ -111,7 +111,16 @@ export async function openTakerPosition(
     const totalFeeRate = creatorFee + insuranceFee + lpFee + protocolFeeRate;
     const totalFees = BigInt(Math.ceil(Number(notional) * totalFeeRate));
 
-    await approveUsdc(context, marginScaled + totalFees);
+    const requiredAmount = marginScaled + totalFees;
+    const currentAllowance = await context.publicClient.readContract({
+      address: context.deployments().usdc,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [context.walletClient.account!.address, context.deployments().perpManager],
+    });
+    if (currentAllowance < requiredAmount) {
+      await approveUsdc(context, requiredAmount);
+    }
 
     // Handle unspecifiedAmountLimit - can be number (human units) or bigint (raw value)
     const unspecifiedAmountLimit =
@@ -205,10 +214,18 @@ export async function openMakerPosition(
     const maxAmt1InScaled =
       typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
 
-    // Approve USDC spending - approve margin only
+    // Approve USDC spending only if current allowance is insufficient
     // maxAmt1In is a slippage limit, not the actual amount needed
     // For positions below current price, only margin is deposited
-    await approveUsdc(context, marginScaled);
+    const currentAllowance = await context.publicClient.readContract({
+      address: context.deployments().usdc,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [context.walletClient.account!.address, context.deployments().perpManager],
+    });
+    if (currentAllowance < marginScaled) {
+      await approveUsdc(context, marginScaled);
+    }
 
     // Get perp data to determine tick spacing
     const perpData = await context.getPerpData(perpId);

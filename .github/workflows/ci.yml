@@ -9,35 +9,35 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         node-version: [20.x]
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 9
-      
+
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
-      
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      
+
       - name: Build
         run: pnpm build
-      
+
       - name: Run unit tests
         run: pnpm test:unit
-      
+
       - name: Check build artifacts
         run: |
           ls -la dist/
@@ -47,22 +47,22 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 9
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: 'pnpm'
-      
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -74,11 +74,13 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    # Run integration tests on all builds, but handle missing secrets gracefully
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
@@ -94,39 +96,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check if secrets are available
-        run: |
-          if [ -z "${{ secrets.BASE_SEPOLIA_RPC_URL }}" ]; then
-            echo "::error::Integration test secrets are not configured!"
-            echo "::error::Configure required secrets: BASE_SEPOLIA_RPC_URL, TEST_PRIVATE_KEY"
-            echo "::error::Configure required variables: PERP_MANAGER_ADDRESS, USDC_ADDRESS, TEST_PERP_ID"
-            exit 1
-          fi
-          echo "✅ Integration test configuration found - running tests"
-
-      - name: Create .env.local for integration tests
-        run: |
-          cat > .env.local << EOF
-          RPC_URL=${{ secrets.BASE_SEPOLIA_RPC_URL }}
-          PRIVATE_KEY=${{ secrets.TEST_PRIVATE_KEY }}
-          PERP_MANAGER_ADDRESS=${{ vars.PERP_MANAGER_ADDRESS }}
-          USDC_ADDRESS=${{ vars.USDC_ADDRESS }}
-          CHAIN_ID=84532
-          TEST_PERP_ID=${{ vars.TEST_PERP_ID }}
-          EOF
-
       - name: Run integration tests
         run: pnpm test:integration
-        env:
-          # Secrets
-          RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
-          PRIVATE_KEY: ${{ secrets.TEST_PRIVATE_KEY }}
-          # Variables
-          PERP_MANAGER_ADDRESS: ${{ vars.PERP_MANAGER_ADDRESS }}
-          USDC_ADDRESS: ${{ vars.USDC_ADDRESS }}
-          TEST_PERP_ID: ${{ vars.TEST_PERP_ID }}
-
-      - name: Clean up .env.local
-        if: always()
-        run: rm -f .env.local
-

@@ -4,9 +4,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    setupFiles: ['./src/__tests__/e2e-setup.ts'],
     include: ['src/__tests__/integration/**/*.test.ts'],
-    testTimeout: 30000, // 30 seconds for integration tests
+    testTimeout: 30000, // 30 seconds for Anvil-based integration tests
+    hookTimeout: 60000, // 60 seconds for beforeAll/afterAll hooks (contract deployment)
     fileParallelism: false, // Run test files sequentially to avoid state conflicts
     pool: 'forks', // Use forked processes for better isolation
     sequence: {

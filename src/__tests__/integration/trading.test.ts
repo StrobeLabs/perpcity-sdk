@@ -1,507 +1,126 @@
-import { erc20Abi } from "viem";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PerpCityContext } from "../../context";
 import { openMakerPosition, openTakerPosition } from "../../functions/perp-manager";
 import { closePosition } from "../../functions/position";
-import { priceToTick, scale6Decimals, tickToPrice } from "../../utils";
-import { approveUsdc } from "../../utils/approve";
-import { estimateLiquidity } from "../../utils/liquidity";
-import {
-  createTestContext,
-  createTestPublicClient,
-  getTestnetConfig,
-} from "../helpers/testnet-config";
+import { type AnvilSetup, setupAnvil } from "../helpers/anvil-setup";
 
 describe("Trading Operations Integration Tests", () => {
+  let setup: AnvilSetup;
   let context: PerpCityContext;
-  let config: ReturnType<typeof getTestnetConfig>;
-  let publicClient: ReturnType<typeof createTestPublicClient>;
-  let liquidityPositionId: bigint | undefined;
-
-  // Helper function to clean up positions after tests
-  async function cleanupPosition(positionId: bigint, perpId: `0x${string}`) {
-    try {
-      const _result = await closePosition(context, perpId, positionId, {
-        minAmt0Out: 0,
-        minAmt1Out: 0,
-        maxAmt1In: 10000, // Generous max to ensure close succeeds
-      });
-      console.log(`Cleaned up position: ${positionId.toString()}`);
-    } catch (error) {
-      console.warn(`Failed to cleanup position ${positionId}:`, error);
-      // Don't throw - allow tests to continue even if cleanup fails
-    }
-  }
 
   beforeAll(async () => {
-    config = getTestnetConfig();
-    context = createTestContext();
-    publicClient = createTestPublicClient();
+    setup = await setupAnvil();
+    context = setup.context;
+  }, 30000);
 
-    // Check if test perp ID is configured
-    if (!config.testPerpId) {
-      console.warn("TEST_PERP_ID not configured - trading tests will be skipped");
-      return;
-    }
-
-    // Wait for any pending transactions from previous test files to clear
-    // This prevents "replacement transaction underpriced" errors
-    console.log("Waiting for previous transactions to settle...");
-    await new Promise((resolve) => setTimeout(resolve, 10000));
-
-    // Additional check: ensure wallet nonce is stable
-    const walletAddress = context.walletClient.account!.address;
-    const nonce1 = await publicClient.getTransactionCount({ address: walletAddress });
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const nonce2 = await publicClient.getTransactionCount({ address: walletAddress });
-
-    if (nonce1 !== nonce2) {
-      console.log("Nonce still changing, waiting additional time...");
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-    }
-
-    console.log(`Wallet nonce stable at ${nonce2}, proceeding with test setup`);
-
-    const perpId = config.testPerpId as `0x${string}`;
-
-    try {
-      // Get current market price to set LP range around it
-      const perpData = await context.getPerpData(perpId);
-      const currentPrice = perpData.mark;
-
-      console.log(`Setting up liquidity for test perp at price ${currentPrice}...`);
-
-      // Create liquidity range AROUND the current price so takers can trade
-      // Takers need liquidity at the current price to open positions
-      const marginAmount = 500; // 500 USDC margin
-
-      // Set range ±30% around current price to ensure it covers current tick
-      const tickSpacing = perpData.tickSpacing;
-      const tickLowerRaw = priceToTick(currentPrice * 0.7, true); // 30% below
-      const tickUpperRaw = priceToTick(currentPrice * 1.3, false); // 30% above
-      const alignedTickLower = Math.floor(tickLowerRaw / tickSpacing) * tickSpacing;
-      const alignedTickUpper = Math.ceil(tickUpperRaw / tickSpacing) * tickSpacing;
-
-      // Convert aligned ticks to prices for logging and SDK call
-      const tightPriceLower = tickToPrice(alignedTickLower);
-      const tightPriceUpper = tickToPrice(alignedTickUpper);
-
-      // Scale margin amount to 6 decimals
-      const marginScaled = scale6Decimals(marginAmount);
-
-      // Get base liquidity estimate for the margin amount
-      // This assumes single-sided exposure, so actual ratio will be lower due to token0 exposure
-      const liquidity = await estimateLiquidity(
-        context,
-        alignedTickLower,
-        alignedTickUpper,
-        marginScaled
-      );
-
-      console.log(
-        `Opening maker position with margin: ${marginAmount} USDC, liquidity: ${liquidity.toString()}`
-      );
-      console.log(
-        `Price range: ${tightPriceLower.toFixed(2)} - ${tightPriceUpper.toFixed(2)} (current: ${currentPrice.toFixed(2)})`
-      );
-
-      // Open maker position to provide liquidity around current price
-      // Pass bigint values directly to bypass scale6Decimals limit
-      const liquidityPosition = await openMakerPosition(context, perpId, {
-        margin: marginAmount,
-        priceLower: tightPriceLower,
-        priceUpper: tightPriceUpper,
-        liquidity,
-        maxAmt0In: 200000000000000000n, // 2×10^17 raw (large slippage tolerance)
-        maxAmt1In: 500000000000000000n, // 5×10^17 raw (large slippage tolerance)
-      });
-
-      liquidityPositionId = liquidityPosition.positionId;
-      console.log(`Liquidity position opened: ${liquidityPositionId.toString()}`);
-      console.log(`Price range: ${tightPriceLower.toFixed(2)} - ${tightPriceUpper.toFixed(2)}`);
-
-      // Wait for all setup transactions to fully settle before tests begin
-      // This prevents stale allowance reads from causing approve skips
-      console.log("Waiting for setup transactions to settle...");
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      const walletAddress = context.walletClient.account!.address;
-      let settled = false;
-      for (let i = 0; i < 3; i++) {
-        const n1 = await publicClient.getTransactionCount({
-          address: walletAddress,
-          blockTag: "latest",
-        });
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-        const n2 = await publicClient.getTransactionCount({
-          address: walletAddress,
-          blockTag: "latest",
-        });
-        if (n1 === n2) {
-          settled = true;
-          break;
-        }
-        console.log(`Nonce still changing (${n1} -> ${n2}), waiting...`);
-      }
-      if (!settled) {
-        console.warn("Nonce did not stabilize after retries, proceeding anyway");
-      }
-      console.log("Setup transactions settled, starting tests");
-    } catch (error) {
-      console.error("Failed to set up liquidity:", error);
-      throw error;
-    }
-  }, 240000); // 4 minutes for setup + settling
-
-  afterAll(async () => {
-    if (!config.testPerpId || !liquidityPositionId) return;
-
-    console.log("Cleaning up test liquidity position...");
-    const perpId = config.testPerpId as `0x${string}`;
-
-    await cleanupPosition(liquidityPositionId, perpId);
-
-    console.log("Test cleanup complete");
-  }, 120000);
+  afterAll(() => {
+    setup?.cleanup();
+  });
 
   describe("openTakerPosition", () => {
-    const testPositions: bigint[] = [];
-
-    afterEach(async () => {
-      if (!config.testPerpId) return;
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Close all positions opened in this test
-      for (const posId of testPositions) {
-        await cleanupPosition(posId, perpId);
-      }
-      testPositions.length = 0; // Clear array
-
-      // Wait for cleanup to settle
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-    }, 60000);
-
     it("should open a long taker position", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      // Wait for any prior transactions (from beforeAll setup) to settle
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Open small long position - returns OpenPosition instance
-      const position = await openTakerPosition(context, perpId, {
+      const position = await openTakerPosition(context, setup.testPerpId, {
         isLong: true,
-        margin: 10, // 10 USDC in human units
-        leverage: 2, // 2x leverage
-        unspecifiedAmountLimit: 0, // Long: 0 = no minimum (accept any amount)
+        margin: 10,
+        leverage: 2,
+        unspecifiedAmountLimit: 0,
       });
 
-      // Track position for cleanup
-      testPositions.push(position.positionId);
-
-      // OpenPosition instance has positionId, perpId, isLong, isMaker
       expect(position).toBeDefined();
       expect(position.positionId).toBeTypeOf("bigint");
       expect(position.positionId).toBeGreaterThan(0n);
-      expect(position.perpId).toBe(perpId);
+      expect(position.perpId).toBe(setup.testPerpId);
       expect(position.isLong).toBe(true);
       expect(position.isMaker).toBe(false);
-
-      console.log("Opened long position:", position.positionId.toString());
-    }, 120000);
+    });
 
     it("should open a short taker position", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Open small short position
-      const position = await openTakerPosition(context, perpId, {
+      const position = await openTakerPosition(context, setup.testPerpId, {
         isLong: false,
-        margin: 10, // 10 USDC
-        leverage: 2, // 2x leverage
-        unspecifiedAmountLimit: 2n ** 128n - 1n, // Short: max uint128 for no limit
+        margin: 10,
+        leverage: 2,
+        unspecifiedAmountLimit: 2n ** 128n - 1n,
       });
-
-      // Track position for cleanup
-      testPositions.push(position.positionId);
 
       expect(position.positionId).toBeTypeOf("bigint");
       expect(position.positionId).toBeGreaterThan(0n);
       expect(position.isLong).toBe(false);
-
-      console.log("Opened short position:", position.positionId.toString());
-    }, 120000);
+    });
 
     it("should open position with high leverage", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Open position with higher leverage (reduced to 3x to avoid depleting liquidity)
-      const position = await openTakerPosition(context, perpId, {
+      const position = await openTakerPosition(context, setup.testPerpId, {
         isLong: true,
-        margin: 10, // 10 USDC
-        leverage: 3, // 3x leverage (reduced from 5x to stay within available liquidity)
-        unspecifiedAmountLimit: 0, // Long: 0 = no minimum
+        margin: 10,
+        leverage: 5,
+        unspecifiedAmountLimit: 0,
       });
 
-      // Track position for cleanup
-      testPositions.push(position.positionId);
-
       expect(position.positionId).toBeGreaterThan(0n);
-
-      console.log("Opened 3x leveraged position:", position.positionId.toString());
-    }, 120000);
+    });
 
     it("should validate zero margin", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // SDK now validates zero margin and throws before calling contract
       await expect(async () => {
-        await openTakerPosition(context, perpId, {
+        await openTakerPosition(context, setup.testPerpId, {
           isLong: true,
-          margin: 0, // Invalid: zero margin
+          margin: 0,
           leverage: 2,
           unspecifiedAmountLimit: 0,
         });
       }).rejects.toThrow("Margin must be greater than 0");
-    }, 120000);
+    });
 
     it("should validate zero leverage", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // SDK now validates zero leverage and throws before calling contract
       await expect(async () => {
-        await openTakerPosition(context, perpId, {
+        await openTakerPosition(context, setup.testPerpId, {
           isLong: true,
           margin: 10,
-          leverage: 0, // Invalid: zero leverage
+          leverage: 0,
           unspecifiedAmountLimit: 0,
         });
       }).rejects.toThrow("Leverage must be greater than 0");
-    }, 120000);
+    });
   });
 
   describe("openMakerPosition", () => {
-    // Note: No cleanup for maker positions due to long lockup periods
-
     it("should open a maker (LP) position", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      // Wait for any prior taker test transactions to settle
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Get current market price to set range around it
-      const perpData = await context.getPerpData(perpId);
-      const currentPrice = perpData.mark;
-
-      // Use same approach as setup: ±30% range with 40x multiplier (proven to work)
-      // But with 50 USDC margin instead of 500 USDC
-      const tickSpacing = perpData.tickSpacing;
-      const tickLowerRaw = priceToTick(currentPrice * 0.7, true); // 30% below
-      const tickUpperRaw = priceToTick(currentPrice * 1.3, false); // 30% above
-      const alignedTickLower = Math.floor(tickLowerRaw / tickSpacing) * tickSpacing;
-      const alignedTickUpper = Math.ceil(tickUpperRaw / tickSpacing) * tickSpacing;
-
-      // Convert aligned ticks back to prices for the SDK
-      const priceLower = tickToPrice(alignedTickLower);
-      const priceUpper = tickToPrice(alignedTickUpper);
-
-      const marginScaled = scale6Decimals(50); // 50 USDC
-      const liquidity = await estimateLiquidity(
-        context,
-        alignedTickLower,
-        alignedTickUpper,
-        marginScaled
-      );
-
-      const position = await openMakerPosition(context, perpId, {
-        margin: 50, // 50 USDC
-        priceLower,
-        priceUpper,
-        liquidity,
-        maxAmt0In: 200000000000000000n, // Large slippage tolerance (bigint)
-        maxAmt1In: 500000000000000000n, // Large slippage tolerance (bigint)
+      const position = await openMakerPosition(context, setup.testPerpId, {
+        margin: 50,
+        priceLower: 0.5,
+        priceUpper: 2.0,
+        liquidity: 1000000n,
+        maxAmt0In: 200000000000000000n,
+        maxAmt1In: 500000000000000000n,
       });
 
       expect(position.positionId).toBeGreaterThan(0n);
-      expect(position.perpId).toBe(perpId);
+      expect(position.perpId).toBe(setup.testPerpId);
       expect(position.isMaker).toBe(true);
-
-      console.log("Opened maker position:", position.positionId.toString());
-      console.log("Price range:", priceLower, "-", priceUpper);
-    }, 120000);
+    });
 
     it("should validate priceLower < priceUpper", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // SDK now validates price order before calling contract
       await expect(async () => {
-        await openMakerPosition(context, perpId, {
+        await openMakerPosition(context, setup.testPerpId, {
           margin: 50,
-          priceLower: 2000, // Higher - invalid
-          priceUpper: 1000, // Lower - invalid
+          priceLower: 2000,
+          priceUpper: 1000,
           liquidity: 1000000n,
           maxAmt0In: 1000,
           maxAmt1In: 100,
         });
       }).rejects.toThrow("priceLower must be less than priceUpper");
-    }, 120000);
-
-    it("should auto-align ticks to tick spacing", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Get perp data for tick spacing
-      const perpData = await context.getPerpData(perpId);
-
-      // Prices that would need alignment
-      const priceLower = 1234.56; // Likely not aligned to tick spacing
-      const priceUpper = 5678.9; // Likely not aligned to tick spacing
-
-      const tickLower = priceToTick(priceLower, true);
-      const tickUpper = priceToTick(priceUpper, false);
-      const tickSpacing = perpData.tickSpacing;
-      const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
-      const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
-
-      // Verify that ticks need alignment (otherwise test is meaningless)
-      if (tickLower === alignedTickLower && tickUpper === alignedTickUpper) {
-        console.log("Skipping: chosen prices happen to be aligned");
-        return;
-      }
-
-      // SDK should auto-align ticks without throwing
-      // The transaction may fail for other reasons (insufficient liquidity, etc.)
-      // but should NOT fail due to tick alignment
-      const marginScaled = scale6Decimals(50);
-      const liquidity = await estimateLiquidity(
-        context,
-        alignedTickLower,
-        alignedTickUpper,
-        marginScaled
-      );
-
-      // This should not throw a tick alignment error
-      // It may throw for other contract-level reasons, but we verify alignment works
-      try {
-        await openMakerPosition(context, perpId, {
-          margin: 50,
-          priceLower,
-          priceUpper,
-          liquidity,
-          maxAmt0In: 10000,
-          maxAmt1In: 100,
-        });
-        // If it succeeds, auto-alignment worked
-        expect(true).toBe(true);
-      } catch (error: any) {
-        // Should NOT be a tick alignment error
-        expect(error.message).not.toContain("Ticks must be aligned");
-      }
-    }, 120000);
+    });
   });
 
   describe("closePosition", () => {
-    // Skip: This test is flaky on live testnet due to rapid price movements
-    // causing positions to be liquidated between open and close
-    it.skip("should close a taker position using standalone function", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      // Wait for previous transactions to settle
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // First open a position with larger margin to avoid liquidation
-      const position = await openTakerPosition(context, perpId, {
+    it("should close a taker position", async () => {
+      const position = await openTakerPosition(context, setup.testPerpId, {
         isLong: true,
-        margin: 100, // Increased to reduce liquidation risk on live testnet
+        margin: 100,
         leverage: 2,
-        unspecifiedAmountLimit: 0, // Long: 0 = no minimum
+        unspecifiedAmountLimit: 0,
       });
 
-      console.log("Opened position to close:", position.positionId.toString());
-
-      // Taker positions have no lockup period - close immediately
-      const closeResult = await closePosition(context, perpId, position.positionId, {
-        minAmt0Out: 0,
-        minAmt1Out: 0,
-        maxAmt1In: 1000, // Max USDC to pay
-      });
-
-      // Full close returns null position with txHash
-      expect(closeResult.position).toBeNull();
-      expect(closeResult.txHash).toBeDefined();
-      expect(closeResult.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
-
-      console.log("Closed position:", position.positionId.toString());
-      console.log("Close transaction hash:", closeResult.txHash);
-    }, 60000);
-
-    // Skip: This test is flaky on live testnet due to rapid price movements
-    // causing positions to be liquidated between open and close
-    it.skip("should close a taker position using OpenPosition method", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      // Wait for previous transactions to settle
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Open a position with very large margin to avoid liquidation on volatile testnet
-      const position = await openTakerPosition(context, perpId, {
-        isLong: true,
-        margin: 200, // Large margin to withstand price volatility on live testnet
-        leverage: 2,
-        unspecifiedAmountLimit: 0, // Long: 0 = no minimum
-      });
-
-      console.log("Opened position to close:", position.positionId.toString());
-
-      // Taker positions have no lockup period - close immediately
-      const closeResult = await position.closePosition({
+      const closeResult = await closePosition(context, setup.testPerpId, position.positionId, {
         minAmt0Out: 0,
         minAmt1Out: 0,
         maxAmt1In: 1000,
@@ -511,278 +130,51 @@ describe("Trading Operations Integration Tests", () => {
       expect(closeResult.position).toBeNull();
       expect(closeResult.txHash).toBeDefined();
       expect(closeResult.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    });
 
-      console.log("Closed position using method:", position.positionId.toString());
-      console.log("Close transaction hash:", closeResult.txHash);
-    }, 60000);
+    it("should close a taker position using OpenPosition method", async () => {
+      const position = await openTakerPosition(context, setup.testPerpId, {
+        isLong: true,
+        margin: 200,
+        leverage: 2,
+        unspecifiedAmountLimit: 0,
+      });
+
+      const closeResult = await position.closePosition({
+        minAmt0Out: 0,
+        minAmt1Out: 0,
+        maxAmt1In: 1000,
+      });
+
+      expect(closeResult.position).toBeNull();
+      expect(closeResult.txHash).toBeDefined();
+      expect(closeResult.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    });
 
     it("should fail to close non-existent position", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
       const nonExistentId = 999999999n;
 
       await expect(async () => {
-        await closePosition(context, perpId, nonExistentId, {
+        await closePosition(context, setup.testPerpId, nonExistentId, {
           minAmt0Out: 0,
           minAmt1Out: 0,
           maxAmt1In: 1000,
         });
       }).rejects.toThrow();
-    }, 120000);
-  });
-
-  describe("Allowance-based approval skip", () => {
-    const testPositions: bigint[] = [];
-
-    afterEach(async () => {
-      if (!config.testPerpId) return;
-      const perpId = config.testPerpId as `0x${string}`;
-
-      for (const posId of testPositions) {
-        await cleanupPosition(posId, perpId);
-      }
-      testPositions.length = 0;
-
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }, 60000);
-
-    it("should skip approve when allowance is sufficient (taker)", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-      const walletAddress = context.walletClient.account!.address;
-
-      // Wait for setup transactions to fully settle
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      // Pre-approve max uint256 so the per-trade approve is redundant
-      await approveUsdc(context, 2n ** 256n - 1n, 1);
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      // Record nonce before opening position
-      const nonceBefore = await publicClient.getTransactionCount({
-        address: walletAddress,
-        blockTag: "latest",
-      });
-
-      const position = await openTakerPosition(context, perpId, {
-        isLong: true,
-        margin: 10,
-        leverage: 2,
-        unspecifiedAmountLimit: 0,
-      });
-
-      testPositions.push(position.positionId);
-
-      // Wait for transaction to settle
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      const nonceAfter = await publicClient.getTransactionCount({
-        address: walletAddress,
-        blockTag: "latest",
-      });
-
-      // Nonce should increase by exactly 1 (trade only, no approve)
-      expect(nonceAfter - nonceBefore).toBe(1);
-      expect(position.positionId).toBeGreaterThan(0n);
-
-      console.log(
-        `Approval skipped: nonce ${nonceBefore} -> ${nonceAfter} (delta: ${nonceAfter - nonceBefore})`
-      );
-    }, 120000);
-
-    it("should skip approve when allowance is sufficient (maker)", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-      const walletAddress = context.walletClient.account!.address;
-
-      // Wait for previous test's cleanup transactions to settle
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      // Pre-approve max uint256
-      await approveUsdc(context, 2n ** 256n - 1n, 1);
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      // Get current market price to set range
-      const perpData = await context.getPerpData(perpId);
-      const currentPrice = perpData.mark;
-      const tickSpacing = perpData.tickSpacing;
-      const tickLowerRaw = priceToTick(currentPrice * 0.7, true);
-      const tickUpperRaw = priceToTick(currentPrice * 1.3, false);
-      const alignedTickLower = Math.floor(tickLowerRaw / tickSpacing) * tickSpacing;
-      const alignedTickUpper = Math.ceil(tickUpperRaw / tickSpacing) * tickSpacing;
-      const priceLower = tickToPrice(alignedTickLower);
-      const priceUpper = tickToPrice(alignedTickUpper);
-
-      const marginScaled = scale6Decimals(50);
-      const liquidity = await estimateLiquidity(
-        context,
-        alignedTickLower,
-        alignedTickUpper,
-        marginScaled
-      );
-
-      // Record nonce before opening position
-      const nonceBefore = await publicClient.getTransactionCount({
-        address: walletAddress,
-        blockTag: "latest",
-      });
-
-      const position = await openMakerPosition(context, perpId, {
-        margin: 50,
-        priceLower,
-        priceUpper,
-        liquidity,
-        maxAmt0In: 200000000000000000n,
-        maxAmt1In: 500000000000000000n,
-      });
-
-      // Wait for transaction to settle
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      const nonceAfter = await publicClient.getTransactionCount({
-        address: walletAddress,
-        blockTag: "latest",
-      });
-
-      // Nonce should increase by exactly 1 (trade only, no approve)
-      expect(nonceAfter - nonceBefore).toBe(1);
-      expect(position.positionId).toBeGreaterThan(0n);
-
-      console.log(
-        `Approval skipped: nonce ${nonceBefore} -> ${nonceAfter} (delta: ${nonceAfter - nonceBefore})`
-      );
-    }, 120000);
-
-    it("should still approve when allowance is zero", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      const perpId = config.testPerpId as `0x${string}`;
-      const walletAddress = context.walletClient.account!.address;
-
-      // Wait for previous test's transactions to settle
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      // Revoke allowance and wait for nonce to stabilize
-      await approveUsdc(context, 0n, 1);
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      // Ensure nonce is stable before proceeding
-      const n1 = await publicClient.getTransactionCount({
-        address: walletAddress,
-        blockTag: "latest",
-      });
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      const n2 = await publicClient.getTransactionCount({
-        address: walletAddress,
-        blockTag: "latest",
-      });
-      if (n1 !== n2) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-      }
-
-      // Verify allowance is 0
-      const allowance = await publicClient.readContract({
-        address: context.deployments().usdc,
-        abi: erc20Abi,
-        functionName: "allowance",
-        args: [walletAddress, context.deployments().perpManager],
-        blockTag: "latest",
-      });
-      expect(allowance).toBe(0n);
-
-      // Record nonce before opening position
-      const nonceBefore = await publicClient.getTransactionCount({
-        address: walletAddress,
-        blockTag: "latest",
-      });
-
-      const position = await openTakerPosition(context, perpId, {
-        isLong: true,
-        margin: 10,
-        leverage: 2,
-        unspecifiedAmountLimit: 0,
-      });
-
-      testPositions.push(position.positionId);
-
-      // Wait for transaction to settle
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      const nonceAfter = await publicClient.getTransactionCount({
-        address: walletAddress,
-        blockTag: "latest",
-      });
-
-      // Nonce should increase by 2 (approve + trade)
-      expect(nonceAfter - nonceBefore).toBe(2);
-      expect(position.positionId).toBeGreaterThan(0n);
-
-      console.log(
-        `Approval triggered: nonce ${nonceBefore} -> ${nonceAfter} (delta: ${nonceAfter - nonceBefore})`
-      );
-    }, 120000);
+    });
   });
 
   describe("Transaction Hash Access", () => {
-    const testPositions: bigint[] = [];
-
-    afterEach(async () => {
-      if (!config.testPerpId) return;
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Close all positions opened in this test
-      for (const posId of testPositions) {
-        await cleanupPosition(posId, perpId);
-      }
-      testPositions.length = 0; // Clear array
-
-      // Wait for cleanup to settle
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-    }, 60000);
-
     it("should expose transaction hash on OpenPosition for gas measurement", async () => {
-      if (!config.testPerpId) {
-        console.log("Skipping: TEST_PERP_ID not configured");
-        return;
-      }
-
-      // Wait for previous transactions to settle
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      const perpId = config.testPerpId as `0x${string}`;
-
-      // Open a position with higher margin to reduce liquidation risk
-      const position = await openTakerPosition(context, perpId, {
+      const position = await openTakerPosition(context, setup.testPerpId, {
         isLong: true,
-        margin: 100, // Increased to reduce liquidation risk on live testnet
+        margin: 100,
         leverage: 2,
-        unspecifiedAmountLimit: 0, // Long: 0 = no minimum
+        unspecifiedAmountLimit: 0,
       });
 
-      // Track position for cleanup
-      testPositions.push(position.positionId);
-
-      // Transaction hash is now accessible on the OpenPosition instance
       expect(position.txHash).toBeDefined();
       expect(position.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
-
-      console.log("Transaction hash:", position.txHash);
-      console.log("Gas measurement now possible via receipt lookup");
-    }, 120000);
+    });
   });
 });

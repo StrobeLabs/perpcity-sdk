@@ -52,7 +52,6 @@ export type OpenMakerPositionParams = {
 };
 
 export type CreatePerpParams = {
-  startingPrice: number;
   beacon: Address;
   // Module addresses - optional, will fall back to deployment config if not provided
   fees?: Address;

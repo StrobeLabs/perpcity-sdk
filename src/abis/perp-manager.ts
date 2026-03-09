@@ -250,26 +250,19 @@ export const PERP_MANAGER_ABI = [
     anonymous: false,
     inputs: [
       {
-        indexed: false,
-        internalType: "contract IFees",
-        name: "feesModule",
-        type: "address",
+        indexed: true,
+        internalType: "uint8",
+        name: "moduleType",
+        type: "uint8",
       },
-    ],
-    name: "FeesModuleRegistered",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
       {
-        indexed: false,
-        internalType: "contract ILockupPeriod",
-        name: "lockupPeriodModule",
+        indexed: true,
+        internalType: "address",
+        name: "module",
         type: "address",
       },
     ],
-    name: "LockupPeriodModuleRegistered",
+    name: "ModuleRegistered",
     type: "event",
   },
   {
@@ -295,19 +288,6 @@ export const PERP_MANAGER_ABI = [
       },
     ],
     name: "MarginAdjusted",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: false,
-        internalType: "contract IMarginRatios",
-        name: "marginRatiosModule",
-        type: "address",
-      },
-    ],
-    name: "MarginRatiosModuleRegistered",
     type: "event",
   },
   {
@@ -483,13 +463,13 @@ export const PERP_MANAGER_ABI = [
       {
         indexed: false,
         internalType: "int256",
-        name: "perpDelta",
+        name: "exitPerpDelta",
         type: "int256",
       },
       {
         indexed: false,
         internalType: "int256",
-        name: "usdDelta",
+        name: "exitUsdDelta",
         type: "int256",
       },
       {
@@ -503,6 +483,42 @@ export const PERP_MANAGER_ABI = [
         internalType: "int24",
         name: "tickUpper",
         type: "int24",
+      },
+      {
+        indexed: false,
+        internalType: "int256",
+        name: "netUsdDelta",
+        type: "int256",
+      },
+      {
+        indexed: false,
+        internalType: "int256",
+        name: "funding",
+        type: "int256",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "utilizationFee",
+        type: "uint256",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "adl",
+        type: "uint256",
+      },
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "liquidationFee",
+        type: "uint256",
+      },
+      {
+        indexed: false,
+        internalType: "int256",
+        name: "netMargin",
+        type: "int256",
       },
     ],
     name: "PositionClosed",
@@ -573,19 +589,6 @@ export const PERP_MANAGER_ABI = [
       },
     ],
     name: "PositionOpened",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: false,
-        internalType: "contract ISqrtPriceImpactLimit",
-        name: "sqrtPriceImpactLimitModule",
-        type: "address",
-      },
-    ],
-    name: "SqrtPriceImpactLimitModuleRegistered",
     type: "event",
   },
   {
@@ -714,12 +717,12 @@ export const PERP_MANAGER_ABI = [
           },
           {
             internalType: "int256",
-            name: "perpDelta",
+            name: "usdDelta",
             type: "int256",
           },
           {
             internalType: "uint128",
-            name: "usdLimit",
+            name: "perpLimit",
             type: "uint128",
           },
         ],
@@ -967,11 +970,6 @@ export const PERP_MANAGER_ABI = [
             name: "sqrtPriceImpactLimit",
             type: "address",
           },
-          {
-            internalType: "uint160",
-            name: "startingSqrtPriceX96",
-            type: "uint160",
-          },
         ],
         internalType: "struct IPerpManager.CreatePerpParams",
         name: "params",
@@ -1091,69 +1089,17 @@ export const PERP_MANAGER_ABI = [
   {
     inputs: [
       {
-        internalType: "contract IFees",
-        name: "",
+        internalType: "uint8",
+        name: "moduleType",
+        type: "uint8",
+      },
+      {
+        internalType: "address",
+        name: "module",
         type: "address",
       },
     ],
-    name: "isFeesRegistered",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "contract ILockupPeriod",
-        name: "",
-        type: "address",
-      },
-    ],
-    name: "isLockupPeriodRegistered",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "contract IMarginRatios",
-        name: "",
-        type: "address",
-      },
-    ],
-    name: "isMarginRatiosRegistered",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "contract ISqrtPriceImpactLimit",
-        name: "",
-        type: "address",
-      },
-    ],
-    name: "isSqrtPriceImpactLimitRegistered",
+    name: "isModuleRegistered",
     outputs: [
       {
         internalType: "bool",
@@ -1505,14 +1451,19 @@ export const PERP_MANAGER_ABI = [
         type: "int256",
       },
       {
-        internalType: "uint256",
+        internalType: "int256",
         name: "netMargin",
-        type: "uint256",
+        type: "int256",
       },
       {
         internalType: "bool",
         name: "wasLiquidated",
         type: "bool",
+      },
+      {
+        internalType: "uint256",
+        name: "notional",
+        type: "uint256",
       },
     ],
     stateMutability: "nonpayable",
@@ -1653,51 +1604,66 @@ export const PERP_MANAGER_ABI = [
   {
     inputs: [
       {
-        internalType: "contract IFees",
-        name: "feesModule",
-        type: "address",
+        internalType: "PoolId",
+        name: "perpId",
+        type: "bytes32",
+      },
+      {
+        internalType: "bool",
+        name: "zeroForOne",
+        type: "bool",
+      },
+      {
+        internalType: "bool",
+        name: "isExactIn",
+        type: "bool",
+      },
+      {
+        internalType: "uint256",
+        name: "amount",
+        type: "uint256",
+      },
+      {
+        internalType: "uint160",
+        name: "sqrtPriceLimitX96",
+        type: "uint160",
       },
     ],
-    name: "registerFeesModule",
-    outputs: [],
+    name: "quoteSwap",
+    outputs: [
+      {
+        internalType: "bytes",
+        name: "unexpectedReason",
+        type: "bytes",
+      },
+      {
+        internalType: "int256",
+        name: "perpDelta",
+        type: "int256",
+      },
+      {
+        internalType: "int256",
+        name: "usdDelta",
+        type: "int256",
+      },
+    ],
     stateMutability: "nonpayable",
     type: "function",
   },
   {
     inputs: [
       {
-        internalType: "contract ILockupPeriod",
-        name: "lockupPeriodModule",
-        type: "address",
+        internalType: "uint8",
+        name: "moduleType",
+        type: "uint8",
       },
-    ],
-    name: "registerLockupPeriodModule",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
       {
-        internalType: "contract IMarginRatios",
-        name: "marginRatiosModule",
+        internalType: "address",
+        name: "module",
         type: "address",
       },
     ],
-    name: "registerMarginRatiosModule",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "contract ISqrtPriceImpactLimit",
-        name: "sqrtPriceImpactLimitModule",
-        type: "address",
-      },
-    ],
-    name: "registerSqrtPriceImpactLimitModule",
+    name: "registerModule",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",

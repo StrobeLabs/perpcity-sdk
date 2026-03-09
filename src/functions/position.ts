@@ -137,9 +137,9 @@ export async function getPositionLiveDetailsFromContract(
       abi: PERP_MANAGER_ABI,
       functionName: "quoteClosePosition" as any,
       args: [positionId],
-    })) as unknown as readonly [Hex, bigint, bigint, bigint, boolean];
+    })) as unknown as readonly [Hex, bigint, bigint, bigint, boolean, bigint];
 
-    // The result is a tuple: [unexpectedReason, pnl, funding, netMargin, wasLiquidated]
+    // The result is a tuple: [unexpectedReason, pnl, funding, netMargin, wasLiquidated, notional]
     const [unexpectedReason, pnl, funding, netMargin, wasLiquidated] = result;
 
     if (unexpectedReason !== "0x") {

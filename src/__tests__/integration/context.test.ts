@@ -36,7 +36,8 @@ describe("Context Integration Tests", () => {
       50_000000n, // pnl: +50 USDC
       -5_000000n, // funding: -5 USDC
       545_000000n, // netMargin: 545 USDC
-      false // not liquidated
+      false, // not liquidated
+      1000_000000n // notional: 1000 USDC
     );
   }, 60000);
 

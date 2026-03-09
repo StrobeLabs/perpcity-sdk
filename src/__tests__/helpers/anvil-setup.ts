@@ -346,7 +346,8 @@ export async function setupMockQuoteResult(
   pnl: bigint,
   funding: bigint,
   netMargin: bigint,
-  wasLiquidated: boolean
+  wasLiquidated: boolean,
+  notional: bigint
 ): Promise<void> {
   const perpManagerArtifact = loadArtifact("MockPerpManager");
   const account = privateKeyToAccount(ANVIL_PRIVATE_KEY);
@@ -355,7 +356,7 @@ export async function setupMockQuoteResult(
     address: setup.addresses.perpManager,
     abi: perpManagerArtifact.abi,
     functionName: "setupQuoteResult",
-    args: [posId, pnl, funding, netMargin, wasLiquidated],
+    args: [posId, pnl, funding, netMargin, wasLiquidated, notional],
     account,
     chain: setup.walletClient.chain!,
   });

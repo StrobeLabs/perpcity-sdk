@@ -3,6 +3,10 @@ dist/
 .env
 .env.local
 
+# Forge build artifacts (recompiled before integration tests)
+tests/contracts/out/
+tests/contracts/cache/
+
 # Debug scripts
 check-*.ts
 test-*.ts

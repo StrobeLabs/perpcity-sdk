@@ -7,14 +7,13 @@ import type {
   OpenMakerPositionParams,
   OpenTakerPositionParams,
 } from "../types/entity-data";
-import { NUMBER_1E6, priceToSqrtPriceX96, priceToTick, scale6Decimals } from "../utils";
+import { NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
 import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
 import { OpenPosition } from "./open-position";
 
 export async function createPerp(context: PerpCityContext, params: CreatePerpParams): Promise<Hex> {
   return withErrorHandling(async () => {
-    const sqrtPriceX96 = priceToSqrtPriceX96(params.startingPrice);
     const deployments = context.deployments();
 
     // Use params if provided, otherwise fall back to deployment config
@@ -34,7 +33,6 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
       marginRatios,
       lockupPeriod,
       sqrtPriceImpactLimit,
-      startingSqrtPriceX96: sqrtPriceX96,
     };
 
     const { request } = await context.publicClient.simulateContract({

@@ -324,6 +324,13 @@ export async function openMakerPosition(
     let maxAmt0In: bigint;
     let maxAmt1In: bigint;
 
+    if ((params.maxAmt0In === undefined) !== (params.maxAmt1In === undefined)) {
+      throw new Error(
+        "Both maxAmt0In and maxAmt1In must be provided together or neither. " +
+          "Omit both to use automatic quote-based slippage calculation."
+      );
+    }
+
     if (params.maxAmt0In !== undefined && params.maxAmt1In !== undefined) {
       maxAmt0In =
         typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);

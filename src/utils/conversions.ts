@@ -1,4 +1,4 @@
-import { BIGINT_1E6, NUMBER_1E6, Q96 } from "./constants";
+import { BIGINT_1E6, MAX_PRICE, MIN_PRICE, NUMBER_1E6, Q96 } from "./constants";
 
 export function priceToSqrtPriceX96(price: number): bigint {
   if (price <= 0) {
@@ -42,6 +42,11 @@ export function scaleFromX96(valueX96: bigint): number {
 export function priceToTick(price: number, roundDown: boolean): number {
   if (price <= 0) {
     throw new Error("Price must be positive");
+  }
+  if (price < MIN_PRICE || price > MAX_PRICE) {
+    throw new Error(
+      `Price ${price} is outside the representable range [${MIN_PRICE}, ${MAX_PRICE}]`
+    );
   }
   const logPrice = Math.log(price) / Math.log(1.0001);
   return roundDown ? Math.floor(logPrice) : Math.ceil(logPrice);

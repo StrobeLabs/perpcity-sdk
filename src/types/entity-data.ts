@@ -47,8 +47,14 @@ export type OpenMakerPositionParams = {
   priceLower: number; // Lower price bound
   priceUpper: number; // Upper price bound
   liquidity: bigint; // Liquidity amount (calculated externally)
-  maxAmt0In: number | bigint; // Max perp tokens (number = human units, bigint = raw)
-  maxAmt1In: number | bigint; // Max USDC (number = human units, bigint = raw)
+  slippageTolerance?: number; // Slippage tolerance as a fraction (e.g. 0.01 = 1%). Default 0.01
+  maxAmt0In?: number | bigint; // Override: max perp tokens (number = human units, bigint = raw)
+  maxAmt1In?: number | bigint; // Override: max USDC (number = human units, bigint = raw)
+};
+
+export type QuoteOpenMakerPositionResult = {
+  perpDelta: bigint; // Exact perp tokens needed (negative = tokens sent in)
+  usdDelta: bigint; // Exact USDC needed (negative = tokens sent in)
 };
 
 export type CreatePerpParams = {

@@ -6,8 +6,9 @@ import type {
   CreatePerpParams,
   OpenMakerPositionParams,
   OpenTakerPositionParams,
+  QuoteOpenMakerPositionResult,
 } from "../types/entity-data";
-import { NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
+import { MAX_TICK, MIN_TICK, NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
 import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
 import { OpenPosition } from "./open-position";
@@ -47,7 +48,9 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for transaction confirmation
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await context.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
 
     // Check if transaction was successful
     if (receipt.status === "reverted") {
@@ -149,7 +152,9 @@ export async function openTakerPosition(
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for confirmation
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await context.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
 
     // Verify success
     if (receipt.status === "reverted") {
@@ -190,13 +195,72 @@ export async function openTakerPosition(
   }, "openTakerPosition");
 }
 
-export async function openMakerPosition(
+function buildMakerContractParams(
+  context: PerpCityContext,
+  marginScaled: bigint,
+  params: OpenMakerPositionParams,
+  alignedTickLower: number,
+  alignedTickUpper: number,
+  maxAmt0In: bigint,
+  maxAmt1In: bigint
+) {
+  return {
+    holder: context.walletClient.account!.address,
+    margin: marginScaled,
+    liquidity: params.liquidity,
+    tickLower: alignedTickLower,
+    tickUpper: alignedTickUpper,
+    maxAmt0In,
+    maxAmt1In,
+  };
+}
+
+export function calculateAlignedTicks(
+  priceLower: number,
+  priceUpper: number,
+  tickSpacing: number
+): { alignedTickLower: number; alignedTickUpper: number } {
+  const tickLower = priceToTick(priceLower, true);
+  const tickUpper = priceToTick(priceUpper, false);
+
+  const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
+  const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
+
+  if (alignedTickLower < MIN_TICK) {
+    throw new Error(
+      `Lower tick ${alignedTickLower} is below MIN_TICK (${MIN_TICK}). Increase priceLower.`
+    );
+  }
+  if (alignedTickUpper > MAX_TICK) {
+    throw new Error(
+      `Upper tick ${alignedTickUpper} exceeds MAX_TICK (${MAX_TICK}). Decrease priceUpper.`
+    );
+  }
+  if (alignedTickLower === alignedTickUpper) {
+    throw new Error(
+      "Price range too narrow: lower and upper ticks are equal after alignment. Widen the range."
+    );
+  }
+
+  return { alignedTickLower, alignedTickUpper };
+}
+
+function alignMakerTicks(
+  params: OpenMakerPositionParams,
+  tickSpacing: number
+): { alignedTickLower: number; alignedTickUpper: number } {
+  return calculateAlignedTicks(params.priceLower, params.priceUpper, tickSpacing);
+}
+
+const DEFAULT_MAKER_SLIPPAGE_TOLERANCE = 0.01;
+const MAX_UINT128 = 2n ** 128n - 1n;
+
+export async function quoteOpenMakerPosition(
   context: PerpCityContext,
   perpId: Hex,
   params: OpenMakerPositionParams
-): Promise<OpenPosition> {
+): Promise<QuoteOpenMakerPositionResult> {
   return withErrorHandling(async () => {
-    // Validate inputs
     if (params.margin <= 0) {
       throw new Error("Margin must be greater than 0");
     }
@@ -204,14 +268,80 @@ export async function openMakerPosition(
       throw new Error("priceLower must be less than priceUpper");
     }
 
-    // Convert margin to 6-decimal scaled bigint
     const marginScaled = scale6Decimals(params.margin);
+    const perpData = await context.getPerpData(perpId);
+    const { alignedTickLower, alignedTickUpper } = alignMakerTicks(params, perpData.tickSpacing);
 
-    // Handle maxAmt values - can be number (human units) or bigint (raw value)
-    const maxAmt0InScaled =
-      typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
-    const maxAmt1InScaled =
-      typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
+    const contractParams = buildMakerContractParams(
+      context,
+      marginScaled,
+      params,
+      alignedTickLower,
+      alignedTickUpper,
+      MAX_UINT128,
+      MAX_UINT128
+    );
+
+    const [unexpectedReason, perpDelta, usdDelta] = (await context.publicClient.readContract({
+      address: context.deployments().perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: "quoteOpenMakerPosition" as any,
+      args: [perpId, contractParams] as any,
+    })) as unknown as readonly [string, bigint, bigint];
+
+    if (unexpectedReason !== "0x") {
+      throw new Error(`Quote failed: ${unexpectedReason}`);
+    }
+
+    return { perpDelta, usdDelta };
+  }, "quoteOpenMakerPosition");
+}
+
+function applySlippage(delta: bigint, slippageTolerance: number): bigint {
+  if (delta >= 0n) return 0n;
+  const absDelta = -delta;
+  const slippageBps = BigInt(Math.ceil(slippageTolerance * 10000));
+  return absDelta + (absDelta * slippageBps) / 10000n;
+}
+
+export async function openMakerPosition(
+  context: PerpCityContext,
+  perpId: Hex,
+  params: OpenMakerPositionParams
+): Promise<OpenPosition> {
+  return withErrorHandling(async () => {
+    if (params.margin <= 0) {
+      throw new Error("Margin must be greater than 0");
+    }
+    if (params.priceLower >= params.priceUpper) {
+      throw new Error("priceLower must be less than priceUpper");
+    }
+
+    const marginScaled = scale6Decimals(params.margin);
+    const perpData = await context.getPerpData(perpId);
+    const { alignedTickLower, alignedTickUpper } = alignMakerTicks(params, perpData.tickSpacing);
+
+    let maxAmt0In: bigint;
+    let maxAmt1In: bigint;
+
+    if ((params.maxAmt0In === undefined) !== (params.maxAmt1In === undefined)) {
+      throw new Error(
+        "Both maxAmt0In and maxAmt1In must be provided together or neither. " +
+          "Omit both to use automatic quote-based slippage calculation."
+      );
+    }
+
+    if (params.maxAmt0In !== undefined && params.maxAmt1In !== undefined) {
+      maxAmt0In =
+        typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
+      maxAmt1In =
+        typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
+    } else {
+      const quote = await quoteOpenMakerPosition(context, perpId, params);
+      const slippage = params.slippageTolerance ?? DEFAULT_MAKER_SLIPPAGE_TOLERANCE;
+      maxAmt0In = applySlippage(quote.perpDelta, slippage);
+      maxAmt1In = applySlippage(quote.usdDelta, slippage);
+    }
 
     // Approve USDC spending only if current allowance is insufficient
     // maxAmt1In is a slippage limit, not the actual amount needed
@@ -227,33 +357,16 @@ export async function openMakerPosition(
       await approveUsdc(context, marginScaled);
     }
 
-    // Get perp data to determine tick spacing
-    const perpData = await context.getPerpData(perpId);
+    const contractParams = buildMakerContractParams(
+      context,
+      marginScaled,
+      params,
+      alignedTickLower,
+      alignedTickUpper,
+      maxAmt0In,
+      maxAmt1In
+    );
 
-    // Convert prices to ticks
-    const tickLower = priceToTick(params.priceLower, true); // round down
-    const tickUpper = priceToTick(params.priceUpper, false); // round up
-
-    // Validate ticks are aligned to tick spacing
-    const tickSpacing = perpData.tickSpacing;
-    const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
-    const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
-
-    // Auto-align ticks to tick spacing for contract compatibility
-    // (JavaScript floating point math cannot precisely match contract's Q96 integer math)
-
-    // Prepare contract parameters - deployed contract requires holder address
-    const contractParams = {
-      holder: context.walletClient.account!.address,
-      margin: marginScaled,
-      liquidity: params.liquidity,
-      tickLower: alignedTickLower,
-      tickUpper: alignedTickUpper,
-      maxAmt0In: maxAmt0InScaled,
-      maxAmt1In: maxAmt1InScaled,
-    };
-
-    // Simulate transaction - deployed contract uses openMakerPos
     const { request } = await context.publicClient.simulateContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
@@ -262,31 +375,25 @@ export async function openMakerPosition(
       account: context.walletClient.account,
     });
 
-    // Execute transaction
     const txHash = await context.walletClient.writeContract(request);
+    const receipt = await context.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
 
-    // Wait for confirmation
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-
-    // Verify success
     if (receipt.status === "reverted") {
       throw new Error(`Transaction reverted. Hash: ${txHash}`);
     }
 
-    // Extract makerPosId from PositionOpened event
     let makerPosId: bigint | null = null;
 
     for (const log of receipt.logs) {
       try {
-        // Don't specify eventName - let viem auto-detect from ABI
         const decoded = decodeEventLog({
           abi: PERP_MANAGER_ABI,
           data: log.data,
           topics: log.topics,
         });
 
-        // Check if this is a PositionOpened event for our perpId and it's a maker
-        // Note: perpId from events is lowercased, so normalize both for comparison
         if (
           decoded.eventName === "PositionOpened" &&
           (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
@@ -302,7 +409,6 @@ export async function openMakerPosition(
       throw new Error(`PositionOpened event not found in transaction receipt. Hash: ${txHash}`);
     }
 
-    // Return OpenPosition instance with transaction hash (isLong will be determined by position data)
     return new OpenPosition(context, perpId, makerPosId, undefined, true, txHash);
   }, "openMakerPosition");
 }

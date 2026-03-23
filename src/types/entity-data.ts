@@ -47,8 +47,18 @@ export type OpenMakerPositionParams = {
   priceLower: number; // Lower price bound
   priceUpper: number; // Upper price bound
   liquidity: bigint; // Liquidity amount (calculated externally)
-  maxAmt0In: number | bigint; // Max perp tokens (number = human units, bigint = raw)
-  maxAmt1In: number | bigint; // Max USDC (number = human units, bigint = raw)
+  // Slippage tolerance as a fraction (e.g. 0.01 = 1%). Default 0.01.
+  // Used when maxAmt0In/maxAmt1In are not provided — the SDK quotes the position
+  // on-chain and applies this tolerance to compute slippage limits automatically.
+  slippageTolerance?: number;
+  // Manual overrides for slippage limits. If you supply one, you must supply both.
+  maxAmt0In?: number | bigint; // Max perp tokens (number = human units, bigint = raw)
+  maxAmt1In?: number | bigint; // Max USDC (number = human units, bigint = raw)
+};
+
+export type QuoteOpenMakerPositionResult = {
+  perpDelta: bigint; // Exact perp tokens needed (negative = tokens sent in)
+  usdDelta: bigint; // Exact USDC needed (negative = tokens sent in)
 };
 
 export type CreatePerpParams = {

@@ -298,7 +298,7 @@ export async function quoteOpenMakerPosition(
 }
 
 function applySlippage(delta: bigint, slippageTolerance: number): bigint {
-  if (delta >= 0n) return delta;
+  if (delta >= 0n) return 0n;
   const absDelta = -delta;
   const slippageBps = BigInt(Math.ceil(slippageTolerance * 10000));
   return absDelta + (absDelta * slippageBps) / 10000n;

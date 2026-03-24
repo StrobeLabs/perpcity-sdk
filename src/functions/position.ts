@@ -89,7 +89,7 @@ export async function quoteClosePosition(
 
 export async function closePositionWithQuote(
   context: PerpCityContext,
-  perpId: Hex,
+  _perpId: Hex,
   positionId: bigint,
   slippageTolerance: number = 0.01
 ): Promise<ClosePositionResult> {
@@ -118,11 +118,13 @@ export async function closePositionWithQuote(
       maxAmt1In: 0n,
     };
 
+    const canonicalPerpId = rawData.perpId;
+
     if (!isMaker) {
       // Compute notional at current price for slippage limits.
       // The contract checks minAmt1Out/maxAmt1In against raw swap USD deltas,
       // not netMargin. The swap amount ≈ positionSize * markPrice.
-      const perpData = await context.getPerpData(rawData.perpId);
+      const perpData = await context.getPerpData(canonicalPerpId);
       const absPerpDelta =
         rawData.entryPerpDelta < 0n ? -rawData.entryPerpDelta : rawData.entryPerpDelta;
       const positionSize = Number(absPerpDelta);
@@ -179,7 +181,7 @@ export async function closePositionWithQuote(
         });
         const eventPerpId = (decoded.args.perpId as string).toLowerCase();
         const eventPosId = decoded.args.posId as bigint;
-        if (eventPerpId === perpId.toLowerCase() && eventPosId !== positionId) {
+        if (eventPerpId === canonicalPerpId.toLowerCase() && eventPosId !== positionId) {
           newPositionId = eventPosId;
           break;
         }
@@ -192,9 +194,13 @@ export async function closePositionWithQuote(
 
     return {
       position: {
-        perpId,
+        perpId: canonicalPerpId,
         positionId: newPositionId,
-        liveDetails: await getPositionLiveDetailsFromContract(context, perpId, newPositionId),
+        liveDetails: await getPositionLiveDetailsFromContract(
+          context,
+          canonicalPerpId,
+          newPositionId
+        ),
       },
       txHash,
     };
@@ -450,6 +456,10 @@ export function calculateClosePositionParams(opts: {
 }): ClosePositionParams {
   if (opts.isMaker) {
     return { minAmt0Out: 0, minAmt1Out: 0, maxAmt1In: 0 };
+  }
+
+  if (typeof opts.isLong !== "boolean") {
+    throw new Error("isLong must be explicitly set for taker positions");
   }
 
   const absNotional = Math.abs(opts.notional);

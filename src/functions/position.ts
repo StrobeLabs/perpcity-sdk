@@ -123,9 +123,9 @@ export async function closePositionWithQuote(
       // The contract checks minAmt1Out/maxAmt1In against raw swap USD deltas,
       // not netMargin. The swap amount ≈ positionSize * markPrice.
       const perpData = await context.getPerpData(rawData.perpId);
-      const positionSize = Number(
-        rawData.entryPerpDelta < 0n ? -rawData.entryPerpDelta : rawData.entryPerpDelta
-      );
+      const absPerpDelta =
+        rawData.entryPerpDelta < 0n ? -rawData.entryPerpDelta : rawData.entryPerpDelta;
+      const positionSize = Number(absPerpDelta);
       const notionalAtClose = BigInt(Math.floor(positionSize * perpData.mark));
       const isLong = rawData.entryPerpDelta > 0n;
 
@@ -305,7 +305,8 @@ export async function getPositionLiveDetailsFromContract(
 
     return {
       pnl: Number(formatUnits(pnl, 6)),
-      fundingPayment: Number(formatUnits(funding, 6)),
+      // Negate so positive = user receives funding, matching quoteClosePosition convention
+      fundingPayment: -Number(formatUnits(funding, 6)),
       effectiveMargin: Number(formatUnits(netMargin, 6)),
       isLiquidatable: wasLiquidated,
     };

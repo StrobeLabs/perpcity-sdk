@@ -717,12 +717,12 @@ export const PERP_MANAGER_ABI = [
           },
           {
             internalType: "int256",
-            name: "usdDelta",
+            name: "perpDelta",
             type: "int256",
           },
           {
             internalType: "uint128",
-            name: "perpLimit",
+            name: "usdLimit",
             type: "uint128",
           },
         ],
@@ -1451,19 +1451,14 @@ export const PERP_MANAGER_ABI = [
         type: "int256",
       },
       {
-        internalType: "int256",
+        internalType: "uint256",
         name: "netMargin",
-        type: "int256",
+        type: "uint256",
       },
       {
         internalType: "bool",
         name: "wasLiquidated",
         type: "bool",
-      },
-      {
-        internalType: "uint256",
-        name: "notional",
-        type: "uint256",
       },
     ],
     stateMutability: "nonpayable",

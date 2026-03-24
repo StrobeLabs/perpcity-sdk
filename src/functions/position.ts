@@ -1,4 +1,4 @@
-import { decodeEventLog, formatUnits, type Hex } from "viem";
+import { decodeErrorResult, decodeEventLog, formatUnits, type Hex } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import type { PerpCityContext } from "../context";
 import type {
@@ -7,6 +7,7 @@ import type {
   LiveDetails,
   OpenPositionData,
   PositionRawData,
+  QuoteClosePositionResult,
 } from "../types/entity-data";
 import { scale6Decimals } from "../utils";
 import { withErrorHandling } from "../utils/errors";
@@ -48,6 +49,158 @@ export function getPositionIsLiquidatable(positionData: OpenPositionData): boole
   return positionData.liveDetails.isLiquidatable;
 }
 
+export async function quoteClosePosition(
+  context: PerpCityContext,
+  positionId: bigint
+): Promise<QuoteClosePositionResult> {
+  return withErrorHandling(async () => {
+    const result = await context.publicClient.readContract({
+      address: context.deployments().perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: "quoteClosePosition" as "positions",
+      args: [positionId],
+    });
+
+    const [unexpectedReason, pnl, funding, netMargin, wasLiquidated] =
+      result as unknown as readonly [Hex, bigint, bigint, bigint, boolean];
+
+    if (unexpectedReason && unexpectedReason !== "0x") {
+      let errorName = "Quote simulation failed";
+      try {
+        const decoded = decodeErrorResult({
+          abi: PERP_MANAGER_ABI,
+          data: unexpectedReason,
+        });
+        errorName = decoded.errorName;
+      } catch {
+        // Could not decode, use generic name
+      }
+      throw new Error(errorName);
+    }
+
+    return {
+      pnl: Number(formatUnits(pnl, 6)),
+      funding: -Number(formatUnits(funding, 6)),
+      netMargin: Number(formatUnits(netMargin, 6)),
+      wasLiquidated,
+    };
+  }, `quoteClosePosition for position ${positionId}`);
+}
+
+export async function closePositionWithQuote(
+  context: PerpCityContext,
+  perpId: Hex,
+  positionId: bigint,
+  slippageTolerance: number = 0.01
+): Promise<ClosePositionResult> {
+  return withErrorHandling(async () => {
+    // Read position to determine if it's a maker position
+    const rawData = await context.getPositionRawData(positionId);
+    const isMaker = rawData.makerDetails !== null;
+
+    const result = await context.publicClient.readContract({
+      address: context.deployments().perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: "quoteClosePosition" as "positions",
+      args: [positionId],
+    });
+
+    const [unexpectedReason] = result as unknown as readonly [Hex, bigint, bigint, bigint, boolean];
+
+    if (unexpectedReason && unexpectedReason !== "0x") {
+      throw new Error("Quote failed — position may be invalid or already closed");
+    }
+
+    let contractParams = {
+      posId: positionId,
+      minAmt0Out: 0n,
+      minAmt1Out: 0n,
+      maxAmt1In: 0n,
+    };
+
+    if (!isMaker) {
+      // Compute notional at current price for slippage limits.
+      // The contract checks minAmt1Out/maxAmt1In against raw swap USD deltas,
+      // not netMargin. The swap amount ≈ positionSize * markPrice.
+      const perpData = await context.getPerpData(rawData.perpId);
+      const positionSize = Number(
+        rawData.entryPerpDelta < 0n ? -rawData.entryPerpDelta : rawData.entryPerpDelta
+      );
+      const notionalAtClose = BigInt(Math.floor(positionSize * perpData.mark));
+      const isLong = rawData.entryPerpDelta > 0n;
+
+      const slippageBps = BigInt(Math.ceil(slippageTolerance * 10000));
+
+      if (isLong) {
+        // Long close: swap perps → USD. Contract checks min USD out.
+        contractParams = {
+          posId: positionId,
+          minAmt0Out: 0n,
+          minAmt1Out: notionalAtClose - (notionalAtClose * slippageBps) / 10000n,
+          maxAmt1In: 0n,
+        };
+      } else {
+        // Short close: swap USD → perps. Contract checks max USD in.
+        contractParams = {
+          posId: positionId,
+          minAmt0Out: 0n,
+          minAmt1Out: 0n,
+          maxAmt1In: notionalAtClose + (notionalAtClose * slippageBps) / 10000n,
+        };
+      }
+    }
+
+    const { request } = await context.publicClient.simulateContract({
+      address: context.deployments().perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: "closePosition",
+      args: [contractParams],
+      account: context.walletClient.account,
+      gas: 500000n,
+    });
+
+    const txHash = await context.walletClient.writeContract(request);
+    const receipt = await context.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
+
+    if (receipt.status === "reverted") {
+      throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    }
+
+    let newPositionId: bigint | null = null;
+    for (const log of receipt.logs) {
+      try {
+        const decoded = decodeEventLog({
+          abi: PERP_MANAGER_ABI,
+          data: log.data,
+          topics: log.topics,
+          eventName: "PositionOpened",
+        });
+        const eventPerpId = (decoded.args.perpId as string).toLowerCase();
+        const eventPosId = decoded.args.posId as bigint;
+        if (eventPerpId === perpId.toLowerCase() && eventPosId !== positionId) {
+          newPositionId = eventPosId;
+          break;
+        }
+      } catch (_e) {}
+    }
+
+    if (!newPositionId) {
+      return { position: null, txHash };
+    }
+
+    return {
+      position: {
+        perpId,
+        positionId: newPositionId,
+        liveDetails: await getPositionLiveDetailsFromContract(context, perpId, newPositionId),
+      },
+      txHash,
+    };
+  }, `closePositionWithQuote for position ${positionId}`);
+}
+
 // Functions that require context for operations
 export async function closePosition(
   context: PerpCityContext,
@@ -75,7 +228,9 @@ export async function closePosition(
     const txHash = await context.walletClient.writeContract(request);
 
     // Wait for transaction confirmation
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await context.publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
 
     // Check if transaction was successful
     if (receipt.status === "reverted") {
@@ -137,9 +292,9 @@ export async function getPositionLiveDetailsFromContract(
       abi: PERP_MANAGER_ABI,
       functionName: "quoteClosePosition" as any,
       args: [positionId],
-    })) as unknown as readonly [Hex, bigint, bigint, bigint, boolean, bigint];
+    })) as unknown as readonly [Hex, bigint, bigint, bigint, boolean];
 
-    // The result is a tuple: [unexpectedReason, pnl, funding, netMargin, wasLiquidated, notional]
+    // The result is a tuple: [unexpectedReason, pnl, funding, netMargin, wasLiquidated]
     const [unexpectedReason, pnl, funding, netMargin, wasLiquidated] = result;
 
     if (unexpectedReason !== "0x") {
@@ -261,5 +416,56 @@ export function calculateLiquidationPrice(
     // For shorts, liquidation happens when price rises
     const liqPrice = entryPrice + (rawData.margin - liqMarginRatio * entryNotional) / positionSize;
     return liqPrice;
+  }
+}
+
+export function calculatePnlPercentage(pnl: number, funding: number, margin: number): number {
+  const totalPnl = pnl + funding;
+  const initialMargin = margin - totalPnl;
+  if (initialMargin <= 0) return 0;
+  return (totalPnl / initialMargin) * 100;
+}
+
+/**
+ * Calculates ClosePositionParams for a position close, handling the difference
+ * between taker and maker positions.
+ *
+ * For taker positions, the contract checks minAmt1Out (for longs) or maxAmt1In
+ * (for shorts) against the raw USD swap delta — NOT netMargin. The swap amount
+ * corresponds to the position's notional value at current price, so slippage
+ * limits must be based on `notional`, not `expectedReturn`.
+ *
+ * For maker positions, the contract checks minAmt0Out and minAmt1Out against
+ * the raw token amounts from Uniswap liquidity removal. The split between
+ * perp tokens and USDC depends on where the current price sits in the LP range,
+ * and quoteClosePosition only returns the aggregate netMargin. Since we cannot
+ * predict the individual token amounts, both minimums are set to 0.
+ */
+export function calculateClosePositionParams(opts: {
+  isMaker: boolean;
+  isLong?: boolean;
+  notional: number;
+  slippagePercent: number;
+}): ClosePositionParams {
+  if (opts.isMaker) {
+    return { minAmt0Out: 0, minAmt1Out: 0, maxAmt1In: 0 };
+  }
+
+  const absNotional = Math.abs(opts.notional);
+
+  if (opts.isLong) {
+    // Long close: swap perps → USD. Contract checks minAmt1Out (min USD out).
+    return {
+      minAmt0Out: 0,
+      minAmt1Out: Math.max(0, absNotional * (1 - opts.slippagePercent / 100)),
+      maxAmt1In: 0,
+    };
+  } else {
+    // Short close: swap USD → perps. Contract checks maxAmt1In (max USD in).
+    return {
+      minAmt0Out: 0,
+      minAmt1Out: 0,
+      maxAmt1In: absNotional * (1 + opts.slippagePercent / 100),
+    };
   }
 }

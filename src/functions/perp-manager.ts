@@ -1,5 +1,5 @@
-import type { Hex } from "viem";
-import { decodeEventLog, erc20Abi } from "viem";
+import type { Address, Hex } from "viem";
+import { decodeErrorResult, decodeEventLog, erc20Abi } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import type { PerpCityContext } from "../context";
 import type {
@@ -7,6 +7,7 @@ import type {
   OpenMakerPositionParams,
   OpenTakerPositionParams,
   QuoteOpenMakerPositionResult,
+  QuoteTakerPositionResult,
 } from "../types/entity-data";
 import { MAX_TICK, MIN_TICK, NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
 import { approveUsdc } from "../utils/approve";
@@ -252,8 +253,8 @@ function alignMakerTicks(
   return calculateAlignedTicks(params.priceLower, params.priceUpper, tickSpacing);
 }
 
-const DEFAULT_MAKER_SLIPPAGE_TOLERANCE = 0.01;
-const MAX_UINT128 = 2n ** 128n - 1n;
+export const DEFAULT_MAKER_SLIPPAGE_TOLERANCE = 0.01;
+export const MAX_UINT128 = 2n ** 128n - 1n;
 
 export async function quoteOpenMakerPosition(
   context: PerpCityContext,
@@ -297,11 +298,35 @@ export async function quoteOpenMakerPosition(
   }, "quoteOpenMakerPosition");
 }
 
-function applySlippage(delta: bigint, slippageTolerance: number): bigint {
-  if (delta >= 0n) return 0n;
-  const absDelta = -delta;
+/**
+ * Computes maxAmtIn slippage limit from a quote delta.
+ *
+ * When delta < 0 (tokens need to go in), applies slippage tolerance to the
+ * absolute amount. When delta >= 0 (quote says no tokens needed), uses
+ * `fallbackRef` as a reference to compute a small buffer — this prevents
+ * reverts when price moves between quote and execution, shifting the token
+ * split so some amount of this token is now required.
+ */
+export function applySlippage(
+  delta: bigint,
+  slippageTolerance: number,
+  fallbackRef?: bigint
+): bigint {
   const slippageBps = BigInt(Math.ceil(slippageTolerance * 10000));
-  return absDelta + (absDelta * slippageBps) / 10000n;
+
+  if (delta < 0n) {
+    const absDelta = -delta;
+    return absDelta + (absDelta * slippageBps) / 10000n;
+  }
+
+  // delta >= 0: quote says no tokens sent in, but price may move.
+  // Use a fraction of the fallback reference as a buffer.
+  if (fallbackRef !== undefined && fallbackRef !== 0n) {
+    const absRef = fallbackRef < 0n ? -fallbackRef : fallbackRef;
+    return (absRef * slippageBps) / 10000n;
+  }
+
+  return 0n;
 }
 
 export async function openMakerPosition(
@@ -339,8 +364,10 @@ export async function openMakerPosition(
     } else {
       const quote = await quoteOpenMakerPosition(context, perpId, params);
       const slippage = params.slippageTolerance ?? DEFAULT_MAKER_SLIPPAGE_TOLERANCE;
-      maxAmt0In = applySlippage(quote.perpDelta, slippage);
-      maxAmt1In = applySlippage(quote.usdDelta, slippage);
+      // Pass the other delta as fallback: if one token has delta >= 0 (not needed),
+      // use the other token's delta to compute a small buffer for price movement.
+      maxAmt0In = applySlippage(quote.perpDelta, slippage, quote.usdDelta);
+      maxAmt1In = applySlippage(quote.usdDelta, slippage, quote.perpDelta);
     }
 
     // Approve USDC spending only if current allowance is insufficient
@@ -411,4 +438,139 @@ export async function openMakerPosition(
 
     return new OpenPosition(context, perpId, makerPosId, undefined, true, txHash);
   }, "openMakerPosition");
+}
+
+export async function quoteTakerPosition(
+  context: PerpCityContext,
+  perpId: Hex,
+  params: {
+    holder: Address;
+    isLong: boolean;
+    margin: number;
+    leverage: number;
+  }
+): Promise<QuoteTakerPositionResult> {
+  return withErrorHandling(async () => {
+    const marginScaled = scale6Decimals(params.margin);
+    const marginRatio = Math.floor(NUMBER_1E6 / params.leverage);
+
+    const result = await context.publicClient.simulateContract({
+      address: context.deployments().perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: "quoteOpenTakerPosition" as any,
+      args: [
+        perpId,
+        {
+          holder: params.holder,
+          isLong: params.isLong,
+          margin: marginScaled,
+          marginRatio,
+          unspecifiedAmountLimit: 0n,
+        },
+      ] as any,
+      account: params.holder,
+    });
+
+    const [unexpectedReason, perpDelta, usdDelta] = result.result as unknown as readonly [
+      Hex,
+      bigint,
+      bigint,
+    ];
+
+    if (unexpectedReason && unexpectedReason !== "0x") {
+      let errorName = "Quote simulation failed";
+      try {
+        const decoded = decodeErrorResult({
+          abi: PERP_MANAGER_ABI,
+          data: unexpectedReason,
+        });
+        errorName = decoded.errorName;
+      } catch {
+        // Could not decode, use generic name
+      }
+      throw new Error(errorName);
+    }
+
+    const absPerpDelta = perpDelta < 0n ? -perpDelta : perpDelta;
+    const absUsdDelta = usdDelta < 0n ? -usdDelta : usdDelta;
+
+    if (absPerpDelta === 0n) {
+      throw new Error("Zero position size");
+    }
+
+    const fillPrice = Number(absUsdDelta) / Number(absPerpDelta);
+
+    return { perpDelta, usdDelta, fillPrice };
+  }, "quoteTakerPosition");
+}
+
+export async function adjustMargin(
+  context: PerpCityContext,
+  positionId: bigint,
+  marginDelta: bigint
+): Promise<{ txHash: Hex }> {
+  return withErrorHandling(async () => {
+    const deployments = context.deployments();
+
+    if (marginDelta > 0n) {
+      const currentAllowance = await context.publicClient.readContract({
+        address: deployments.usdc,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [context.walletClient.account!.address, deployments.perpManager],
+        blockTag: "latest",
+      });
+      if (currentAllowance < marginDelta) {
+        await approveUsdc(context, marginDelta);
+      }
+    }
+
+    const { request } = await context.publicClient.simulateContract({
+      address: deployments.perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: "adjustMargin",
+      args: [{ posId: positionId, marginDelta }],
+      account: context.walletClient.account,
+    });
+
+    const txHash = await context.walletClient.writeContract(request);
+
+    return { txHash };
+  }, `adjustMargin for position ${positionId}`);
+}
+
+export async function adjustNotional(
+  context: PerpCityContext,
+  positionId: bigint,
+  perpDelta: bigint,
+  usdLimit: bigint
+): Promise<{ txHash: Hex }> {
+  return withErrorHandling(async () => {
+    const deployments = context.deployments();
+
+    if (perpDelta > 0n) {
+      const currentAllowance = await context.publicClient.readContract({
+        address: deployments.usdc,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [context.walletClient.account!.address, deployments.perpManager],
+        blockTag: "latest",
+      });
+      if (currentAllowance < usdLimit) {
+        await approveUsdc(context, usdLimit);
+      }
+    }
+
+    const { request } = await context.publicClient.simulateContract({
+      address: deployments.perpManager,
+      abi: PERP_MANAGER_ABI,
+      functionName: "adjustNotional",
+      args: [{ posId: positionId, perpDelta, usdLimit }],
+      account: context.walletClient.account,
+    });
+
+    const txHash = await context.walletClient.writeContract(request);
+
+    return { txHash };
+  }, `adjustNotional for position ${positionId}`);
 }

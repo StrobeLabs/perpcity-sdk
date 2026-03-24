@@ -1,7 +1,17 @@
-import { erc20Abi } from "viem";
+import { type Address, erc20Abi } from "viem";
 import type { PerpCityContext } from "../context";
 
 const DEFAULT_CONFIRMATIONS = 2;
+
+export async function getUsdcAllowance(context: PerpCityContext, owner: Address): Promise<bigint> {
+  const deployments = context.deployments();
+  return context.publicClient.readContract({
+    address: deployments.usdc,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [owner, deployments.perpManager],
+  }) as Promise<bigint>;
+}
 
 export async function approveUsdc(
   context: PerpCityContext,

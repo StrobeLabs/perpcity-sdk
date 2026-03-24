@@ -675,4 +675,16 @@ describe("PerpManager Position/Trading Errors", () => {
     expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
   });
+
+  it("should return a user-friendly slippage message for MinimumAmountInsufficient without args", () => {
+    const mockError = createMockContractError("MinimumAmountInsufficient", []);
+    const result = parseContractError(mockError);
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("MinimumAmountInsufficient");
+    expect(result.message).toContain("Slippage tolerance exceeded");
+    expect(result.message).not.toContain("undefined");
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
+  });
 });

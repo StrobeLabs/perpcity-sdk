@@ -92,6 +92,7 @@ export async function closePositionWithQuote(
   context: PerpCityContext,
   _perpId: Hex,
   positionId: bigint,
+  /** Slippage as a fraction, e.g. 0.01 = 1%. Compare with calculateClosePositionParams which uses percentage form (1 = 1%). */
   slippageTolerance: number = 0.01
 ): Promise<ClosePositionResult> {
   return withErrorHandling(async () => {
@@ -462,6 +463,7 @@ export function calculateClosePositionParams(opts: {
   isMaker: boolean;
   isLong?: boolean;
   notional: number;
+  /** Slippage as a percentage, e.g. 1 = 1%. Compare with closePositionWithQuote which uses fractional form (0.01 = 1%). */
   slippagePercent: number;
 }): ClosePositionParams {
   if (opts.isMaker) {

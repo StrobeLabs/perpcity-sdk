@@ -5,10 +5,7 @@ import type { PerpCityContext } from "../context";
 import type { PerpData } from "../types/entity-data";
 import { Q96 } from "../utils/constants";
 import { withErrorHandling } from "../utils/errors";
-import {
-  convertFundingPerSecondX96ToPercentPerDay,
-  convertFundingPerSecondX96ToPercentPerMinute,
-} from "../utils/funding";
+import { convertFundingDiffX96ToPercentPerPeriod } from "../utils/funding";
 
 const TWAVG_WINDOW = 3600; // 1 hour, matches Constants.sol TWAVG_WINDOW
 const INTERVAL = 86400n; // 1 day in seconds, matches Constants.sol INTERVAL
@@ -58,11 +55,15 @@ export async function getFundingRate(
     ]);
 
     const twAvgMarkX96 = (twAvgSqrtMarkX96 * twAvgSqrtMarkX96) / Q96;
-    const fundingPerSecondX96 = (twAvgMarkX96 - twAvgIndexX96) / INTERVAL;
+    // Defer INTERVAL division to avoid truncating small funding differentials.
+    // fundingDiffX96 = (mark - index) per INTERVAL period.
+    const fundingDiffX96 = twAvgMarkX96 - twAvgIndexX96;
+    // For rawX96 (per-second rate), divide here — callers expect per-second.
+    const fundingPerSecondX96 = fundingDiffX96 / INTERVAL;
 
     return {
-      ratePerDay: convertFundingPerSecondX96ToPercentPerDay(fundingPerSecondX96),
-      ratePerMinute: convertFundingPerSecondX96ToPercentPerMinute(fundingPerSecondX96),
+      ratePerDay: convertFundingDiffX96ToPercentPerPeriod(fundingDiffX96, INTERVAL, 86400n),
+      ratePerMinute: convertFundingDiffX96ToPercentPerPeriod(fundingDiffX96, INTERVAL, 60n),
       rawX96: fundingPerSecondX96,
     };
   }, `getFundingRate for perp ${perpId}`);

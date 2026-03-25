@@ -306,6 +306,11 @@ export async function quoteOpenMakerPosition(
  * `fallbackRef` as a reference to compute a small buffer — this prevents
  * reverts when price moves between quote and execution, shifting the token
  * split so some amount of this token is now required.
+ *
+ * Note: `fallbackRef` is intentionally the *other* leg's delta (cross-unit).
+ * It is only used as a rough magnitude reference for sizing a small buffer,
+ * not as a precise same-unit value. For maker positions the two legs are
+ * correlated in magnitude, so this heuristic produces a reasonable buffer.
  */
 export function applySlippage(
   delta: bigint,
@@ -451,6 +456,13 @@ export async function quoteTakerPosition(
   }
 ): Promise<QuoteTakerPositionResult> {
   return withErrorHandling(async () => {
+    if (params.margin <= 0) {
+      throw new Error("Margin must be greater than 0");
+    }
+    if (params.leverage <= 0) {
+      throw new Error("Leverage must be greater than 0");
+    }
+
     const marginScaled = scale6Decimals(params.margin);
     const marginRatio = Math.floor(NUMBER_1E6 / params.leverage);
 
@@ -549,6 +561,7 @@ export async function adjustNotional(
     const deployments = context.deployments();
 
     if (usdDelta > 0n) {
+      // Approve the USDC amount (usdDelta), not the perp-side limit
       const currentAllowance = await context.publicClient.readContract({
         address: deployments.usdc,
         abi: erc20Abi,
@@ -556,8 +569,8 @@ export async function adjustNotional(
         args: [context.walletClient.account!.address, deployments.perpManager],
         blockTag: "latest",
       });
-      if (currentAllowance < perpLimit) {
-        await approveUsdc(context, perpLimit);
+      if (currentAllowance < usdDelta) {
+        await approveUsdc(context, usdDelta);
       }
     }
 

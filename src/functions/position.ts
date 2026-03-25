@@ -57,7 +57,7 @@ export async function quoteClosePosition(
     const result = await context.publicClient.readContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: "quoteClosePosition" as "positions",
+      functionName: "quoteClosePosition" as any,
       args: [positionId],
     });
 
@@ -103,7 +103,7 @@ export async function closePositionWithQuote(
     const result = await context.publicClient.readContract({
       address: context.deployments().perpManager,
       abi: PERP_MANAGER_ABI,
-      functionName: "quoteClosePosition" as "positions",
+      functionName: "quoteClosePosition" as any,
       args: [positionId],
     });
 

@@ -542,13 +542,13 @@ export async function adjustMargin(
 export async function adjustNotional(
   context: PerpCityContext,
   positionId: bigint,
-  perpDelta: bigint,
-  usdLimit: bigint
+  usdDelta: bigint,
+  perpLimit: bigint
 ): Promise<{ txHash: Hex }> {
   return withErrorHandling(async () => {
     const deployments = context.deployments();
 
-    if (perpDelta > 0n) {
+    if (usdDelta > 0n) {
       const currentAllowance = await context.publicClient.readContract({
         address: deployments.usdc,
         abi: erc20Abi,
@@ -556,8 +556,8 @@ export async function adjustNotional(
         args: [context.walletClient.account!.address, deployments.perpManager],
         blockTag: "latest",
       });
-      if (currentAllowance < usdLimit) {
-        await approveUsdc(context, usdLimit);
+      if (currentAllowance < perpLimit) {
+        await approveUsdc(context, perpLimit);
       }
     }
 
@@ -565,7 +565,7 @@ export async function adjustNotional(
       address: deployments.perpManager,
       abi: PERP_MANAGER_ABI,
       functionName: "adjustNotional",
-      args: [{ posId: positionId, perpDelta, usdLimit }],
+      args: [{ posId: positionId, usdDelta, perpLimit }],
       account: context.walletClient.account,
     });
 

@@ -717,12 +717,12 @@ export const PERP_MANAGER_ABI = [
           },
           {
             internalType: "int256",
-            name: "perpDelta",
+            name: "usdDelta",
             type: "int256",
           },
           {
             internalType: "uint128",
-            name: "usdLimit",
+            name: "perpLimit",
             type: "uint128",
           },
         ],

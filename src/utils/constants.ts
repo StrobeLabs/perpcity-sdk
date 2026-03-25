@@ -7,3 +7,6 @@ export const MIN_TICK = -887272;
 export const MAX_TICK = 887272;
 export const MIN_PRICE = 1e-6;
 export const MAX_PRICE = 1e6;
+
+export const UINT256_MAX = (1n << 256n) - 1n;
+export const INT256_THRESHOLD = 1n << 255n;

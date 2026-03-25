@@ -318,7 +318,8 @@ function formatContractError(
 
     case "MinimumAmountInsufficient":
       return {
-        message: `Minimum amount not met. Required: ${args[0]}, Received: ${args[1]}`,
+        message:
+          "Slippage tolerance exceeded. The position's value moved unfavorably during execution. Try increasing your slippage tolerance.",
         debug: { source, category: ErrorCategory.USER_ERROR },
       };
 

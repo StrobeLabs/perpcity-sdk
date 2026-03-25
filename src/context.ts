@@ -22,7 +22,12 @@ import type {
   PositionRawData,
   UserData,
 } from "./types/entity-data";
-import { marginRatioToLeverage, sqrtPriceX96ToPrice } from "./utils";
+import {
+  marginRatioToLeverage,
+  priceToSqrtPriceX96,
+  sqrtPriceX96ToPrice,
+  uint256ToInt256,
+} from "./utils";
 import { withErrorHandling } from "./utils/errors";
 
 export class PerpCityContext {
@@ -169,9 +174,7 @@ export class PerpCityContext {
       // Calculate sqrtPriceX96 from mark price if available, otherwise use TWAP
       let sqrtPriceX96: bigint;
       if (markPrice) {
-        // Convert mark price to sqrtPriceX96 format
-        const sqrtPrice = Math.sqrt(markPrice);
-        sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * 2 ** 96));
+        sqrtPriceX96 = priceToSqrtPriceX96(markPrice);
       } else {
         // Fallback to TWAP with 1 second lookback
         sqrtPriceX96 = (await this.publicClient.readContract({
@@ -320,8 +323,9 @@ export class PerpCityContext {
 
       return {
         pnl: Number(formatUnits(pnl, 6)),
-        fundingPayment: Number(formatUnits(funding, 6)),
-        effectiveMargin: Number(formatUnits(netMargin, 6)),
+        // Negate so positive = user receives funding
+        fundingPayment: -Number(formatUnits(funding, 6)),
+        effectiveMargin: Number(formatUnits(uint256ToInt256(netMargin), 6)),
         isLiquidatable: wasLiquidated,
       };
     }, `fetchPositionLiveDetailsFromContract for position ${positionId}`);
@@ -389,16 +393,21 @@ export class PerpCityContext {
         bigint, // entryCumlBadDebtX96
         bigint, // entryCumlUtilizationX96
         { min: number; max: number; liq: number }, // marginRatios
-        unknown, // makerDetails (not needed for now)
+        { unlockTimestamp: bigint; tickLower: number; tickUpper: number } | null, // makerDetails
       ];
 
-      const [perpId, margin, entryPerpDelta, entryUsdDelta, , , , marginRatios] = resultArray;
+      const [perpId, margin, entryPerpDelta, entryUsdDelta, , , , marginRatios, makerDetailsRaw] =
+        resultArray;
 
       // Check if position exists (non-existent positions have zero perpId)
       const zeroPerpId = `0x${"0".repeat(64)}` as Hex;
       if (perpId === zeroPerpId) {
         throw new Error(`Position ${positionId} does not exist`);
       }
+
+      const isMaker =
+        makerDetailsRaw != null &&
+        (makerDetailsRaw.tickLower !== 0 || makerDetailsRaw.tickUpper !== 0);
 
       return {
         perpId,
@@ -411,6 +420,13 @@ export class PerpCityContext {
           max: Number(marginRatios.max),
           liq: Number(marginRatios.liq),
         },
+        makerDetails: isMaker
+          ? {
+              unlockTimestamp: Number(makerDetailsRaw.unlockTimestamp),
+              tickLower: makerDetailsRaw.tickLower,
+              tickUpper: makerDetailsRaw.tickUpper,
+            }
+          : null,
       };
     }, `getPositionRawData for position ${positionId}`);
   }

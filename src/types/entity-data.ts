@@ -36,9 +36,10 @@ export type OpenTakerPositionParams = {
   isLong: boolean; // true = long, false = short
   margin: number; // USDC amount in human units (e.g., 100 = $100)
   leverage: number; // Leverage multiplier (e.g., 2 = 2x)
-  unspecifiedAmountLimit: number | bigint; // Slippage protection
+  unspecifiedAmountLimit: number | bigint; // Slippage protection (perp token units)
   // - For longs: minimum perp tokens to receive (0 = no minimum)
   // - For shorts: maximum perp tokens to send (use 2n**128n-1n for no limit)
+  // Both refer to currency0 (perp tokens), not USD.
   // Can pass number (in human units) or bigint (raw value)
 };
 
@@ -99,6 +100,12 @@ export type MarginRatios = {
   liq: number; // Liquidation margin ratio (scaled by 1e6)
 };
 
+export type MakerDetails = {
+  unlockTimestamp: number;
+  tickLower: number;
+  tickUpper: number;
+};
+
 export type PositionRawData = {
   perpId: Hex;
   positionId: bigint;
@@ -106,6 +113,20 @@ export type PositionRawData = {
   entryPerpDelta: bigint; // Position size in perp tokens (raw)
   entryUsdDelta: bigint; // Entry notional value in USDC (raw)
   marginRatios: MarginRatios;
+  makerDetails: MakerDetails | null;
+};
+
+export type QuoteTakerPositionResult = {
+  perpDelta: bigint;
+  usdDelta: bigint;
+  fillPrice: number;
+};
+
+export type QuoteClosePositionResult = {
+  pnl: number;
+  funding: number;
+  netMargin: number;
+  wasLiquidated: boolean;
 };
 
 export type CacheConfig = {

@@ -2,7 +2,8 @@
   "name": "@strobelabs/perpcity-sdk",
   "author": "Strobe Labs",
   "description": "TypeScript SDK for interacting with Perp City contracts",
-  "version": "0.5.1",
+  "version": "0.6.0",
+  "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -11,8 +12,8 @@
   "publishConfig": {
     "access": "public"
   },
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist"

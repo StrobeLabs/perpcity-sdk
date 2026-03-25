@@ -405,34 +405,26 @@ export function calculateLeverage(positionValue: number, effectiveMargin: number
  */
 export function calculateLiquidationPrice(
   rawData: PositionRawData,
-  isLong: boolean
+  isLong: boolean,
+  effectiveMargin?: number
 ): number | null {
   const entryPrice = calculateEntryPrice(rawData);
   const positionSize = Math.abs(calculatePositionSize(rawData));
 
-  if (positionSize === 0 || rawData.margin <= 0) {
+  const margin = effectiveMargin ?? rawData.margin;
+
+  if (positionSize === 0 || margin <= 0) {
     return null;
   }
 
-  // Liquidation margin ratio is scaled by 1e6, convert to decimal
   const liqMarginRatio = rawData.marginRatios.liq / 1e6;
-
-  // Entry notional value
   const entryNotional = positionSize * entryPrice;
 
-  // Calculate price move that would trigger liquidation
-  // At liquidation: margin + pnl = liqMarginRatio * notional
-  // For long: margin + (liqPrice - entryPrice) * size = liqMarginRatio * liqPrice * size
-  // Solving: liqPrice = (margin + entryPrice * size) / (size * (1 + liqMarginRatio))
-  // Simplified: liqPrice = entryPrice - (margin - liqMarginRatio * entryNotional) / size
-
   if (isLong) {
-    // For longs, liquidation happens when price drops
-    const liqPrice = entryPrice - (rawData.margin - liqMarginRatio * entryNotional) / positionSize;
+    const liqPrice = entryPrice - (margin - liqMarginRatio * entryNotional) / positionSize;
     return Math.max(0, liqPrice);
   } else {
-    // For shorts, liquidation happens when price rises
-    const liqPrice = entryPrice + (rawData.margin - liqMarginRatio * entryNotional) / positionSize;
+    const liqPrice = entryPrice + (margin - liqMarginRatio * entryNotional) / positionSize;
     return liqPrice;
   }
 }

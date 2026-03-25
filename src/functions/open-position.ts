@@ -3,7 +3,7 @@ import { decodeEventLog, formatUnits } from "viem";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import type { PerpCityContext } from "../context";
 import type { ClosePositionParams, ClosePositionResult, LiveDetails } from "../types/entity-data";
-import { scale6Decimals } from "../utils";
+import { scale6Decimals, uint256ToInt256 } from "../utils";
 import { withErrorHandling } from "../utils/errors";
 
 export class OpenPosition {
@@ -153,7 +153,7 @@ export class OpenPosition {
       return {
         pnl: Number(formatUnits(pnl, 6)),
         fundingPayment: Number(formatUnits(funding, 6)),
-        effectiveMargin: Number(formatUnits(netMargin, 6)),
+        effectiveMargin: Number(formatUnits(uint256ToInt256(netMargin), 6)),
         isLiquidatable: wasLiquidated,
       };
     }, `liveDetails for position ${this.positionId}`);

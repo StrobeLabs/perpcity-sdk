@@ -1,4 +1,12 @@
-import { BIGINT_1E6, MAX_PRICE, MIN_PRICE, NUMBER_1E6, Q96 } from "./constants";
+import {
+  BIGINT_1E6,
+  INT256_THRESHOLD,
+  MAX_PRICE,
+  MIN_PRICE,
+  NUMBER_1E6,
+  Q96,
+  UINT256_MAX,
+} from "./constants";
 
 export function priceToSqrtPriceX96(price: number): bigint {
   if (price <= 0) {
@@ -54,6 +62,18 @@ export function priceToTick(price: number, roundDown: boolean): number {
 
 export function tickToPrice(tick: number): number {
   return 1.0001 ** tick;
+}
+
+/**
+ * Interprets a uint256 as int256 if it exceeds 2^255 (unsigned underflow).
+ * The contract returns netMargin as uint256, but it can underflow when
+ * the effective margin is negative (position is underwater).
+ */
+export function uint256ToInt256(value: bigint): bigint {
+  if (value >= INT256_THRESHOLD) {
+    return value - UINT256_MAX - 1n;
+  }
+  return value;
 }
 
 export function sqrtPriceX96ToPrice(sqrtPriceX96: bigint): number {

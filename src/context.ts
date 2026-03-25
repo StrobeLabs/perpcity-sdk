@@ -22,7 +22,12 @@ import type {
   PositionRawData,
   UserData,
 } from "./types/entity-data";
-import { marginRatioToLeverage, priceToSqrtPriceX96, sqrtPriceX96ToPrice } from "./utils";
+import {
+  marginRatioToLeverage,
+  priceToSqrtPriceX96,
+  sqrtPriceX96ToPrice,
+  uint256ToInt256,
+} from "./utils";
 import { withErrorHandling } from "./utils/errors";
 
 export class PerpCityContext {
@@ -318,8 +323,9 @@ export class PerpCityContext {
 
       return {
         pnl: Number(formatUnits(pnl, 6)),
-        fundingPayment: Number(formatUnits(funding, 6)),
-        effectiveMargin: Number(formatUnits(netMargin, 6)),
+        // Negate so positive = user receives funding
+        fundingPayment: -Number(formatUnits(funding, 6)),
+        effectiveMargin: Number(formatUnits(uint256ToInt256(netMargin), 6)),
         isLiquidatable: wasLiquidated,
       };
     }, `fetchPositionLiveDetailsFromContract for position ${positionId}`);

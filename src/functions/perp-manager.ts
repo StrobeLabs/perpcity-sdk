@@ -465,7 +465,7 @@ export async function quoteTakerPosition(
           isLong: params.isLong,
           margin: marginScaled,
           marginRatio,
-          unspecifiedAmountLimit: 0n,
+          unspecifiedAmountLimit: params.isLong ? 0n : (1n << 128n) - 1n,
         },
       ] as any,
       account: params.holder,

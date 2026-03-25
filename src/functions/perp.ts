@@ -3,11 +3,15 @@ import { BEACON_ABI } from "../abis/beacon";
 import { PERP_MANAGER_ABI } from "../abis/perp-manager";
 import type { PerpCityContext } from "../context";
 import type { PerpData } from "../types/entity-data";
+import { Q96 } from "../utils/constants";
 import { withErrorHandling } from "../utils/errors";
 import {
   convertFundingPerSecondX96ToPercentPerDay,
   convertFundingPerSecondX96ToPercentPerMinute,
 } from "../utils/funding";
+
+const TWAVG_WINDOW = 3600; // 1 hour, matches Constants.sol TWAVG_WINDOW
+const INTERVAL = 86400n; // 1 day in seconds, matches Constants.sol INTERVAL
 
 // Pure functions that operate on PerpData
 export function getPerpMark(perpData: PerpData): number {
@@ -35,17 +39,31 @@ export async function getFundingRate(
   perpId: Hex
 ): Promise<{ ratePerDay: number; ratePerMinute: number; rawX96: bigint }> {
   return withErrorHandling(async () => {
-    const fundingX96 = (await context.publicClient.readContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "fundingPerSecondX96",
-      args: [perpId],
-    })) as bigint;
+    const perpManagerAddr = context.deployments().perpManager;
+    const cfg = await context.getPerpConfig(perpId);
+
+    const [twAvgSqrtMarkX96, twAvgIndexX96] = await Promise.all([
+      context.publicClient.readContract({
+        address: perpManagerAddr,
+        abi: PERP_MANAGER_ABI,
+        functionName: "timeWeightedAvgSqrtPriceX96",
+        args: [perpId, TWAVG_WINDOW],
+      }) as Promise<bigint>,
+      context.publicClient.readContract({
+        address: cfg.beacon,
+        abi: BEACON_ABI,
+        functionName: "twAvg",
+        args: [TWAVG_WINDOW],
+      }) as Promise<bigint>,
+    ]);
+
+    const twAvgMarkX96 = (twAvgSqrtMarkX96 * twAvgSqrtMarkX96) / Q96;
+    const fundingPerSecondX96 = (twAvgMarkX96 - twAvgIndexX96) / INTERVAL;
 
     return {
-      ratePerDay: convertFundingPerSecondX96ToPercentPerDay(fundingX96),
-      ratePerMinute: convertFundingPerSecondX96ToPercentPerMinute(fundingX96),
-      rawX96: fundingX96,
+      ratePerDay: convertFundingPerSecondX96ToPercentPerDay(fundingPerSecondX96),
+      ratePerMinute: convertFundingPerSecondX96ToPercentPerMinute(fundingPerSecondX96),
+      rawX96: fundingPerSecondX96,
     };
   }, `getFundingRate for perp ${perpId}`);
 }

@@ -9,7 +9,7 @@ import type {
   PositionRawData,
   QuoteClosePositionResult,
 } from "../types/entity-data";
-import { scale6Decimals } from "../utils";
+import { scale6Decimals, uint256ToInt256 } from "../utils";
 import { withErrorHandling } from "../utils/errors";
 
 // Pure functions that operate on OpenPositionData
@@ -80,8 +80,9 @@ export async function quoteClosePosition(
 
     return {
       pnl: Number(formatUnits(pnl, 6)),
+      // Negate so positive = user receives funding, matching live details convention
       funding: -Number(formatUnits(funding, 6)),
-      netMargin: Number(formatUnits(netMargin, 6)),
+      netMargin: Number(formatUnits(uint256ToInt256(netMargin), 6)),
       wasLiquidated,
     };
   }, `quoteClosePosition for position ${positionId}`);
@@ -105,7 +106,13 @@ export async function closePositionWithQuote(
       args: [positionId],
     });
 
-    const [unexpectedReason] = result as unknown as readonly [Hex, bigint, bigint, bigint, boolean];
+    const [unexpectedReason, quotePnl] = result as unknown as readonly [
+      Hex,
+      bigint,
+      bigint,
+      bigint,
+      boolean,
+    ];
 
     if (unexpectedReason && unexpectedReason !== "0x") {
       throw new Error("Quote failed — position may be invalid or already closed");
@@ -121,33 +128,36 @@ export async function closePositionWithQuote(
     const canonicalPerpId = rawData.perpId;
 
     if (!isMaker) {
-      // Compute notional at current price for slippage limits.
-      // The contract checks minAmt1Out/maxAmt1In against raw swap USD deltas,
-      // not netMargin. The swap amount ≈ positionSize * markPrice.
-      const perpData = await context.getPerpData(canonicalPerpId);
-      const absPerpDelta =
-        rawData.entryPerpDelta < 0n ? -rawData.entryPerpDelta : rawData.entryPerpDelta;
-      const positionSize = Number(absPerpDelta);
-      const notionalAtClose = BigInt(Math.floor(positionSize * perpData.mark));
       const isLong = rawData.entryPerpDelta > 0n;
-
       const slippageBps = BigInt(Math.ceil(slippageTolerance * 10000));
 
+      // Derive the actual swap cost/revenue from the quote simulation.
+      // The quote already accounts for AMM price impact, so slippage
+      // only needs to cover price movement between quote and execution.
+      const absEntryUsd =
+        rawData.entryUsdDelta < 0n ? -rawData.entryUsdDelta : rawData.entryUsdDelta;
+
       if (isLong) {
-        // Long close: swap perps → USD. Contract checks min USD out.
+        // Long close: sell perps for USD. Revenue = pnl + entryNotional.
+        // entryUsdDelta < 0 for longs (paid USDC), so absEntryUsd = |entryUsdDelta|.
+        const swapRevenue = quotePnl + absEntryUsd;
+        const minOut = swapRevenue > 0n ? swapRevenue - (swapRevenue * slippageBps) / 10000n : 0n;
         contractParams = {
           posId: positionId,
           minAmt0Out: 0n,
-          minAmt1Out: notionalAtClose - (notionalAtClose * slippageBps) / 10000n,
+          minAmt1Out: minOut,
           maxAmt1In: 0n,
         };
       } else {
-        // Short close: swap USD → perps. Contract checks max USD in.
+        // Short close: buy back perps with USD. Cost = entryNotional - pnl.
+        // entryUsdDelta > 0 for shorts (received USDC), so absEntryUsd = entryUsdDelta.
+        const swapCost = absEntryUsd - quotePnl;
+        const maxIn = swapCost > 0n ? swapCost + (swapCost * slippageBps) / 10000n : 0n;
         contractParams = {
           posId: positionId,
           minAmt0Out: 0n,
           minAmt1Out: 0n,
-          maxAmt1In: notionalAtClose + (notionalAtClose * slippageBps) / 10000n,
+          maxAmt1In: maxIn,
         };
       }
     }
@@ -313,7 +323,7 @@ export async function getPositionLiveDetailsFromContract(
       pnl: Number(formatUnits(pnl, 6)),
       // Negate so positive = user receives funding, matching quoteClosePosition convention
       fundingPayment: -Number(formatUnits(funding, 6)),
-      effectiveMargin: Number(formatUnits(netMargin, 6)),
+      effectiveMargin: Number(formatUnits(uint256ToInt256(netMargin), 6)),
       isLiquidatable: wasLiquidated,
     };
   }, `getPositionLiveDetailsFromContract for position ${positionId}`);

@@ -11,7 +11,7 @@ describe("Trading Operations Integration Tests", () => {
   beforeAll(async () => {
     setup = await setupAnvil();
     context = setup.context;
-  }, 30000);
+  }, 60000);
 
   afterAll(() => {
     setup?.cleanup();

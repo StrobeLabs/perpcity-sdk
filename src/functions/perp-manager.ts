@@ -1,12 +1,12 @@
 import type { Address, Hex } from "viem";
-import { decodeErrorResult, decodeEventLog, erc20Abi } from "viem";
-import { PERP_MANAGER_ABI } from "../abis/perp-manager";
+import { decodeAbiParameters, decodeEventLog, erc20Abi, keccak256, toBytes } from "viem";
+import { PERP_ABI } from "../abis/perp";
+import { PERP_FACTORY_ABI } from "../abis/perp-factory";
 import type { PerpCityContext } from "../context";
 import type {
   CreatePerpParams,
   OpenMakerPositionParams,
   OpenTakerPositionParams,
-  QuoteOpenMakerPositionResult,
   QuoteTakerPositionResult,
 } from "../types/entity-data";
 import { MAX_TICK, MIN_TICK, NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
@@ -14,62 +14,72 @@ import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
 import { OpenPosition } from "./open-position";
 
+const MAKER_OPENED_TOPIC = keccak256(toBytes("MakerOpened(uint256)"));
+const TAKER_OPENED_TOPIC = keccak256(
+  toBytes("TakerOpened(uint256,(int256,uint256,int256,uint256,uint256,uint256,uint256))")
+);
+
 export async function createPerp(context: PerpCityContext, params: CreatePerpParams): Promise<Hex> {
   return withErrorHandling(async () => {
     const deployments = context.deployments();
+    const perpFactory = deployments.perpFactory;
+    if (!perpFactory) throw new Error("perpFactory deployment address is required");
 
-    // Use params if provided, otherwise fall back to deployment config
-    const fees = params.fees ?? deployments.feesModule;
-    const marginRatios = params.marginRatios ?? deployments.marginRatiosModule;
-    const lockupPeriod = params.lockupPeriod ?? deployments.lockupPeriodModule;
-    const sqrtPriceImpactLimit =
-      params.sqrtPriceImpactLimit ?? deployments.sqrtPriceImpactLimitModule;
-
-    if (!fees || !marginRatios || !lockupPeriod || !sqrtPriceImpactLimit) {
-      throw new Error("Module addresses must be provided either in params or deployment config");
-    }
-
-    const contractParams = {
+    const modules = {
       beacon: params.beacon,
-      fees,
-      marginRatios,
-      lockupPeriod,
-      sqrtPriceImpactLimit,
+      fees: params.fees ?? deployments.feesModule,
+      funding: params.funding ?? deployments.fundingModule,
+      marginRatios: params.marginRatios ?? deployments.marginRatiosModule,
+      priceImpact: params.priceImpact ?? deployments.priceImpactModule,
+      pricing: params.pricing ?? deployments.pricingModule,
     };
 
+    if (
+      !modules.fees ||
+      !modules.funding ||
+      !modules.marginRatios ||
+      !modules.priceImpact ||
+      !modules.pricing
+    ) {
+      throw new Error("All module addresses must be provided in params or deployment config");
+    }
+
     const { request } = await context.publicClient.simulateContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
+      address: perpFactory,
+      abi: PERP_FACTORY_ABI,
       functionName: "createPerp",
-      args: [contractParams],
+      args: [
+        params.owner,
+        params.name,
+        params.symbol,
+        params.tokenUri,
+        modules as {
+          beacon: Address;
+          fees: Address;
+          funding: Address;
+          marginRatios: Address;
+          priceImpact: Address;
+          pricing: Address;
+        },
+        params.emaWindow,
+        params.salt,
+      ],
       account: context.walletClient.account,
     });
 
-    // Execute the transaction
     const txHash = await context.walletClient.writeContract(request);
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
 
-    // Wait for transaction confirmation
-    const receipt = await context.publicClient.waitForTransactionReceipt({
-      hash: txHash,
-    });
-
-    // Check if transaction was successful
-    if (receipt.status === "reverted") {
-      throw new Error(`Transaction reverted. Hash: ${txHash}`);
-    }
-
-    // Extract perpId from PerpCreated event
     for (const log of receipt.logs) {
       try {
         const decoded = decodeEventLog({
-          abi: PERP_MANAGER_ABI,
+          abi: PERP_FACTORY_ABI,
           data: log.data,
           topics: log.topics,
           eventName: "PerpCreated",
         });
-
-        // Return the perpId from the event
-        return decoded.args.perpId as Hex;
+        return decoded.args.perp as Hex;
       } catch (_e) {}
     }
 
@@ -77,122 +87,104 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
   }, "createPerp");
 }
 
+export function derivePerpDelta(opts: {
+  margin: number;
+  leverage: number;
+  price: number;
+  isLong: boolean;
+}): bigint {
+  if (opts.margin <= 0) throw new Error("Margin must be greater than 0");
+  if (opts.leverage <= 0) throw new Error("Leverage must be greater than 0");
+  if (opts.price <= 0) throw new Error("Price must be greater than 0");
+
+  const marginScaled = scale6Decimals(opts.margin);
+  const leverageScaled = BigInt(Math.floor(opts.leverage * NUMBER_1E6));
+  const priceScaled = scale6Decimals(opts.price);
+  const notional = (marginScaled * leverageScaled) / BigInt(NUMBER_1E6);
+  const perpSize = (notional * BigInt(NUMBER_1E6)) / priceScaled;
+  return opts.isLong ? perpSize : -perpSize;
+}
+
+async function ensureUsdcAllowance(
+  context: PerpCityContext,
+  spender: Address,
+  requiredAmount: bigint
+): Promise<void> {
+  const account = context.walletClient.account?.address;
+  if (!account) throw new Error("Wallet account is required");
+
+  const currentAllowance = await context.publicClient.readContract({
+    address: context.deployments().usdc,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [account, spender],
+    blockTag: "latest",
+  });
+  if (currentAllowance < requiredAmount) {
+    await approveUsdc(context, requiredAmount, 2, spender);
+  }
+}
+
 export async function openTakerPosition(
   context: PerpCityContext,
-  perpId: Hex,
+  perpAddress: Hex,
   params: OpenTakerPositionParams
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
-    // Validate inputs
-    if (params.margin <= 0) {
-      throw new Error("Margin must be greater than 0");
-    }
-    if (params.leverage <= 0) {
-      throw new Error("Leverage must be greater than 0");
-    }
+    if (params.margin <= 0) throw new Error("Margin must be greater than 0");
+    if (params.leverage <= 0) throw new Error("Leverage must be greater than 0");
 
-    // Convert margin to 6-decimal scaled bigint
     const marginScaled = scale6Decimals(params.margin);
+    await ensureUsdcAllowance(context, perpAddress, marginScaled);
 
-    // Calculate margin ratio by inverting leverage
-    const marginRatio = Math.floor(NUMBER_1E6 / params.leverage);
-
-    // Calculate total approval amount: margin + fees
-    // Fees are percentages of notional (= margin * leverage)
-    const perpData = await context.getPerpData(perpId);
-    const { creatorFee, insuranceFee, lpFee } = perpData.fees;
-
-    const protocolFeeRaw = await context.publicClient.readContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "protocolFee",
-    });
-    const protocolFeeRate = Number(protocolFeeRaw) / NUMBER_1E6;
-
-    const notional = (marginScaled * BigInt(NUMBER_1E6)) / BigInt(marginRatio);
-    const totalFeeRate = creatorFee + insuranceFee + lpFee + protocolFeeRate;
-    const totalFees = BigInt(Math.ceil(Number(notional) * totalFeeRate));
-
-    const requiredAmount = marginScaled + totalFees;
-    const currentAllowance = await context.publicClient.readContract({
-      address: context.deployments().usdc,
-      abi: erc20Abi,
-      functionName: "allowance",
-      args: [context.walletClient.account!.address, context.deployments().perpManager],
-      blockTag: "latest",
-    });
-    if (currentAllowance < requiredAmount) {
-      await approveUsdc(context, requiredAmount);
-    }
-
-    // Handle unspecifiedAmountLimit - can be number (human units) or bigint (raw value)
-    const unspecifiedAmountLimit =
-      typeof params.unspecifiedAmountLimit === "bigint"
+    const perpData = await context.getPerpData(perpAddress);
+    const perpDelta =
+      params.perpDelta ??
+      derivePerpDelta({
+        margin: params.margin,
+        leverage: params.leverage,
+        price: perpData.mark,
+        isLong: params.isLong,
+      });
+    const amt1Limit =
+      params.amt1Limit ??
+      (typeof params.unspecifiedAmountLimit === "bigint"
         ? params.unspecifiedAmountLimit
-        : scale6Decimals(params.unspecifiedAmountLimit);
+        : scale6Decimals(params.unspecifiedAmountLimit));
 
-    // Prepare contract parameters - deployed contract requires holder address
-    const contractParams = {
-      holder: context.walletClient.account!.address,
-      isLong: params.isLong,
-      margin: marginScaled,
-      marginRatio: marginRatio,
-      unspecifiedAmountLimit,
-    };
-
-    // Simulate transaction - deployed contract uses openTakerPos
     const { request } = await context.publicClient.simulateContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "openTakerPos" as any,
-      args: [perpId, contractParams],
+      address: perpAddress,
+      abi: PERP_ABI,
+      functionName: "openTaker",
+      args: [
+        {
+          holder: context.walletClient.account!.address,
+          margin: marginScaled,
+          perpDelta,
+          amt1Limit,
+        },
+      ],
       account: context.walletClient.account,
     });
 
-    // Execute transaction
     const txHash = await context.walletClient.writeContract(request);
-
-    // Wait for confirmation
-    const receipt = await context.publicClient.waitForTransactionReceipt({
-      hash: txHash,
-    });
-
-    // Verify success
-    if (receipt.status === "reverted") {
-      throw new Error(`Transaction reverted. Hash: ${txHash}`);
-    }
-
-    // Extract takerPosId from PositionOpened event
-    let takerPosId: bigint | null = null;
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
 
     for (const log of receipt.logs) {
       try {
-        // Don't specify eventName - let viem auto-detect from ABI
-        const decoded = decodeEventLog({
-          abi: PERP_MANAGER_ABI,
-          data: log.data,
-          topics: log.topics,
-        });
-
-        // Check if this is a PositionOpened event for our perpId and it's a taker
-        // Note: perpId from events is lowercased, so normalize both for comparison
         if (
-          decoded.eventName === "PositionOpened" &&
-          (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
-          !decoded.args.isMaker
+          log.address.toLowerCase() !== perpAddress.toLowerCase() ||
+          log.topics[0] !== TAKER_OPENED_TOPIC ||
+          log.data === "0x"
         ) {
-          takerPosId = decoded.args.posId as bigint;
-          break;
+          continue;
         }
+        const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
+        return new OpenPosition(context, perpAddress, posId, params.isLong, false, txHash);
       } catch (_e) {}
     }
-
-    if (!takerPosId) {
-      throw new Error(`PositionOpened event not found in transaction receipt. Hash: ${txHash}`);
-    }
-
-    // Return OpenPosition instance with transaction hash
-    return new OpenPosition(context, perpId, takerPosId, params.isLong, false, txHash);
+    throw new Error(`TakerOpened event not found in transaction receipt. Hash: ${txHash}`);
   }, "openTakerPosition");
 }
 
@@ -208,9 +200,9 @@ function buildMakerContractParams(
   return {
     holder: context.walletClient.account!.address,
     margin: marginScaled,
-    liquidity: params.liquidity,
     tickLower: alignedTickLower,
     tickUpper: alignedTickUpper,
+    liquidity: params.liquidity,
     maxAmt0In,
     maxAmt1In,
   };
@@ -246,72 +238,9 @@ export function calculateAlignedTicks(
   return { alignedTickLower, alignedTickUpper };
 }
 
-function alignMakerTicks(
-  params: OpenMakerPositionParams,
-  tickSpacing: number
-): { alignedTickLower: number; alignedTickUpper: number } {
-  return calculateAlignedTicks(params.priceLower, params.priceUpper, tickSpacing);
-}
-
 export const DEFAULT_MAKER_SLIPPAGE_TOLERANCE = 0.01;
 export const MAX_UINT128 = 2n ** 128n - 1n;
 
-export async function quoteOpenMakerPosition(
-  context: PerpCityContext,
-  perpId: Hex,
-  params: OpenMakerPositionParams
-): Promise<QuoteOpenMakerPositionResult> {
-  return withErrorHandling(async () => {
-    if (params.margin <= 0) {
-      throw new Error("Margin must be greater than 0");
-    }
-    if (params.priceLower >= params.priceUpper) {
-      throw new Error("priceLower must be less than priceUpper");
-    }
-
-    const marginScaled = scale6Decimals(params.margin);
-    const perpData = await context.getPerpData(perpId);
-    const { alignedTickLower, alignedTickUpper } = alignMakerTicks(params, perpData.tickSpacing);
-
-    const contractParams = buildMakerContractParams(
-      context,
-      marginScaled,
-      params,
-      alignedTickLower,
-      alignedTickUpper,
-      MAX_UINT128,
-      MAX_UINT128
-    );
-
-    const [unexpectedReason, perpDelta, usdDelta] = (await context.publicClient.readContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "quoteOpenMakerPosition" as any,
-      args: [perpId, contractParams] as any,
-    })) as unknown as readonly [string, bigint, bigint];
-
-    if (unexpectedReason !== "0x") {
-      throw new Error(`Quote failed: ${unexpectedReason}`);
-    }
-
-    return { perpDelta, usdDelta };
-  }, "quoteOpenMakerPosition");
-}
-
-/**
- * Computes maxAmtIn slippage limit from a quote delta.
- *
- * When delta < 0 (tokens need to go in), applies slippage tolerance to the
- * absolute amount. When delta >= 0 (quote says no tokens needed), uses
- * `fallbackRef` as a reference to compute a small buffer — this prevents
- * reverts when price moves between quote and execution, shifting the token
- * split so some amount of this token is now required.
- *
- * Note: `fallbackRef` is intentionally the *other* leg's delta (cross-unit).
- * It is only used as a rough magnitude reference for sizing a small buffer,
- * not as a precise same-unit value. For maker positions the two legs are
- * correlated in magnitude, so this heuristic produces a reasonable buffer.
- */
 export function applySlippage(
   delta: bigint,
   slippageTolerance: number,
@@ -324,8 +253,6 @@ export function applySlippage(
     return absDelta + (absDelta * slippageBps) / 10000n;
   }
 
-  // delta >= 0: quote says no tokens sent in, but price may move.
-  // Use a fraction of the fallback reference as a buffer.
   if (fallbackRef !== undefined && fallbackRef !== 0n) {
     const absRef = fallbackRef < 0n ? -fallbackRef : fallbackRef;
     return (absRef * slippageBps) / 10000n;
@@ -336,58 +263,38 @@ export function applySlippage(
 
 export async function openMakerPosition(
   context: PerpCityContext,
-  perpId: Hex,
+  perpAddress: Hex,
   params: OpenMakerPositionParams
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
-    if (params.margin <= 0) {
-      throw new Error("Margin must be greater than 0");
-    }
-    if (params.priceLower >= params.priceUpper) {
+    if (params.margin <= 0) throw new Error("Margin must be greater than 0");
+    if (params.priceLower >= params.priceUpper)
       throw new Error("priceLower must be less than priceUpper");
-    }
 
     const marginScaled = scale6Decimals(params.margin);
-    const perpData = await context.getPerpData(perpId);
-    const { alignedTickLower, alignedTickUpper } = alignMakerTicks(params, perpData.tickSpacing);
+    const perpData = await context.getPerpData(perpAddress);
+    const { alignedTickLower, alignedTickUpper } = calculateAlignedTicks(
+      params.priceLower,
+      params.priceUpper,
+      perpData.tickSpacing
+    );
 
     let maxAmt0In: bigint;
     let maxAmt1In: bigint;
-
     if ((params.maxAmt0In === undefined) !== (params.maxAmt1In === undefined)) {
-      throw new Error(
-        "Both maxAmt0In and maxAmt1In must be provided together or neither. " +
-          "Omit both to use automatic quote-based slippage calculation."
-      );
+      throw new Error("Both maxAmt0In and maxAmt1In must be provided together or neither.");
     }
-
     if (params.maxAmt0In !== undefined && params.maxAmt1In !== undefined) {
       maxAmt0In =
         typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
       maxAmt1In =
         typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
     } else {
-      const quote = await quoteOpenMakerPosition(context, perpId, params);
-      const slippage = params.slippageTolerance ?? DEFAULT_MAKER_SLIPPAGE_TOLERANCE;
-      // Pass the other delta as fallback: if one token has delta >= 0 (not needed),
-      // use the other token's delta to compute a small buffer for price movement.
-      maxAmt0In = applySlippage(quote.perpDelta, slippage, quote.usdDelta);
-      maxAmt1In = applySlippage(quote.usdDelta, slippage, quote.perpDelta);
+      maxAmt0In = MAX_UINT128;
+      maxAmt1In = MAX_UINT128;
     }
 
-    // Approve USDC spending only if current allowance is insufficient
-    // maxAmt1In is a slippage limit, not the actual amount needed
-    // For positions below current price, only margin is deposited
-    const currentAllowance = await context.publicClient.readContract({
-      address: context.deployments().usdc,
-      abi: erc20Abi,
-      functionName: "allowance",
-      args: [context.walletClient.account!.address, context.deployments().perpManager],
-      blockTag: "latest",
-    });
-    if (currentAllowance < marginScaled) {
-      await approveUsdc(context, marginScaled);
-    }
+    await ensureUsdcAllowance(context, perpAddress, marginScaled);
 
     const contractParams = buildMakerContractParams(
       context,
@@ -400,54 +307,37 @@ export async function openMakerPosition(
     );
 
     const { request } = await context.publicClient.simulateContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "openMakerPos" as any,
-      args: [perpId, contractParams],
+      address: perpAddress,
+      abi: PERP_ABI,
+      functionName: "openMaker",
+      args: [contractParams],
       account: context.walletClient.account,
     });
 
     const txHash = await context.walletClient.writeContract(request);
-    const receipt = await context.publicClient.waitForTransactionReceipt({
-      hash: txHash,
-    });
-
-    if (receipt.status === "reverted") {
-      throw new Error(`Transaction reverted. Hash: ${txHash}`);
-    }
-
-    let makerPosId: bigint | null = null;
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
 
     for (const log of receipt.logs) {
       try {
-        const decoded = decodeEventLog({
-          abi: PERP_MANAGER_ABI,
-          data: log.data,
-          topics: log.topics,
-        });
-
         if (
-          decoded.eventName === "PositionOpened" &&
-          (decoded.args.perpId as string).toLowerCase() === perpId.toLowerCase() &&
-          decoded.args.isMaker
+          log.address.toLowerCase() !== perpAddress.toLowerCase() ||
+          log.topics[0] !== MAKER_OPENED_TOPIC ||
+          log.data === "0x"
         ) {
-          makerPosId = decoded.args.posId as bigint;
-          break;
+          continue;
         }
+        const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
+        return new OpenPosition(context, perpAddress, posId, undefined, true, txHash);
       } catch (_e) {}
     }
-
-    if (!makerPosId) {
-      throw new Error(`PositionOpened event not found in transaction receipt. Hash: ${txHash}`);
-    }
-
-    return new OpenPosition(context, perpId, makerPosId, undefined, true, txHash);
+    throw new Error(`MakerOpened event not found in transaction receipt. Hash: ${txHash}`);
   }, "openMakerPosition");
 }
 
 export async function quoteTakerPosition(
   context: PerpCityContext,
-  perpId: Hex,
+  perpAddress: Hex,
   params: {
     holder: Address;
     isLong: boolean;
@@ -456,134 +346,91 @@ export async function quoteTakerPosition(
   }
 ): Promise<QuoteTakerPositionResult> {
   return withErrorHandling(async () => {
-    if (params.margin <= 0) {
-      throw new Error("Margin must be greater than 0");
-    }
-    if (params.leverage <= 0) {
-      throw new Error("Leverage must be greater than 0");
-    }
-
-    const marginScaled = scale6Decimals(params.margin);
-    const marginRatio = Math.floor(NUMBER_1E6 / params.leverage);
-
-    const result = await context.publicClient.simulateContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "quoteOpenTakerPosition" as any,
-      args: [
-        perpId,
-        {
-          holder: params.holder,
-          isLong: params.isLong,
-          margin: marginScaled,
-          marginRatio,
-          unspecifiedAmountLimit: params.isLong ? 0n : (1n << 128n) - 1n,
-        },
-      ] as any,
-      account: params.holder,
+    const perpData = await context.getPerpData(perpAddress);
+    const perpDelta = derivePerpDelta({
+      margin: params.margin,
+      leverage: params.leverage,
+      price: perpData.mark,
+      isLong: params.isLong,
     });
-
-    const [unexpectedReason, perpDelta, usdDelta] = result.result as unknown as readonly [
-      Hex,
-      bigint,
-      bigint,
-    ];
-
-    if (unexpectedReason && unexpectedReason !== "0x") {
-      let errorName = "Quote simulation failed";
-      try {
-        const decoded = decodeErrorResult({
-          abi: PERP_MANAGER_ABI,
-          data: unexpectedReason,
-        });
-        errorName = decoded.errorName;
-      } catch {
-        // Could not decode, use generic name
-      }
-      throw new Error(errorName);
-    }
-
     const absPerpDelta = perpDelta < 0n ? -perpDelta : perpDelta;
-    const absUsdDelta = usdDelta < 0n ? -usdDelta : usdDelta;
-
-    if (absPerpDelta === 0n) {
-      throw new Error("Zero position size");
-    }
-
-    const fillPrice = Number(absUsdDelta) / Number(absPerpDelta);
-
-    return { perpDelta, usdDelta, fillPrice };
+    const usdDelta = (absPerpDelta * scale6Decimals(perpData.mark)) / BigInt(NUMBER_1E6);
+    return {
+      perpDelta,
+      usdDelta: params.isLong ? -usdDelta : usdDelta,
+      fillPrice: perpData.mark,
+    };
   }, "quoteTakerPosition");
+}
+
+export async function adjustTaker(
+  context: PerpCityContext,
+  perpAddress: Hex,
+  params: { posId: bigint; marginDelta: bigint; perpDelta: bigint; amt1Limit: bigint }
+): Promise<{ txHash: Hex }> {
+  return withErrorHandling(async () => {
+    if (params.marginDelta > 0n)
+      await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
+
+    const { request } = await context.publicClient.simulateContract({
+      address: perpAddress,
+      abi: PERP_ABI,
+      functionName: "adjustTaker",
+      args: [params],
+      account: context.walletClient.account,
+    });
+    const txHash = await context.walletClient.writeContract(request);
+    return { txHash };
+  }, `adjustTaker for position ${params.posId}`);
+}
+
+export async function adjustMaker(
+  context: PerpCityContext,
+  perpAddress: Hex,
+  params: {
+    posId: bigint;
+    marginDelta: bigint;
+    liquidityDelta: bigint;
+    amt0Limit: bigint;
+    amt1Limit: bigint;
+  }
+): Promise<{ txHash: Hex }> {
+  return withErrorHandling(async () => {
+    if (params.marginDelta > 0n)
+      await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
+
+    const { request } = await context.publicClient.simulateContract({
+      address: perpAddress,
+      abi: PERP_ABI,
+      functionName: "adjustMaker",
+      args: [params],
+      account: context.walletClient.account,
+    });
+    const txHash = await context.walletClient.writeContract(request);
+    return { txHash };
+  }, `adjustMaker for position ${params.posId}`);
 }
 
 export async function adjustMargin(
   context: PerpCityContext,
+  perpAddress: Hex,
   positionId: bigint,
   marginDelta: bigint
 ): Promise<{ txHash: Hex }> {
-  return withErrorHandling(async () => {
-    const deployments = context.deployments();
-
-    if (marginDelta > 0n) {
-      const currentAllowance = await context.publicClient.readContract({
-        address: deployments.usdc,
-        abi: erc20Abi,
-        functionName: "allowance",
-        args: [context.walletClient.account!.address, deployments.perpManager],
-        blockTag: "latest",
-      });
-      if (currentAllowance < marginDelta) {
-        await approveUsdc(context, marginDelta);
-      }
-    }
-
-    const { request } = await context.publicClient.simulateContract({
-      address: deployments.perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "adjustMargin",
-      args: [{ posId: positionId, marginDelta }],
-      account: context.walletClient.account,
+  const rawData = await context.getPositionRawData(perpAddress, positionId);
+  if (rawData.makerDetails) {
+    return adjustMaker(context, perpAddress, {
+      posId: positionId,
+      marginDelta,
+      liquidityDelta: 0n,
+      amt0Limit: 0n,
+      amt1Limit: 0n,
     });
-
-    const txHash = await context.walletClient.writeContract(request);
-
-    return { txHash };
-  }, `adjustMargin for position ${positionId}`);
-}
-
-export async function adjustNotional(
-  context: PerpCityContext,
-  positionId: bigint,
-  usdDelta: bigint,
-  perpLimit: bigint
-): Promise<{ txHash: Hex }> {
-  return withErrorHandling(async () => {
-    const deployments = context.deployments();
-
-    if (usdDelta > 0n) {
-      // Approve the USDC amount (usdDelta), not the perp-side limit
-      const currentAllowance = await context.publicClient.readContract({
-        address: deployments.usdc,
-        abi: erc20Abi,
-        functionName: "allowance",
-        args: [context.walletClient.account!.address, deployments.perpManager],
-        blockTag: "latest",
-      });
-      if (currentAllowance < usdDelta) {
-        await approveUsdc(context, usdDelta);
-      }
-    }
-
-    const { request } = await context.publicClient.simulateContract({
-      address: deployments.perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "adjustNotional",
-      args: [{ posId: positionId, usdDelta, perpLimit }],
-      account: context.walletClient.account,
-    });
-
-    const txHash = await context.walletClient.writeContract(request);
-
-    return { txHash };
-  }, `adjustNotional for position ${positionId}`);
+  }
+  return adjustTaker(context, perpAddress, {
+    posId: positionId,
+    marginDelta,
+    perpDelta: 0n,
+    amt1Limit: 0n,
+  });
 }

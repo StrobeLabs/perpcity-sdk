@@ -36,11 +36,19 @@ export type OpenTakerPositionParams = {
   isLong: boolean; // true = long, false = short
   margin: number; // USDC amount in human units (e.g., 100 = $100)
   leverage: number; // Leverage multiplier (e.g., 2 = 2x)
-  unspecifiedAmountLimit: number | bigint; // Slippage protection (perp token units)
-  // - For longs: minimum perp tokens to receive (0 = no minimum)
-  // - For shorts: maximum perp tokens to send (use 2n**128n-1n for no limit)
-  // Both refer to currency0 (perp tokens), not USD.
-  // Can pass number (in human units) or bigint (raw value)
+  /**
+   * Optional contract-native perp delta. If omitted, the SDK derives it from
+   * margin * leverage / current AMM price.
+   */
+  perpDelta?: bigint;
+  /**
+   * Deprecated v1 name. In v2 this is forwarded as amt1Limit:
+   * - longs: maximum USDC in
+   * - shorts: minimum USDC out
+   */
+  unspecifiedAmountLimit: number | bigint;
+  /** Contract-native alias for unspecifiedAmountLimit. */
+  amt1Limit?: bigint;
 };
 
 export type OpenMakerPositionParams = {
@@ -57,18 +65,19 @@ export type OpenMakerPositionParams = {
   maxAmt1In?: number | bigint; // Max USDC (number = human units, bigint = raw)
 };
 
-export type QuoteOpenMakerPositionResult = {
-  perpDelta: bigint; // Exact perp tokens needed (negative = tokens sent in)
-  usdDelta: bigint; // Exact USDC needed (negative = tokens sent in)
-};
-
 export type CreatePerpParams = {
+  owner: Address;
+  name: string;
+  symbol: string;
+  tokenUri: string;
   beacon: Address;
-  // Module addresses - optional, will fall back to deployment config if not provided
+  emaWindow: number;
+  salt: Hex;
+  pricing?: Address;
+  funding?: Address;
   fees?: Address;
   marginRatios?: Address;
-  lockupPeriod?: Address;
-  sqrtPriceImpactLimit?: Address;
+  priceImpact?: Address;
 };
 
 export type PerpData = {
@@ -122,13 +131,6 @@ export type QuoteTakerPositionResult = {
   fillPrice: number;
 };
 
-export type QuoteClosePositionResult = {
-  pnl: number;
-  funding: number;
-  netMargin: number;
-  wasLiquidated: boolean;
-};
-
 export type CacheConfig = {
   ttl: number; // Time to live in milliseconds
   maxSize: number; // Maximum cache size
@@ -143,10 +145,14 @@ export type PerpConfig = {
     hooks: Address;
   };
   creator: Address;
-  vault: Address;
   beacon: Address;
+  pricing: Address;
+  funding: Address;
   fees: Address;
   marginRatios: Address;
-  lockupPeriod: Address;
-  sqrtPriceImpactLimit: Address;
+  priceImpact: Address;
+  protocolFeeManager: Address;
+  protocolFee: number;
+  emaWindow: number;
+  poolId: Hex;
 };

@@ -11,7 +11,7 @@ describe("USDC Approval Integration Tests", () => {
   beforeAll(async () => {
     setup = await setupAnvil();
     context = setup.context;
-  }, 30000);
+  }, 60000);
 
   afterAll(() => {
     setup?.cleanup();
@@ -27,7 +27,7 @@ describe("USDC Approval Integration Tests", () => {
         address: setup.addresses.usdc,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [setup.account, setup.addresses.perpManager],
+        args: [setup.account, setup.addresses.perp],
       });
 
       expect(allowance).toBeGreaterThanOrEqual(amount);
@@ -42,7 +42,7 @@ describe("USDC Approval Integration Tests", () => {
         address: setup.addresses.usdc,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [setup.account, setup.addresses.perpManager],
+        args: [setup.account, setup.addresses.perp],
       });
 
       expect(allowance).toBeGreaterThanOrEqual(amount);
@@ -57,7 +57,7 @@ describe("USDC Approval Integration Tests", () => {
         address: setup.addresses.usdc,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [setup.account, setup.addresses.perpManager],
+        args: [setup.account, setup.addresses.perp],
       });
 
       expect(allowance).toBeGreaterThanOrEqual(amount);
@@ -70,7 +70,7 @@ describe("USDC Approval Integration Tests", () => {
         address: setup.addresses.usdc,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [setup.account, setup.addresses.perpManager],
+        args: [setup.account, setup.addresses.perp],
       });
 
       expect(allowance).toBe(0n);
@@ -85,7 +85,7 @@ describe("USDC Approval Integration Tests", () => {
         address: setup.addresses.usdc,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [setup.account, setup.addresses.perpManager],
+        args: [setup.account, setup.addresses.perp],
       });
 
       expect(allowance).toBe(maxAmount);
@@ -104,7 +104,7 @@ describe("USDC Approval Integration Tests", () => {
           address: setup.addresses.usdc,
           abi: erc20Abi,
           functionName: "allowance",
-          args: [setup.account, setup.addresses.perpManager],
+          args: [setup.account, setup.addresses.perp],
         });
 
         expect(allowance).toBeGreaterThanOrEqual(amount);
@@ -118,7 +118,7 @@ describe("USDC Approval Integration Tests", () => {
         address: setup.addresses.usdc,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [setup.account, setup.addresses.perpManager],
+        args: [setup.account, setup.addresses.perp],
       });
 
       expect(currentAllowance).toBeTypeOf("bigint");

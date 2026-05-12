@@ -3,6 +3,7 @@ import { decodeAbiParameters, decodeEventLog, erc20Abi, keccak256, toBytes } fro
 import { PERP_ABI } from "../abis/perp";
 import { PERP_FACTORY_ABI } from "../abis/perp-factory";
 import type { PerpCityContext } from "../context";
+import type { PerpAddress } from "../types";
 import type {
   CreatePerpParams,
   EstimateTakerPositionResult,
@@ -19,7 +20,10 @@ const TAKER_OPENED_TOPIC = keccak256(
   toBytes("TakerOpened(uint256,(int256,uint256,int256,uint256,uint256,uint256,uint256))")
 );
 
-export async function createPerp(context: PerpCityContext, params: CreatePerpParams): Promise<Hex> {
+export async function createPerp(
+  context: PerpCityContext,
+  params: CreatePerpParams
+): Promise<PerpAddress> {
   return withErrorHandling(async () => {
     const deployments = context.deployments();
     const perpFactory = deployments.perpFactory;
@@ -79,7 +83,7 @@ export async function createPerp(context: PerpCityContext, params: CreatePerpPar
           topics: log.topics,
           eventName: "PerpCreated",
         });
-        return decoded.args.perp as Hex;
+        return decoded.args.perp as PerpAddress;
       } catch (_e) {}
     }
 
@@ -127,7 +131,7 @@ async function ensureUsdcAllowance(
 
 export async function openTakerPosition(
   context: PerpCityContext,
-  perpAddress: Hex,
+  perpAddress: PerpAddress,
   params: OpenTakerPositionParams
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
@@ -225,7 +229,7 @@ export function calculateAlignedTicks(
 
 export async function openMakerPosition(
   context: PerpCityContext,
-  perpAddress: Hex,
+  perpAddress: PerpAddress,
   params: OpenMakerPositionParams
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
@@ -289,7 +293,7 @@ export async function openMakerPosition(
 
 export async function estimateTakerPosition(
   context: PerpCityContext,
-  perpAddress: Hex,
+  perpAddress: PerpAddress,
   params: {
     isLong: boolean;
     margin: number;
@@ -316,7 +320,7 @@ export async function estimateTakerPosition(
 
 export async function adjustTaker(
   context: PerpCityContext,
-  perpAddress: Hex,
+  perpAddress: PerpAddress,
   params: { posId: bigint; marginDelta: bigint; perpDelta: bigint; amt1Limit: bigint }
 ): Promise<{ txHash: Hex }> {
   return withErrorHandling(async () => {
@@ -337,7 +341,7 @@ export async function adjustTaker(
 
 export async function adjustMaker(
   context: PerpCityContext,
-  perpAddress: Hex,
+  perpAddress: PerpAddress,
   params: {
     posId: bigint;
     marginDelta: bigint;
@@ -364,7 +368,7 @@ export async function adjustMaker(
 
 export async function adjustMargin(
   context: PerpCityContext,
-  perpAddress: Hex,
+  perpAddress: PerpAddress,
   positionId: bigint,
   marginDelta: bigint
 ): Promise<{ txHash: Hex }> {

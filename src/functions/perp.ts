@@ -1,7 +1,7 @@
-import type { Hex } from "viem";
 import { BEACON_ABI } from "../abis/beacon";
 import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
+import type { PerpAddress } from "../types";
 import type { PerpData } from "../types/entity-data";
 import { withErrorHandling } from "../utils/errors";
 
@@ -28,7 +28,7 @@ export function getPerpTickSpacing(perpData: PerpData): number {
 
 export async function getFundingRate(
   context: PerpCityContext,
-  perpAddress: Hex
+  perpAddress: PerpAddress
 ): Promise<{ ratePerDay: number; ratePerMinute: number; rawX96: bigint }> {
   return withErrorHandling(async () => {
     const rates = await context.publicClient.readContract({
@@ -46,7 +46,10 @@ export async function getFundingRate(
   }, `getFundingRate for perp ${perpAddress}`);
 }
 
-export async function getIndexValue(context: PerpCityContext, perpAddress: Hex): Promise<bigint> {
+export async function getIndexValue(
+  context: PerpCityContext,
+  perpAddress: PerpAddress
+): Promise<bigint> {
   return withErrorHandling(async () => {
     const perpData = await context.getPerpData(perpAddress);
     return (await context.publicClient.readContract({
@@ -59,7 +62,7 @@ export async function getIndexValue(context: PerpCityContext, perpAddress: Hex):
 
 export async function getIndexTWAP(
   context: PerpCityContext,
-  perpAddress: Hex,
+  perpAddress: PerpAddress,
   secondsAgo: number
 ): Promise<bigint> {
   return withErrorHandling(async () => {

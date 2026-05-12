@@ -1,11 +1,12 @@
 import type { Hex } from "viem";
 import type { PerpCityContext } from "../context";
+import type { PerpAddress } from "../types";
 import type { ClosePositionParams, ClosePositionResult } from "../types/entity-data";
 import { closePosition } from "./position";
 
 export class OpenPosition {
   public readonly context: PerpCityContext;
-  public readonly perpId: Hex;
+  public readonly perpId: PerpAddress;
   public readonly positionId: bigint;
   public readonly isLong?: boolean;
   public readonly isMaker?: boolean;
@@ -13,7 +14,7 @@ export class OpenPosition {
 
   constructor(
     context: PerpCityContext,
-    perpId: Hex,
+    perpId: PerpAddress,
     positionId: bigint,
     isLong?: boolean,
     isMaker?: boolean,

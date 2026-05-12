@@ -1,4 +1,5 @@
 import type { Address, Hex } from "viem";
+import type { PerpAddress } from "../types";
 
 export type Bounds = {
   minMargin: number;
@@ -56,7 +57,7 @@ export type CreatePerpParams = {
 };
 
 export type PerpData = {
-  id: Hex;
+  id: PerpAddress;
   tickSpacing: number;
   mark: number;
   beacon: Address;
@@ -71,7 +72,7 @@ export type UserData = {
 };
 
 export type OpenPositionData = {
-  perpId: Hex;
+  perpId: PerpAddress;
   positionId: bigint;
   isLong?: boolean;
   isMaker?: boolean;
@@ -90,7 +91,7 @@ export type MakerDetails = {
 };
 
 export type PositionRawData = {
-  perpId: Hex;
+  perpId: PerpAddress;
   positionId: bigint;
   margin: number; // Current margin in USDC
   entryPerpDelta: bigint; // Position size in perp tokens (raw)

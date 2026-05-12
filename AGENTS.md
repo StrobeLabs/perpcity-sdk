@@ -12,6 +12,7 @@ The SDK now targets the v2 contract model from `../perpcity-contracts`:
 ## Main Interface Changes
 
 - Position reads and mutations must include the Perp address because `positionId` values are local to each market.
+- Perp-address-facing SDK parameters and data fields should use the `PerpAddress` alias instead of generic `Hex`.
 - USDC approvals must use the Perp contract as spender, not a global contract.
 - `getUsdcAllowance` and `approveUsdc` require an explicit spender address; do not fall back to `deployments.perpAddress` for approvals.
 - Taker-native actions use `perpDelta` and `amt1Limit`.

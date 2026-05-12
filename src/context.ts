@@ -11,7 +11,7 @@ import {
 import { FEES_ABI } from "./abis/fees";
 import { MARGIN_RATIOS_ABI } from "./abis/margin-ratios";
 import { PERP_ABI } from "./abis/perp";
-import type { PerpCityContextConfig, PerpCityDeployments } from "./types";
+import type { PerpAddress, PerpCityContextConfig, PerpCityDeployments } from "./types";
 import type {
   Bounds,
   Fees,
@@ -82,7 +82,7 @@ export class PerpCityContext {
     return this._deployments;
   }
 
-  async getPerpConfig(perpAddress: Address): Promise<PerpConfig> {
+  async getPerpConfig(perpAddress: PerpAddress): Promise<PerpConfig> {
     const cached = this.configCache.get(perpAddress);
     if (cached) return cached;
 
@@ -154,7 +154,7 @@ export class PerpCityContext {
     return cfg;
   }
 
-  private async fetchPerpContractData(perpAddress: Address): Promise<{
+  private async fetchPerpContractData(perpAddress: PerpAddress): Promise<{
     tickSpacing: number;
     mark: number;
     bounds: Bounds;
@@ -208,7 +208,7 @@ export class PerpCityContext {
     }, `fetchPerpContractData for perp ${perpAddress}`);
   }
 
-  async getPerpData(perpAddress: Address): Promise<PerpData> {
+  async getPerpData(perpAddress: PerpAddress): Promise<PerpData> {
     return withErrorHandling(async () => {
       const [contractData, config] = await Promise.all([
         this.fetchPerpContractData(perpAddress),
@@ -216,7 +216,7 @@ export class PerpCityContext {
       ]);
 
       return {
-        id: perpAddress as Hex,
+        id: perpAddress,
         tickSpacing: contractData.tickSpacing,
         mark: contractData.mark,
         beacon: config.beacon,
@@ -228,7 +228,7 @@ export class PerpCityContext {
 
   private async fetchUserData(
     userAddress: Address,
-    positions: Array<{ perpId: Address; positionId: bigint; isLong: boolean; isMaker: boolean }>
+    positions: Array<{ perpId: PerpAddress; positionId: bigint; isLong: boolean; isMaker: boolean }>
   ): Promise<UserData> {
     const usdcBalance = await this.publicClient.readContract({
       address: this.deployments().usdc,
@@ -239,7 +239,7 @@ export class PerpCityContext {
 
     const openPositionsData = await Promise.all(
       positions.map(async ({ perpId, positionId, isLong, isMaker }) => ({
-        perpId: perpId as Hex,
+        perpId,
         positionId,
         isLong,
         isMaker,
@@ -255,27 +255,27 @@ export class PerpCityContext {
 
   async getUserData(
     userAddress: Address,
-    positions: Array<{ perpId: Address; positionId: bigint; isLong: boolean; isMaker: boolean }>
+    positions: Array<{ perpId: PerpAddress; positionId: bigint; isLong: boolean; isMaker: boolean }>
   ): Promise<UserData> {
     return this.fetchUserData(userAddress, positions);
   }
 
   async getOpenPositionData(
-    perpAddress: Address,
+    perpAddress: PerpAddress,
     positionId: bigint,
     isLong: boolean,
     isMaker: boolean
   ): Promise<OpenPositionData> {
     await this.getPositionRawData(perpAddress, positionId);
     return {
-      perpId: perpAddress as Hex,
+      perpId: perpAddress,
       positionId,
       isLong,
       isMaker,
     };
   }
 
-  async getPositionRawData(perpAddress: Address, positionId: bigint): Promise<PositionRawData> {
+  async getPositionRawData(perpAddress: PerpAddress, positionId: bigint): Promise<PositionRawData> {
     return withErrorHandling(async () => {
       const [position, makerDetails] = await Promise.all([
         this.publicClient.readContract({
@@ -300,7 +300,7 @@ export class PerpCityContext {
       const isMaker = makerDetails[2] !== 0n;
 
       return {
-        perpId: perpAddress as Hex,
+        perpId: perpAddress,
         positionId,
         margin: Number(formatUnits(position[1], 6)),
         entryPerpDelta: delta.amount0,

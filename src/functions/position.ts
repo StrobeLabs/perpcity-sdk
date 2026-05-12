@@ -1,6 +1,7 @@
 import type { Hex } from "viem";
 import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
+import type { PerpAddress } from "../types";
 import type {
   ClosePositionParams,
   ClosePositionResult,
@@ -11,7 +12,7 @@ import { scale6Decimals } from "../utils";
 import { withErrorHandling } from "../utils/errors";
 import { adjustMaker, adjustTaker } from "./perp-actions";
 
-export function getPositionPerpId(positionData: OpenPositionData): Hex {
+export function getPositionPerpId(positionData: OpenPositionData): PerpAddress {
   return positionData.perpId;
 }
 
@@ -34,7 +35,7 @@ function toContractAmount(value: number | bigint | undefined): bigint {
 
 export async function closePosition(
   context: PerpCityContext,
-  perpAddress: Hex,
+  perpAddress: PerpAddress,
   positionId: bigint,
   params: ClosePositionParams
 ): Promise<ClosePositionResult> {

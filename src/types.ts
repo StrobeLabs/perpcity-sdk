@@ -11,12 +11,8 @@ export interface PerpCityDeployments {
   /** ProtocolFeeManager address. Can also be read from a Perp contract. */
   protocolFeeManager?: Address;
 
-  /**
-   * Deprecated v1 manager address. Kept so existing callers can construct a
-   * context during the migration, but v2 market actions use the Perp address as
-   * spender/callee.
-   */
-  perpManager?: Address;
+  /** Default Perp address used by approval helpers when no spender is supplied. */
+  perpAddress?: Address;
 
   // Module addresses used as defaults when creating new perps.
   pricingModule?: Address;

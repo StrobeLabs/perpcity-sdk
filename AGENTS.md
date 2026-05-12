@@ -6,16 +6,16 @@ The SDK now targets the v2 contract model from `../perpcity-contracts`:
 
 - Markets are individual `Perp` contracts.
 - `PerpFactory` creates markets and emits the new market address.
-- The old global `PerpManager` model is deprecated.
+- The old global coordinator model is deprecated.
 - Existing `perpId` names are treated as a compatibility alias for the Perp contract address.
 
 ## Main Interface Changes
 
 - Position reads and mutations must include the Perp address because `positionId` values are local to each market.
-- USDC approvals must use the Perp contract as spender, not a global manager.
+- USDC approvals must use the Perp contract as spender, not a global contract.
 - Taker-native actions use `perpDelta` and `amt1Limit`.
-- The old leverage-based taker open wrapper is retained and derives `perpDelta` from `margin * leverage / mark`.
-- Old quote helpers do not have exact v2 contract equivalents. Current quote behavior is best-effort unless contract quote/preview methods are added.
+- The old leverage-based taker open wrapper has been removed from the mutation path; `estimateTakerPosition` remains a client-side helper for deriving a best-effort delta.
+- Old quote helpers do not have exact v2 contract equivalents. The SDK only exposes best-effort estimates unless contract quote/preview methods are added.
 
 ## Updated SDK Areas
 
@@ -28,7 +28,7 @@ The SDK now targets the v2 contract model from `../perpcity-contracts`:
 
 ## Test Harness Changes
 
-- `tests/contracts/MockPerpManager.sol` was replaced by v2-shaped mocks for `Perp`, `PerpFactory`, `ProtocolFeeManager`, and `Beacon`.
+- The legacy global mock was replaced by v2-shaped mocks for `Perp`, `PerpFactory`, `ProtocolFeeManager`, and `Beacon`.
 - Existing module mocks now expose the tuple-returning `fees`, `liqFee`, `takerMarginRatios`, and `makerMarginRatios` functions used by the new SDK reads.
 - Integration tests deploy an isolated local Anvil instance on a free port and use the deployed `MockPerp` address as `testPerpId`.
 - Approval tests now assert USDC allowance against the Perp contract spender.
@@ -38,10 +38,10 @@ The SDK now targets the v2 contract model from `../perpcity-contracts`:
 
 `../perpcity-client` is outside this repo's writable root in this session. The client still needs a follow-up pass:
 
-- Rename or map `perpManagerAddress` to `perpAddress`.
+- Use `perpAddress` for v2 Perp markets.
 - Ensure API `perp_id` values are Perp addresses, or expose a separate `perp_address`.
-- Replace direct `PERP_MANAGER_ABI` calls in adjust hooks with SDK helpers.
-- Pass Perp address into all position read/quote hooks.
+- Replace direct `PERP_ABI` calls in adjust hooks with SDK helpers.
+- Pass Perp address into all position read/estimate hooks.
 
 ## Verification
 

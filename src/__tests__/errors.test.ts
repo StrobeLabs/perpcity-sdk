@@ -21,14 +21,14 @@ describe("Error Classes", () => {
 
   it("should create ContractError with error details", () => {
     const error = new ContractError("Invalid margin", "InvalidMargin", [100n], {
-      source: ErrorSource.PERP_MANAGER,
+      source: ErrorSource.PERP,
       category: ErrorCategory.USER_ERROR,
     });
     expect(error.message).toBe("Invalid margin");
     expect(error.errorName).toBe("InvalidMargin");
     expect(error.args).toEqual([100n]);
     expect(error.name).toBe("ContractError");
-    expect(error.debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect(error.debug?.source).toBe(ErrorSource.PERP);
     expect(error.debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -359,7 +359,7 @@ describe("Uniswap V4 PoolManager Errors", () => {
   });
 });
 
-describe("PerpManager ERC721/Ownership Errors", () => {
+describe("Perp ERC721/Ownership Errors", () => {
   it("should parse AccountBalanceOverflow", () => {
     const mockError = createMockContractError("AccountBalanceOverflow");
     const result = parseContractError(mockError);
@@ -367,7 +367,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("AccountBalanceOverflow");
     expect(result.message).toContain("balance overflow");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
   });
 
@@ -378,7 +378,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("BalanceQueryForZeroAddress");
     expect(result.message).toContain("zero address");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -389,7 +389,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("NotOwnerNorApproved");
     expect(result.message).toContain("not the owner or an approved operator");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -400,7 +400,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("TokenAlreadyExists");
     expect(result.message).toContain("already exists");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
   });
 
@@ -411,7 +411,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("TokenDoesNotExist");
     expect(result.message).toContain("does not exist");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -422,7 +422,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("TransferFromIncorrectOwner");
     expect(result.message).toContain("incorrect owner");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -433,7 +433,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("TransferToNonERC721ReceiverImplementer");
     expect(result.message).toContain("does not implement ERC721 receiver");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -444,7 +444,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("TransferToZeroAddress");
     expect(result.message).toContain("zero address");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -455,7 +455,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("NewOwnerIsZeroAddress");
     expect(result.message).toContain("zero address");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -466,7 +466,7 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("NoHandoverRequest");
     expect(result.message).toContain("No pending ownership handover");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
   });
 
@@ -477,12 +477,12 @@ describe("PerpManager ERC721/Ownership Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("Unauthorized");
     expect(result.message).toContain("Unauthorized access");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 });
 
-describe("PerpManager Transfer/Approval Errors", () => {
+describe("Perp Transfer/Approval Errors", () => {
   it("should parse TransferFromFailed", () => {
     const mockError = createMockContractError("TransferFromFailed");
     const result = parseContractError(mockError);
@@ -490,7 +490,7 @@ describe("PerpManager Transfer/Approval Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("TransferFromFailed");
     expect(result.message).toContain("transferFrom operation failed");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -501,7 +501,7 @@ describe("PerpManager Transfer/Approval Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("TransferFailed");
     expect(result.message).toContain("transfer operation failed");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
   });
 
@@ -512,12 +512,12 @@ describe("PerpManager Transfer/Approval Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("ApproveFailed");
     expect(result.message).toContain("approve operation failed");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
   });
 });
 
-describe("PerpManager Module Config Errors", () => {
+describe("Perp Module Config Errors", () => {
   it("should parse AlreadyInitialized", () => {
     const mockError = createMockContractError("AlreadyInitialized");
     const result = parseContractError(mockError);
@@ -525,7 +525,7 @@ describe("PerpManager Module Config Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("AlreadyInitialized");
     expect(result.message).toContain("already been initialized");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
   });
 
@@ -536,7 +536,7 @@ describe("PerpManager Module Config Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("FeesNotRegistered");
     expect(result.message).toContain("Fees module has not been registered");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
   });
 
@@ -547,7 +547,7 @@ describe("PerpManager Module Config Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("FeeTooLarge");
     expect(result.message).toContain("fee exceeds");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
   });
 
@@ -558,7 +558,7 @@ describe("PerpManager Module Config Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("MarginRatiosNotRegistered");
     expect(result.message).toContain("Margin ratios module");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
   });
 
@@ -569,7 +569,7 @@ describe("PerpManager Module Config Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("LockupPeriodNotRegistered");
     expect(result.message).toContain("Lockup period module");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
   });
 
@@ -580,7 +580,7 @@ describe("PerpManager Module Config Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("SqrtPriceImpactLimitNotRegistered");
     expect(result.message).toContain("Sqrt price impact limit module");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
   });
 
@@ -591,12 +591,12 @@ describe("PerpManager Module Config Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("ModuleAlreadyRegistered");
     expect(result.message).toContain("already been registered");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
   });
 });
 
-describe("PerpManager Position/Trading Errors", () => {
+describe("Perp Position/Trading Errors", () => {
   it("should parse InvalidAction with args", () => {
     const mockError = createMockContractError("InvalidAction", [5]);
     const result = parseContractError(mockError);
@@ -605,7 +605,7 @@ describe("PerpManager Position/Trading Errors", () => {
     expect((result as ContractError).errorName).toBe("InvalidAction");
     expect(result.message).toContain("Invalid action type");
     expect(result.message).toContain("5");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -617,7 +617,7 @@ describe("PerpManager Position/Trading Errors", () => {
     expect((result as ContractError).errorName).toBe("InvalidMarginRatio");
     expect(result.message).toContain("Invalid margin ratio");
     expect(result.message).toContain("150");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -628,7 +628,7 @@ describe("PerpManager Position/Trading Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("MakerNotAllowed");
     expect(result.message).toContain("Maker positions are not allowed");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 
@@ -639,7 +639,7 @@ describe("PerpManager Position/Trading Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("PositionLocked");
     expect(result.message).toContain("currently locked");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
   });
 
@@ -650,7 +650,7 @@ describe("PerpManager Position/Trading Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("ZeroDelta");
     expect(result.message).toContain("zero size");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
   });
 
@@ -661,7 +661,7 @@ describe("PerpManager Position/Trading Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("NotPoolManager");
     expect(result.message).toContain("Only the Uniswap V4 Pool Manager");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
   });
 
@@ -672,7 +672,7 @@ describe("PerpManager Position/Trading Errors", () => {
     expect(result).toBeInstanceOf(ContractError);
     expect((result as ContractError).errorName).toBe("NoLiquidityToReceiveFees");
     expect(result.message).toContain("No liquidity available");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
   });
 
@@ -684,7 +684,7 @@ describe("PerpManager Position/Trading Errors", () => {
     expect((result as ContractError).errorName).toBe("MinimumAmountInsufficient");
     expect(result.message).toContain("Slippage tolerance exceeded");
     expect(result.message).not.toContain("undefined");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP_MANAGER);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 });

@@ -6,16 +6,17 @@ import {
   getPerpMark,
   getPerpTickSpacing,
 } from "../functions/perp";
-import { openMakerPosition, openTakerPosition } from "../functions/perp-manager";
+import { openMakerPosition, openTakerPosition } from "../functions/perp-actions";
 import {
   calculateEntryPrice,
   calculateLeverage,
   calculateLiquidationPrice,
   calculatePositionSize,
   calculatePositionValue,
-  getPositionFundingPayment,
-  getPositionIsLiquidatable,
-  getPositionPnl,
+  getPositionId,
+  getPositionIsLong,
+  getPositionIsMaker,
+  getPositionPerpId,
 } from "../functions/position";
 import { getUserOpenPositions, getUserUsdcBalance, getUserWalletAddress } from "../functions/user";
 import type { OpenPositionData, PerpData, PositionRawData, UserData } from "../types/entity-data";
@@ -81,12 +82,6 @@ describe("User Functions", () => {
         positionId: BigInt(1),
         isLong: true,
         isMaker: false,
-        liveDetails: {
-          pnl: 50.0,
-          fundingPayment: 5.0,
-          effectiveMargin: 100.0,
-          isLiquidatable: false,
-        },
       },
     ],
   };
@@ -113,24 +108,19 @@ describe("Position Functions", () => {
     positionId: BigInt(1),
     isLong: true,
     isMaker: false,
-    liveDetails: {
-      pnl: 75.0,
-      fundingPayment: 7.5,
-      effectiveMargin: 150.0,
-      isLiquidatable: false,
-    },
   };
 
-  it("should extract position PnL", () => {
-    expect(getPositionPnl(mockPositionData)).toBe(75.0);
+  it("should extract position perp id", () => {
+    expect(getPositionPerpId(mockPositionData)).toBe("0x123");
   });
 
-  it("should extract funding payment", () => {
-    expect(getPositionFundingPayment(mockPositionData)).toBe(7.5);
+  it("should extract position id", () => {
+    expect(getPositionId(mockPositionData)).toBe(BigInt(1));
   });
 
-  it("should extract liquidation status", () => {
-    expect(getPositionIsLiquidatable(mockPositionData)).toBe(false);
+  it("should extract position side metadata", () => {
+    expect(getPositionIsLong(mockPositionData)).toBe(true);
+    expect(getPositionIsMaker(mockPositionData)).toBe(false);
   });
 });
 

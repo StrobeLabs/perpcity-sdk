@@ -14,17 +14,9 @@ export type Fees = {
   liquidationFee: number;
 };
 
-export type LiveDetails = {
-  pnl: number;
-  fundingPayment: number;
-  effectiveMargin: number;
-  isLiquidatable: boolean;
-};
-
 export type ClosePositionParams = {
-  minAmt0Out: number;
-  minAmt1Out: number;
-  maxAmt1In: number;
+  amt0Limit?: number | bigint;
+  amt1Limit: number | bigint;
 };
 
 export type ClosePositionResult = {
@@ -33,22 +25,10 @@ export type ClosePositionResult = {
 };
 
 export type OpenTakerPositionParams = {
-  isLong: boolean; // true = long, false = short
   margin: number; // USDC amount in human units (e.g., 100 = $100)
-  leverage: number; // Leverage multiplier (e.g., 2 = 2x)
-  /**
-   * Optional contract-native perp delta. If omitted, the SDK derives it from
-   * margin * leverage / current AMM price.
-   */
-  perpDelta?: bigint;
-  /**
-   * Deprecated v1 name. In v2 this is forwarded as amt1Limit:
-   * - longs: maximum USDC in
-   * - shorts: minimum USDC out
-   */
-  unspecifiedAmountLimit: number | bigint;
-  /** Contract-native alias for unspecifiedAmountLimit. */
-  amt1Limit?: bigint;
+  perpDelta: bigint;
+  /** Contract-native amount1 limit. */
+  amt1Limit: bigint;
 };
 
 export type OpenMakerPositionParams = {
@@ -56,13 +36,8 @@ export type OpenMakerPositionParams = {
   priceLower: number; // Lower price bound
   priceUpper: number; // Upper price bound
   liquidity: bigint; // Liquidity amount (calculated externally)
-  // Slippage tolerance as a fraction (e.g. 0.01 = 1%). Default 0.01.
-  // Used when maxAmt0In/maxAmt1In are not provided — the SDK quotes the position
-  // on-chain and applies this tolerance to compute slippage limits automatically.
-  slippageTolerance?: number;
-  // Manual overrides for slippage limits. If you supply one, you must supply both.
-  maxAmt0In?: number | bigint; // Max perp tokens (number = human units, bigint = raw)
-  maxAmt1In?: number | bigint; // Max USDC (number = human units, bigint = raw)
+  maxAmt0In: number | bigint; // Max perp tokens (number = human units, bigint = raw)
+  maxAmt1In: number | bigint; // Max USDC (number = human units, bigint = raw)
 };
 
 export type CreatePerpParams = {
@@ -100,7 +75,6 @@ export type OpenPositionData = {
   positionId: bigint;
   isLong?: boolean;
   isMaker?: boolean;
-  liveDetails: LiveDetails;
 };
 
 export type MarginRatios = {
@@ -125,7 +99,7 @@ export type PositionRawData = {
   makerDetails: MakerDetails | null;
 };
 
-export type QuoteTakerPositionResult = {
+export type EstimateTakerPositionResult = {
   perpDelta: bigint;
   usdDelta: bigint;
   fillPrice: number;

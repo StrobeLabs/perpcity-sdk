@@ -1,16 +1,15 @@
-import { formatUnits, type Hex } from "viem";
+import type { Hex } from "viem";
 import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
-import { unpackBalanceDelta } from "../context";
 import type {
   ClosePositionParams,
   ClosePositionResult,
-  LiveDetails,
   OpenPositionData,
   PositionRawData,
 } from "../types/entity-data";
+import { scale6Decimals } from "../utils";
 import { withErrorHandling } from "../utils/errors";
-import { adjustMaker, adjustTaker } from "./perp-manager";
+import { adjustMaker, adjustTaker } from "./perp-actions";
 
 export function getPositionPerpId(positionData: OpenPositionData): Hex {
   return positionData.perpId;
@@ -28,24 +27,9 @@ export function getPositionIsMaker(positionData: OpenPositionData): boolean | un
   return positionData.isMaker;
 }
 
-export function getPositionLiveDetails(positionData: OpenPositionData): LiveDetails {
-  return positionData.liveDetails;
-}
-
-export function getPositionPnl(positionData: OpenPositionData): number {
-  return positionData.liveDetails.pnl;
-}
-
-export function getPositionFundingPayment(positionData: OpenPositionData): number {
-  return positionData.liveDetails.fundingPayment;
-}
-
-export function getPositionEffectiveMargin(positionData: OpenPositionData): number {
-  return positionData.liveDetails.effectiveMargin;
-}
-
-export function getPositionIsLiquidatable(positionData: OpenPositionData): boolean {
-  return positionData.liveDetails.isLiquidatable;
+function toContractAmount(value: number | bigint | undefined): bigint {
+  if (value === undefined) return 0n;
+  return typeof value === "bigint" ? value : scale6Decimals(value);
 }
 
 export async function closePosition(
@@ -69,8 +53,8 @@ export async function closePosition(
         posId: positionId,
         marginDelta: 0n,
         liquidityDelta: -makerDetails[2],
-        amt0Limit: BigInt(Math.max(0, Math.floor(params.minAmt0Out * 1e6))),
-        amt1Limit: BigInt(Math.max(0, Math.floor(params.minAmt1Out * 1e6))),
+        amt0Limit: toContractAmount(params.amt0Limit),
+        amt1Limit: toContractAmount(params.amt1Limit),
       });
       txHash = result.txHash;
     } else {
@@ -78,7 +62,7 @@ export async function closePosition(
         posId: positionId,
         marginDelta: 0n,
         perpDelta: -rawData.entryPerpDelta,
-        amt1Limit: BigInt(Math.max(0, Math.floor(params.maxAmt1In * 1e6))),
+        amt1Limit: toContractAmount(params.amt1Limit),
       });
       txHash = result.txHash;
     }
@@ -87,41 +71,6 @@ export async function closePosition(
     if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
     return { position: null, txHash };
   }, `closePosition for position ${positionId}`);
-}
-
-export async function getPositionLiveDetailsFromContract(
-  context: PerpCityContext,
-  perpAddress: Hex,
-  positionId: bigint
-): Promise<LiveDetails> {
-  return withErrorHandling(async () => {
-    const [position, poolState] = await Promise.all([
-      context.publicClient.readContract({
-        address: perpAddress,
-        abi: PERP_ABI,
-        functionName: "positions",
-        args: [positionId],
-      }),
-      context.publicClient.readContract({
-        address: perpAddress,
-        abi: PERP_ABI,
-        functionName: "poolState",
-      }),
-    ]);
-
-    if (position[1] === 0n && position[0] === 0n) {
-      throw new Error(`Position ${positionId} does not exist or is closed`);
-    }
-
-    const delta = unpackBalanceDelta(position[0]);
-    const pnl = (delta.amount0 * poolState[2]) / (1n << 96n) + delta.amount1;
-    return {
-      pnl: Number(formatUnits(pnl, 6)),
-      fundingPayment: 0,
-      effectiveMargin: Number(formatUnits(position[1] + pnl, 6)),
-      isLiquidatable: false,
-    };
-  }, `getPositionLiveDetailsFromContract for position ${positionId}`);
 }
 
 export function calculateEntryPrice(rawData: PositionRawData): number {

@@ -5,7 +5,7 @@ const DEFAULT_CONFIRMATIONS = 2;
 
 export async function getUsdcAllowance(context: PerpCityContext, owner: Address): Promise<bigint> {
   const deployments = context.deployments();
-  const spender = deployments.perpManager;
+  const spender = deployments.perpAddress;
   if (!spender) {
     throw new Error("getUsdcAllowance requires a spender/perp address in v2");
   }
@@ -37,7 +37,7 @@ export async function approveUsdc(
   spender?: Address
 ) {
   const deployments = context.deployments();
-  const approvalSpender = spender ?? deployments.perpManager;
+  const approvalSpender = spender ?? deployments.perpAddress;
   if (!approvalSpender) {
     throw new Error("approveUsdc requires a spender/perp address in v2");
   }

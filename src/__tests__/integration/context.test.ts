@@ -37,7 +37,7 @@ describe("Context Integration Tests", () => {
     it("should have correct deployment addresses", () => {
       const deployments = context.deployments();
 
-      expect(deployments.perpManager).toBe(setup.addresses.perp);
+      expect(deployments.perpAddress).toBe(setup.addresses.perp);
       expect(deployments.perpFactory).toBe(setup.addresses.perpFactory);
       expect(deployments.usdc).toBe(setup.addresses.usdc);
     });

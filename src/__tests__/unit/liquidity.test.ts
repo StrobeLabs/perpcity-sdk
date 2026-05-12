@@ -24,7 +24,7 @@ describe("Liquidity Calculations", () => {
       walletClient,
       rpcUrl: "https://sepolia.base.org",
       deployments: {
-        perpManager: "0x0000000000000000000000000000000000000000",
+        perpAddress: "0x0000000000000000000000000000000000000000",
         usdc: "0x0000000000000000000000000000000000000000",
       },
     });

@@ -15,7 +15,6 @@ import type { PerpCityContextConfig, PerpCityDeployments } from "./types";
 import type {
   Bounds,
   Fees,
-  LiveDetails,
   OpenPositionData,
   PerpConfig,
   PerpData,
@@ -227,43 +226,6 @@ export class PerpCityContext {
     }, `getPerpData for perp ${perpAddress}`);
   }
 
-  private async fetchPositionLiveDetailsFromContract(
-    perpAddress: Address,
-    positionId: bigint
-  ): Promise<LiveDetails> {
-    return withErrorHandling(async () => {
-      const [position, poolState] = await Promise.all([
-        this.publicClient.readContract({
-          address: perpAddress,
-          abi: PERP_ABI,
-          functionName: "positions",
-          args: [positionId],
-        }),
-        this.publicClient.readContract({
-          address: perpAddress,
-          abi: PERP_ABI,
-          functionName: "poolState",
-        }),
-      ]);
-
-      if (position[1] === 0n && position[0] === 0n) {
-        throw new Error(`Position ${positionId} does not exist or is closed`);
-      }
-
-      const delta = unpackBalanceDelta(position[0]);
-      const markPriceX96 = poolState[2];
-      const perpValue = (delta.amount0 * markPriceX96) / (1n << 96n);
-      const pnl = perpValue + delta.amount1;
-
-      return {
-        pnl: Number(formatUnits(pnl, 6)),
-        fundingPayment: 0,
-        effectiveMargin: Number(formatUnits(position[1] + pnl, 6)),
-        isLiquidatable: false,
-      };
-    }, `fetchPositionLiveDetailsFromContract for position ${positionId}`);
-  }
-
   private async fetchUserData(
     userAddress: Address,
     positions: Array<{ perpId: Address; positionId: bigint; isLong: boolean; isMaker: boolean }>
@@ -281,7 +243,6 @@ export class PerpCityContext {
         positionId,
         isLong,
         isMaker,
-        liveDetails: await this.fetchPositionLiveDetailsFromContract(perpId, positionId),
       }))
     );
 
@@ -305,12 +266,12 @@ export class PerpCityContext {
     isLong: boolean,
     isMaker: boolean
   ): Promise<OpenPositionData> {
+    await this.getPositionRawData(perpAddress, positionId);
     return {
       perpId: perpAddress as Hex,
       positionId,
       isLong,
       isMaker,
-      liveDetails: await this.fetchPositionLiveDetailsFromContract(perpAddress, positionId),
     };
   }
 

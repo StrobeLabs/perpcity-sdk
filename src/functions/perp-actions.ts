@@ -5,9 +5,9 @@ import { PERP_FACTORY_ABI } from "../abis/perp-factory";
 import type { PerpCityContext } from "../context";
 import type {
   CreatePerpParams,
+  EstimateTakerPositionResult,
   OpenMakerPositionParams,
   OpenTakerPositionParams,
-  QuoteTakerPositionResult,
 } from "../types/entity-data";
 import { MAX_TICK, MIN_TICK, NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
 import { approveUsdc } from "../utils/approve";
@@ -132,25 +132,10 @@ export async function openTakerPosition(
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
     if (params.margin <= 0) throw new Error("Margin must be greater than 0");
-    if (params.leverage <= 0) throw new Error("Leverage must be greater than 0");
+    if (params.perpDelta === 0n) throw new Error("perpDelta must be non-zero");
 
     const marginScaled = scale6Decimals(params.margin);
     await ensureUsdcAllowance(context, perpAddress, marginScaled);
-
-    const perpData = await context.getPerpData(perpAddress);
-    const perpDelta =
-      params.perpDelta ??
-      derivePerpDelta({
-        margin: params.margin,
-        leverage: params.leverage,
-        price: perpData.mark,
-        isLong: params.isLong,
-      });
-    const amt1Limit =
-      params.amt1Limit ??
-      (typeof params.unspecifiedAmountLimit === "bigint"
-        ? params.unspecifiedAmountLimit
-        : scale6Decimals(params.unspecifiedAmountLimit));
 
     const { request } = await context.publicClient.simulateContract({
       address: perpAddress,
@@ -160,8 +145,8 @@ export async function openTakerPosition(
         {
           holder: context.walletClient.account!.address,
           margin: marginScaled,
-          perpDelta,
-          amt1Limit,
+          perpDelta: params.perpDelta,
+          amt1Limit: params.amt1Limit,
         },
       ],
       account: context.walletClient.account,
@@ -181,7 +166,7 @@ export async function openTakerPosition(
           continue;
         }
         const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
-        return new OpenPosition(context, perpAddress, posId, params.isLong, false, txHash);
+        return new OpenPosition(context, perpAddress, posId, params.perpDelta > 0n, false, txHash);
       } catch (_e) {}
     }
     throw new Error(`TakerOpened event not found in transaction receipt. Hash: ${txHash}`);
@@ -238,29 +223,6 @@ export function calculateAlignedTicks(
   return { alignedTickLower, alignedTickUpper };
 }
 
-export const DEFAULT_MAKER_SLIPPAGE_TOLERANCE = 0.01;
-export const MAX_UINT128 = 2n ** 128n - 1n;
-
-export function applySlippage(
-  delta: bigint,
-  slippageTolerance: number,
-  fallbackRef?: bigint
-): bigint {
-  const slippageBps = BigInt(Math.ceil(slippageTolerance * 10000));
-
-  if (delta < 0n) {
-    const absDelta = -delta;
-    return absDelta + (absDelta * slippageBps) / 10000n;
-  }
-
-  if (fallbackRef !== undefined && fallbackRef !== 0n) {
-    const absRef = fallbackRef < 0n ? -fallbackRef : fallbackRef;
-    return (absRef * slippageBps) / 10000n;
-  }
-
-  return 0n;
-}
-
 export async function openMakerPosition(
   context: PerpCityContext,
   perpAddress: Hex,
@@ -279,20 +241,10 @@ export async function openMakerPosition(
       perpData.tickSpacing
     );
 
-    let maxAmt0In: bigint;
-    let maxAmt1In: bigint;
-    if ((params.maxAmt0In === undefined) !== (params.maxAmt1In === undefined)) {
-      throw new Error("Both maxAmt0In and maxAmt1In must be provided together or neither.");
-    }
-    if (params.maxAmt0In !== undefined && params.maxAmt1In !== undefined) {
-      maxAmt0In =
-        typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
-      maxAmt1In =
-        typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
-    } else {
-      maxAmt0In = MAX_UINT128;
-      maxAmt1In = MAX_UINT128;
-    }
+    const maxAmt0In =
+      typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
+    const maxAmt1In =
+      typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
 
     await ensureUsdcAllowance(context, perpAddress, marginScaled);
 
@@ -335,16 +287,15 @@ export async function openMakerPosition(
   }, "openMakerPosition");
 }
 
-export async function quoteTakerPosition(
+export async function estimateTakerPosition(
   context: PerpCityContext,
   perpAddress: Hex,
   params: {
-    holder: Address;
     isLong: boolean;
     margin: number;
     leverage: number;
   }
-): Promise<QuoteTakerPositionResult> {
+): Promise<EstimateTakerPositionResult> {
   return withErrorHandling(async () => {
     const perpData = await context.getPerpData(perpAddress);
     const perpDelta = derivePerpDelta({
@@ -360,7 +311,7 @@ export async function quoteTakerPosition(
       usdDelta: params.isLong ? -usdDelta : usdDelta,
       fillPrice: perpData.mark,
     };
-  }, "quoteTakerPosition");
+  }, "estimateTakerPosition");
 }
 
 export async function adjustTaker(

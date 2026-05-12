@@ -270,7 +270,7 @@ export async function setupAnvil(): Promise<AnvilSetup> {
     walletClient: walletClient as any,
     rpcUrl,
     deployments: {
-      perpManager: perpAddress,
+      perpAddress,
       perpFactory: perpFactoryAddress,
       protocolFeeManager: protocolFeeManagerAddress,
       usdc: usdcAddress,

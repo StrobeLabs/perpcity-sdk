@@ -11,7 +11,7 @@ export interface PerpCityDeployments {
   /** ProtocolFeeManager address. Can also be read from a Perp contract. */
   protocolFeeManager?: Address;
 
-  /** Default Perp address used by approval helpers when no spender is supplied. */
+  /** Optional default Perp address for apps that operate on one market. */
   perpAddress?: Address;
 
   // Module addresses used as defaults when creating new perps.

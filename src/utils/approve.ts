@@ -3,25 +3,14 @@ import type { PerpCityContext } from "../context";
 
 const DEFAULT_CONFIRMATIONS = 2;
 
-export async function getUsdcAllowance(context: PerpCityContext, owner: Address): Promise<bigint> {
-  const deployments = context.deployments();
-  const spender = deployments.perpAddress;
-  if (!spender) {
-    throw new Error("getUsdcAllowance requires a spender/perp address in v2");
-  }
-  return context.publicClient.readContract({
-    address: deployments.usdc,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: [owner, spender],
-  }) as Promise<bigint>;
-}
-
-export async function getUsdcAllowanceForSpender(
+export async function getUsdcAllowance(
   context: PerpCityContext,
   owner: Address,
   spender: Address
 ): Promise<bigint> {
+  if (!spender) {
+    throw new Error("getUsdcAllowance requires a spender/perp address in v2");
+  }
   return context.publicClient.readContract({
     address: context.deployments().usdc,
     abi: erc20Abi,
@@ -33,20 +22,18 @@ export async function getUsdcAllowanceForSpender(
 export async function approveUsdc(
   context: PerpCityContext,
   amount: bigint,
-  confirmations: number = DEFAULT_CONFIRMATIONS,
-  spender?: Address
+  spender: Address,
+  confirmations: number = DEFAULT_CONFIRMATIONS
 ) {
-  const deployments = context.deployments();
-  const approvalSpender = spender ?? deployments.perpAddress;
-  if (!approvalSpender) {
+  if (!spender) {
     throw new Error("approveUsdc requires a spender/perp address in v2");
   }
 
   const { request } = await context.publicClient.simulateContract({
-    address: deployments.usdc,
+    address: context.deployments().usdc,
     abi: erc20Abi,
     functionName: "approve",
-    args: [approvalSpender, amount],
+    args: [spender, amount],
     account: context.walletClient.account,
   });
 

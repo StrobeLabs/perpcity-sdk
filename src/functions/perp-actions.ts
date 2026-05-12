@@ -121,7 +121,7 @@ async function ensureUsdcAllowance(
     blockTag: "latest",
   });
   if (currentAllowance < requiredAmount) {
-    await approveUsdc(context, requiredAmount, 2, spender);
+    await approveUsdc(context, requiredAmount, spender, 2);
   }
 }
 

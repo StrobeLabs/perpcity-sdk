@@ -21,7 +21,7 @@ describe("USDC Approval Integration Tests", () => {
     it("should approve USDC spending", async () => {
       const amount = 100_000_000n; // 100 USDC (6 decimals)
 
-      await approveUsdc(context, amount, 1);
+      await approveUsdc(context, amount, setup.addresses.perp, 1);
 
       const allowance = await setup.publicClient.readContract({
         address: setup.addresses.usdc,
@@ -36,7 +36,7 @@ describe("USDC Approval Integration Tests", () => {
     it("should verify approval was set correctly", async () => {
       const amount = 1000_000_000n; // 1000 USDC
 
-      await approveUsdc(context, amount, 1);
+      await approveUsdc(context, amount, setup.addresses.perp, 1);
 
       const allowance = await setup.publicClient.readContract({
         address: setup.addresses.usdc,
@@ -51,7 +51,7 @@ describe("USDC Approval Integration Tests", () => {
     it("should approve with different confirmation counts", async () => {
       const amount = 50_000_000n; // 50 USDC
 
-      await approveUsdc(context, amount, 2);
+      await approveUsdc(context, amount, setup.addresses.perp, 2);
 
       const allowance = await setup.publicClient.readContract({
         address: setup.addresses.usdc,
@@ -64,7 +64,7 @@ describe("USDC Approval Integration Tests", () => {
     });
 
     it("should approve zero amount (revoke approval)", async () => {
-      await approveUsdc(context, 0n, 1);
+      await approveUsdc(context, 0n, setup.addresses.perp, 1);
 
       const allowance = await setup.publicClient.readContract({
         address: setup.addresses.usdc,
@@ -79,7 +79,7 @@ describe("USDC Approval Integration Tests", () => {
     it("should approve maximum amount", async () => {
       const maxAmount = 2n ** 256n - 1n;
 
-      await approveUsdc(context, maxAmount, 1);
+      await approveUsdc(context, maxAmount, setup.addresses.perp, 1);
 
       const allowance = await setup.publicClient.readContract({
         address: setup.addresses.usdc,
@@ -97,8 +97,8 @@ describe("USDC Approval Integration Tests", () => {
       const amounts = [10_000_000n, 20_000_000n, 30_000_000n];
 
       for (const amount of amounts) {
-        await approveUsdc(context, 0n, 1);
-        await approveUsdc(context, amount, 1);
+        await approveUsdc(context, 0n, setup.addresses.perp, 1);
+        await approveUsdc(context, amount, setup.addresses.perp, 1);
 
         const allowance = await setup.publicClient.readContract({
           address: setup.addresses.usdc,

@@ -13,6 +13,7 @@ The SDK now targets the v2 contract model from `../perpcity-contracts`:
 
 - Position reads and mutations must include the Perp address because `positionId` values are local to each market.
 - USDC approvals must use the Perp contract as spender, not a global contract.
+- `getUsdcAllowance` and `approveUsdc` require an explicit spender address; do not fall back to `deployments.perpAddress` for approvals.
 - Taker-native actions use `perpDelta` and `amt1Limit`.
 - The old leverage-based taker open wrapper has been removed from the mutation path; `estimateTakerPosition` remains a client-side helper for deriving a best-effort delta.
 - Old quote helpers do not have exact v2 contract equivalents. The SDK only exposes best-effort estimates unless contract quote/preview methods are added.
@@ -25,13 +26,16 @@ The SDK now targets the v2 contract model from `../perpcity-contracts`:
 - Maker/taker open and adjust helpers call `Perp.openMaker`, `Perp.openTaker`, `Perp.adjustMaker`, and `Perp.adjustTaker`.
 - Position raw data reads use `Perp.positions` and `Perp.makerDetails`.
 - `BalanceDelta` values from the contract are unpacked into signed `amount0` and `amount1`.
+- Taker opens now require caller-supplied `perpDelta` and `amt1Limit`; maker opens require caller-supplied `maxAmt0In` and `maxAmt1In`.
+- Live position detail placeholders were removed because v2 contracts do not expose a complete live-risk view.
+- Legacy `PerpManager` naming was removed from SDK code; action helpers live in `src/functions/perp-actions.ts`.
 
 ## Test Harness Changes
 
 - The legacy global mock was replaced by v2-shaped mocks for `Perp`, `PerpFactory`, `ProtocolFeeManager`, and `Beacon`.
 - Existing module mocks now expose the tuple-returning `fees`, `liqFee`, `takerMarginRatios`, and `makerMarginRatios` functions used by the new SDK reads.
 - Integration tests deploy an isolated local Anvil instance on a free port and use the deployed `MockPerp` address as `testPerpId`.
-- Approval tests now assert USDC allowance against the Perp contract spender.
+- Approval tests pass the Perp contract as the explicit spender and assert USDC allowance against it.
 - Position read tests now pass both Perp address and position id.
 
 ## Client Notes

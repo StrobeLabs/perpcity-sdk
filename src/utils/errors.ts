@@ -14,7 +14,7 @@ export enum ErrorCategory {
  * Contract source classification
  */
 export enum ErrorSource {
-  PERP_MANAGER = "PERP_MANAGER",
+  PERP = "PERP",
   POOL_MANAGER = "POOL_MANAGER",
   UNKNOWN = "UNKNOWN",
 }
@@ -161,8 +161,8 @@ function detectErrorSource(errorName: string): ErrorSource {
     "MustClearExactPositiveDelta",
   ];
 
-  // Known PerpManager errors
-  const perpManagerErrors = [
+  // Known Perp errors
+  const perpErrors = [
     "InvalidBeaconAddress",
     "InvalidTradingFeeSplits",
     "InvalidMaxOpeningLev",
@@ -220,8 +220,8 @@ function detectErrorSource(errorName: string): ErrorSource {
     return ErrorSource.POOL_MANAGER;
   }
 
-  if (perpManagerErrors.includes(errorName)) {
-    return ErrorSource.PERP_MANAGER;
+  if (perpErrors.includes(errorName)) {
+    return ErrorSource.PERP;
   }
 
   return ErrorSource.UNKNOWN;
@@ -237,7 +237,7 @@ function formatContractError(
   const source = detectErrorSource(errorName);
 
   switch (errorName) {
-    // Existing PerpManager errors
+    // Existing Perp errors
     case "InvalidBeaconAddress":
       return {
         message: `Invalid beacon address: ${args[0]}`,
@@ -464,7 +464,7 @@ function formatContractError(
         debug: { source, category: ErrorCategory.SYSTEM_ERROR },
       };
 
-    // Missing PerpManager errors - ERC721/Ownership
+    // Missing Perp errors - ERC721/Ownership
     case "AccountBalanceOverflow":
       return {
         message:
@@ -533,7 +533,7 @@ function formatContractError(
         debug: { source, category: ErrorCategory.USER_ERROR },
       };
 
-    // Missing PerpManager errors - Transfer/Approval
+    // Missing Perp errors - Transfer/Approval
     case "TransferFromFailed":
       return {
         message:
@@ -554,7 +554,7 @@ function formatContractError(
         debug: { source, category: ErrorCategory.SYSTEM_ERROR },
       };
 
-    // Missing PerpManager errors - Module Config
+    // Missing Perp errors - Module Config
     case "AlreadyInitialized":
       return {
         message: "Contract has already been initialized. Initialization can only occur once.",
@@ -601,7 +601,7 @@ function formatContractError(
         debug: { source, category: ErrorCategory.CONFIG_ERROR },
       };
 
-    // Missing PerpManager errors - Position/Trading
+    // Missing Perp errors - Position/Trading
     case "InvalidAction":
       return {
         message: `Invalid action type: ${args[0]}. Please specify a valid action.`,

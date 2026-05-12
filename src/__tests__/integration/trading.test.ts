@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PerpCityContext } from "../../context";
-import { openMakerPosition, openTakerPosition } from "../../functions/perp-manager";
+import { openMakerPosition, openTakerPosition } from "../../functions/perp-actions";
 import { closePosition } from "../../functions/position";
 import { type AnvilSetup, setupAnvil } from "../helpers/anvil-setup";
 
@@ -11,7 +11,7 @@ describe("Trading Operations Integration Tests", () => {
   beforeAll(async () => {
     setup = await setupAnvil();
     context = setup.context;
-  }, 30000);
+  }, 60000);
 
   afterAll(() => {
     setup?.cleanup();
@@ -20,10 +20,9 @@ describe("Trading Operations Integration Tests", () => {
   describe("openTakerPosition", () => {
     it("should open a long taker position", async () => {
       const position = await openTakerPosition(context, setup.testPerpId, {
-        isLong: true,
         margin: 10,
-        leverage: 2,
-        unspecifiedAmountLimit: 0,
+        perpDelta: 20_000000n,
+        amt1Limit: 0n,
       });
 
       expect(position).toBeDefined();
@@ -36,10 +35,9 @@ describe("Trading Operations Integration Tests", () => {
 
     it("should open a short taker position", async () => {
       const position = await openTakerPosition(context, setup.testPerpId, {
-        isLong: false,
         margin: 10,
-        leverage: 2,
-        unspecifiedAmountLimit: 2n ** 128n - 1n,
+        perpDelta: -20_000000n,
+        amt1Limit: 2n ** 128n - 1n,
       });
 
       expect(position.positionId).toBeTypeOf("bigint");
@@ -47,12 +45,11 @@ describe("Trading Operations Integration Tests", () => {
       expect(position.isLong).toBe(false);
     });
 
-    it("should open position with high leverage", async () => {
+    it("should open position with larger perp delta", async () => {
       const position = await openTakerPosition(context, setup.testPerpId, {
-        isLong: true,
         margin: 10,
-        leverage: 5,
-        unspecifiedAmountLimit: 0,
+        perpDelta: 50_000000n,
+        amt1Limit: 0n,
       });
 
       expect(position.positionId).toBeGreaterThan(0n);
@@ -61,23 +58,21 @@ describe("Trading Operations Integration Tests", () => {
     it("should validate zero margin", async () => {
       await expect(async () => {
         await openTakerPosition(context, setup.testPerpId, {
-          isLong: true,
           margin: 0,
-          leverage: 2,
-          unspecifiedAmountLimit: 0,
+          perpDelta: 20_000000n,
+          amt1Limit: 0n,
         });
       }).rejects.toThrow("Margin must be greater than 0");
     });
 
-    it("should validate zero leverage", async () => {
+    it("should validate zero perp delta", async () => {
       await expect(async () => {
         await openTakerPosition(context, setup.testPerpId, {
-          isLong: true,
           margin: 10,
-          leverage: 0,
-          unspecifiedAmountLimit: 0,
+          perpDelta: 0n,
+          amt1Limit: 0n,
         });
-      }).rejects.toThrow("Leverage must be greater than 0");
+      }).rejects.toThrow("perpDelta must be non-zero");
     });
   });
 
@@ -114,16 +109,13 @@ describe("Trading Operations Integration Tests", () => {
   describe("closePosition", () => {
     it("should close a taker position", async () => {
       const position = await openTakerPosition(context, setup.testPerpId, {
-        isLong: true,
         margin: 100,
-        leverage: 2,
-        unspecifiedAmountLimit: 0,
+        perpDelta: 200_000000n,
+        amt1Limit: 0n,
       });
 
       const closeResult = await closePosition(context, setup.testPerpId, position.positionId, {
-        minAmt0Out: 0,
-        minAmt1Out: 0,
-        maxAmt1In: 1000,
+        amt1Limit: 1000_000000n,
       });
 
       // Full close returns null position with txHash
@@ -134,16 +126,13 @@ describe("Trading Operations Integration Tests", () => {
 
     it("should close a taker position using OpenPosition method", async () => {
       const position = await openTakerPosition(context, setup.testPerpId, {
-        isLong: true,
         margin: 200,
-        leverage: 2,
-        unspecifiedAmountLimit: 0,
+        perpDelta: 400_000000n,
+        amt1Limit: 0n,
       });
 
       const closeResult = await position.closePosition({
-        minAmt0Out: 0,
-        minAmt1Out: 0,
-        maxAmt1In: 1000,
+        amt1Limit: 1000_000000n,
       });
 
       expect(closeResult.position).toBeNull();
@@ -156,9 +145,7 @@ describe("Trading Operations Integration Tests", () => {
 
       await expect(async () => {
         await closePosition(context, setup.testPerpId, nonExistentId, {
-          minAmt0Out: 0,
-          minAmt1Out: 0,
-          maxAmt1In: 1000,
+          amt1Limit: 1000_000000n,
         });
       }).rejects.toThrow();
     });
@@ -167,10 +154,9 @@ describe("Trading Operations Integration Tests", () => {
   describe("Transaction Hash Access", () => {
     it("should expose transaction hash on OpenPosition for gas measurement", async () => {
       const position = await openTakerPosition(context, setup.testPerpId, {
-        isLong: true,
         margin: 100,
-        leverage: 2,
-        unspecifiedAmountLimit: 0,
+        perpDelta: 200_000000n,
+        amt1Limit: 0n,
       });
 
       expect(position.txHash).toBeDefined();

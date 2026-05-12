@@ -13,4 +13,12 @@ contract MockFees {
         LP_FEE = lpFee;
         LIQUIDATION_FEE = liquidationFee;
     }
+
+    function fees() external view returns (uint24, uint24, uint24) {
+        return (CREATOR_FEE, INSURANCE_FEE, LP_FEE);
+    }
+
+    function liqFee() external view returns (uint24) {
+        return LIQUIDATION_FEE;
+    }
 }

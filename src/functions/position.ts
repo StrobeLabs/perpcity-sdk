@@ -1,19 +1,18 @@
-import { decodeErrorResult, decodeEventLog, formatUnits, type Hex } from "viem";
-import { PERP_MANAGER_ABI } from "../abis/perp-manager";
+import type { Hex } from "viem";
+import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
+import type { PerpAddress } from "../types";
 import type {
   ClosePositionParams,
   ClosePositionResult,
-  LiveDetails,
   OpenPositionData,
   PositionRawData,
-  QuoteClosePositionResult,
 } from "../types/entity-data";
-import { scale6Decimals, uint256ToInt256 } from "../utils";
+import { scale6Decimals } from "../utils";
 import { withErrorHandling } from "../utils/errors";
+import { adjustMaker, adjustTaker } from "./perp-actions";
 
-// Pure functions that operate on OpenPositionData
-export function getPositionPerpId(positionData: OpenPositionData): Hex {
+export function getPositionPerpId(positionData: OpenPositionData): PerpAddress {
   return positionData.perpId;
 }
 
@@ -29,380 +28,74 @@ export function getPositionIsMaker(positionData: OpenPositionData): boolean | un
   return positionData.isMaker;
 }
 
-export function getPositionLiveDetails(positionData: OpenPositionData): LiveDetails {
-  return positionData.liveDetails;
+function toContractAmount(value: number | bigint | undefined): bigint {
+  if (value === undefined) return 0n;
+  return typeof value === "bigint" ? value : scale6Decimals(value);
 }
 
-export function getPositionPnl(positionData: OpenPositionData): number {
-  return positionData.liveDetails.pnl;
-}
-
-export function getPositionFundingPayment(positionData: OpenPositionData): number {
-  return positionData.liveDetails.fundingPayment;
-}
-
-export function getPositionEffectiveMargin(positionData: OpenPositionData): number {
-  return positionData.liveDetails.effectiveMargin;
-}
-
-export function getPositionIsLiquidatable(positionData: OpenPositionData): boolean {
-  return positionData.liveDetails.isLiquidatable;
-}
-
-export async function quoteClosePosition(
-  context: PerpCityContext,
-  positionId: bigint
-): Promise<QuoteClosePositionResult> {
-  return withErrorHandling(async () => {
-    const result = await context.publicClient.readContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "quoteClosePosition" as any,
-      args: [positionId],
-    });
-
-    const [unexpectedReason, pnl, funding, netMargin, wasLiquidated] =
-      result as unknown as readonly [Hex, bigint, bigint, bigint, boolean];
-
-    if (unexpectedReason && unexpectedReason !== "0x") {
-      let errorName = "Quote simulation failed";
-      try {
-        const decoded = decodeErrorResult({
-          abi: PERP_MANAGER_ABI,
-          data: unexpectedReason,
-        });
-        errorName = decoded.errorName;
-      } catch {
-        // Could not decode, use generic name
-      }
-      throw new Error(errorName);
-    }
-
-    return {
-      pnl: Number(formatUnits(pnl, 6)),
-      // Negate so positive = user receives funding, matching live details convention
-      funding: -Number(formatUnits(funding, 6)),
-      netMargin: Number(formatUnits(uint256ToInt256(netMargin), 6)),
-      wasLiquidated,
-    };
-  }, `quoteClosePosition for position ${positionId}`);
-}
-
-export async function closePositionWithQuote(
-  context: PerpCityContext,
-  _perpId: Hex,
-  positionId: bigint,
-  /** Slippage as a fraction, e.g. 0.01 = 1%. Compare with calculateClosePositionParams which uses percentage form (1 = 1%). */
-  slippageTolerance: number = 0.01
-): Promise<ClosePositionResult> {
-  return withErrorHandling(async () => {
-    // Read position to determine if it's a maker position
-    const rawData = await context.getPositionRawData(positionId);
-    const isMaker = rawData.makerDetails !== null;
-
-    const result = await context.publicClient.readContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "quoteClosePosition" as any,
-      args: [positionId],
-    });
-
-    const [unexpectedReason, quotePnl] = result as unknown as readonly [
-      Hex,
-      bigint,
-      bigint,
-      bigint,
-      boolean,
-    ];
-
-    if (unexpectedReason && unexpectedReason !== "0x") {
-      throw new Error("Quote failed — position may be invalid or already closed");
-    }
-
-    let contractParams = {
-      posId: positionId,
-      minAmt0Out: 0n,
-      minAmt1Out: 0n,
-      maxAmt1In: 0n,
-    };
-
-    const canonicalPerpId = rawData.perpId;
-
-    if (!isMaker) {
-      const isLong = rawData.entryPerpDelta > 0n;
-      const slippageBps = BigInt(Math.ceil(slippageTolerance * 10000));
-
-      // Derive the actual swap cost/revenue from the quote simulation.
-      // The quote already accounts for AMM price impact, so slippage
-      // only needs to cover price movement between quote and execution.
-      const absEntryUsd =
-        rawData.entryUsdDelta < 0n ? -rawData.entryUsdDelta : rawData.entryUsdDelta;
-
-      if (isLong) {
-        // Long close: sell perps for USD. Revenue = pnl + entryNotional.
-        // entryUsdDelta < 0 for longs (paid USDC), so absEntryUsd = |entryUsdDelta|.
-        const swapRevenue = quotePnl + absEntryUsd;
-        const minOut = swapRevenue > 0n ? swapRevenue - (swapRevenue * slippageBps) / 10000n : 0n;
-        contractParams = {
-          posId: positionId,
-          minAmt0Out: 0n,
-          minAmt1Out: minOut,
-          maxAmt1In: 0n,
-        };
-      } else {
-        // Short close: buy back perps with USD. Cost = entryNotional - pnl.
-        // entryUsdDelta > 0 for shorts (received USDC), so absEntryUsd = entryUsdDelta.
-        const swapCost = absEntryUsd - quotePnl;
-        const maxIn = swapCost > 0n ? swapCost + (swapCost * slippageBps) / 10000n : 0n;
-        contractParams = {
-          posId: positionId,
-          minAmt0Out: 0n,
-          minAmt1Out: 0n,
-          maxAmt1In: maxIn,
-        };
-      }
-    }
-
-    const { request } = await context.publicClient.simulateContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "closePosition",
-      args: [contractParams],
-      account: context.walletClient.account,
-      gas: 500000n,
-    });
-
-    const txHash = await context.walletClient.writeContract(request);
-    const receipt = await context.publicClient.waitForTransactionReceipt({
-      hash: txHash,
-    });
-
-    if (receipt.status === "reverted") {
-      throw new Error(`Transaction reverted. Hash: ${txHash}`);
-    }
-
-    let newPositionId: bigint | null = null;
-    for (const log of receipt.logs) {
-      try {
-        const decoded = decodeEventLog({
-          abi: PERP_MANAGER_ABI,
-          data: log.data,
-          topics: log.topics,
-          eventName: "PositionOpened",
-        });
-        const eventPerpId = (decoded.args.perpId as string).toLowerCase();
-        const eventPosId = decoded.args.posId as bigint;
-        if (eventPerpId === canonicalPerpId.toLowerCase() && eventPosId !== positionId) {
-          newPositionId = eventPosId;
-          break;
-        }
-      } catch (_e) {}
-    }
-
-    if (!newPositionId) {
-      return { position: null, txHash };
-    }
-
-    return {
-      position: {
-        perpId: canonicalPerpId,
-        positionId: newPositionId,
-        liveDetails: await getPositionLiveDetailsFromContract(
-          context,
-          canonicalPerpId,
-          newPositionId
-        ),
-      },
-      txHash,
-    };
-  }, `closePositionWithQuote for position ${positionId}`);
-}
-
-// Functions that require context for operations
 export async function closePosition(
   context: PerpCityContext,
-  perpId: Hex,
+  perpAddress: PerpAddress,
   positionId: bigint,
   params: ClosePositionParams
 ): Promise<ClosePositionResult> {
   return withErrorHandling(async () => {
-    const contractParams = {
-      posId: positionId,
-      minAmt0Out: scale6Decimals(params.minAmt0Out),
-      minAmt1Out: scale6Decimals(params.minAmt1Out),
-      maxAmt1In: scale6Decimals(params.maxAmt1In),
-    };
+    const rawData = await context.getPositionRawData(perpAddress, positionId);
+    let txHash: Hex;
 
-    const { request } = await context.publicClient.simulateContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "closePosition",
-      args: [contractParams],
-      account: context.walletClient.account,
-      gas: 500000n, // Provide explicit gas limit to avoid estimation issues
-    });
-
-    const txHash = await context.walletClient.writeContract(request);
-
-    // Wait for transaction confirmation
-    const receipt = await context.publicClient.waitForTransactionReceipt({
-      hash: txHash,
-    });
-
-    // Check if transaction was successful
-    if (receipt.status === "reverted") {
-      throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    if (rawData.makerDetails) {
+      const makerDetails = await context.publicClient.readContract({
+        address: perpAddress,
+        abi: PERP_ABI,
+        functionName: "makerDetails",
+        args: [positionId],
+      });
+      const result = await adjustMaker(context, perpAddress, {
+        posId: positionId,
+        marginDelta: 0n,
+        liquidityDelta: -makerDetails[2],
+        amt0Limit: toContractAmount(params.amt0Limit),
+        amt1Limit: toContractAmount(params.amt1Limit),
+      });
+      txHash = result.txHash;
+    } else {
+      const result = await adjustTaker(context, perpAddress, {
+        posId: positionId,
+        marginDelta: 0n,
+        perpDelta: -rawData.entryPerpDelta,
+        amt1Limit: toContractAmount(params.amt1Limit),
+      });
+      txHash = result.txHash;
     }
 
-    // Extract actual positionId from transaction receipt logs
-    // For partial closes, a PositionOpened event is emitted with the new position ID
-    // For full closes, no PositionOpened event will be present
-    let newPositionId: bigint | null = null;
-
-    for (const log of receipt.logs) {
-      try {
-        const decoded = decodeEventLog({
-          abi: PERP_MANAGER_ABI,
-          data: log.data,
-          topics: log.topics,
-          eventName: "PositionOpened",
-        });
-
-        // Match the perpId (case-insensitive) and extract the new position ID
-        // For partial closes, a NEW position is created with a DIFFERENT posId
-        const eventPerpId = (decoded.args.perpId as string).toLowerCase();
-        const eventPosId = decoded.args.posId as bigint;
-
-        if (eventPerpId === perpId.toLowerCase() && eventPosId !== positionId) {
-          newPositionId = eventPosId;
-          break;
-        }
-      } catch (_e) {}
-    }
-
-    // If no PositionOpened event found with a new posId, this was a full close - return null
-    if (!newPositionId) {
-      return { position: null, txHash };
-    }
-
-    // Return the updated position data with actual on-chain position ID
-    return {
-      position: {
-        perpId,
-        positionId: newPositionId,
-        liveDetails: await getPositionLiveDetailsFromContract(context, perpId, newPositionId),
-      },
-      txHash,
-    };
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    return { position: null, txHash };
   }, `closePosition for position ${positionId}`);
 }
 
-export async function getPositionLiveDetailsFromContract(
-  context: PerpCityContext,
-  _perpId: Hex,
-  positionId: bigint
-): Promise<LiveDetails> {
-  return withErrorHandling(async () => {
-    // Use quoteClosePosition which provides live position details
-    const result = (await context.publicClient.readContract({
-      address: context.deployments().perpManager,
-      abi: PERP_MANAGER_ABI,
-      functionName: "quoteClosePosition" as any,
-      args: [positionId],
-    })) as unknown as readonly [Hex, bigint, bigint, bigint, boolean];
-
-    // The result is a tuple: [unexpectedReason, pnl, funding, netMargin, wasLiquidated]
-    const [unexpectedReason, pnl, funding, netMargin, wasLiquidated] = result;
-
-    if (unexpectedReason !== "0x") {
-      throw new Error(
-        `Failed to quote position ${positionId} - position may be invalid or already closed`
-      );
-    }
-
-    return {
-      pnl: Number(formatUnits(pnl, 6)),
-      // Negate so positive = user receives funding, matching quoteClosePosition convention
-      fundingPayment: -Number(formatUnits(funding, 6)),
-      effectiveMargin: Number(formatUnits(uint256ToInt256(netMargin), 6)),
-      isLiquidatable: wasLiquidated,
-    };
-  }, `getPositionLiveDetailsFromContract for position ${positionId}`);
-}
-
-// Pure calculation functions for position metrics
-
-/**
- * Calculate the entry price from raw position data
- * Entry price = abs(entryUsdDelta) / abs(entryPerpDelta)
- * @param rawData - The raw position data from the contract
- * @returns Entry price in USD
- */
 export function calculateEntryPrice(rawData: PositionRawData): number {
   const perpDelta = rawData.entryPerpDelta;
   const usdDelta = rawData.entryUsdDelta;
-
-  // Handle edge case where position size is zero
-  if (perpDelta === 0n) {
-    return 0;
-  }
-
-  // Both values are in scaled format (6 decimals each)
-  // entryUsdDelta is scaled by 1e6, entryPerpDelta is scaled by 1e6
-  // Price = USD / Perp = (usdDelta / 1e6) / (perpDelta / 1e6) = usdDelta / perpDelta
+  if (perpDelta === 0n) return 0;
   const absPerpDelta = perpDelta < 0n ? -perpDelta : perpDelta;
   const absUsdDelta = usdDelta < 0n ? -usdDelta : usdDelta;
-
-  // Since both are scaled by 1e6, they cancel out
   return Number(absUsdDelta) / Number(absPerpDelta);
 }
 
-/**
- * Calculate the position size (in perp units)
- * @param rawData - The raw position data from the contract
- * @returns Position size (positive for long, negative for short)
- */
 export function calculatePositionSize(rawData: PositionRawData): number {
-  // entryPerpDelta is scaled by 1e6
   return Number(rawData.entryPerpDelta) / 1e6;
 }
 
-/**
- * Calculate the current position value at a given mark price
- * Position value = abs(size) * markPrice
- * @param rawData - The raw position data from the contract
- * @param markPrice - Current mark price
- * @returns Position value in USD (always positive)
- */
 export function calculatePositionValue(rawData: PositionRawData, markPrice: number): number {
-  const size = calculatePositionSize(rawData);
-  return Math.abs(size) * markPrice;
+  return Math.abs(calculatePositionSize(rawData)) * markPrice;
 }
 
-/**
- * Calculate the current leverage of a position
- * Leverage = positionValue / effectiveMargin
- * @param positionValue - Current position value in USD
- * @param effectiveMargin - Current effective margin in USD
- * @returns Leverage multiplier
- */
 export function calculateLeverage(positionValue: number, effectiveMargin: number): number {
-  if (effectiveMargin <= 0) {
-    return Infinity;
-  }
+  if (effectiveMargin <= 0) return Infinity;
   return positionValue / effectiveMargin;
 }
 
-/**
- * Calculate the liquidation price for a position
- * Liquidation occurs when: effectiveMargin / positionValue <= liqMarginRatio
- * For longs: liqPrice = entryPrice - (margin - liqRatio * entryNotional) / size
- * For shorts: liqPrice = entryPrice + (margin - liqRatio * entryNotional) / size
- *
- * @param rawData - The raw position data from the contract
- * @param isLong - Whether the position is long
- * @returns Liquidation price in USD, or null if cannot be calculated
- */
 export function calculateLiquidationPrice(
   rawData: PositionRawData,
   isLong: boolean,
@@ -410,23 +103,15 @@ export function calculateLiquidationPrice(
 ): number | null {
   const entryPrice = calculateEntryPrice(rawData);
   const positionSize = Math.abs(calculatePositionSize(rawData));
-
   const margin = effectiveMargin ?? rawData.margin;
-
-  if (positionSize === 0 || margin <= 0) {
-    return null;
-  }
+  if (positionSize === 0 || margin <= 0) return null;
 
   const liqMarginRatio = rawData.marginRatios.liq / 1e6;
   const entryNotional = positionSize * entryPrice;
-
   if (isLong) {
-    const liqPrice = entryPrice - (margin - liqMarginRatio * entryNotional) / positionSize;
-    return Math.max(0, liqPrice);
-  } else {
-    const liqPrice = entryPrice + (margin - liqMarginRatio * entryNotional) / positionSize;
-    return liqPrice;
+    return Math.max(0, entryPrice - (margin - liqMarginRatio * entryNotional) / positionSize);
   }
+  return entryPrice + (margin - liqMarginRatio * entryNotional) / positionSize;
 }
 
 export function calculatePnlPercentage(pnl: number, funding: number, margin: number): number {
@@ -434,53 +119,4 @@ export function calculatePnlPercentage(pnl: number, funding: number, margin: num
   const initialMargin = margin - totalPnl;
   if (initialMargin <= 0) return 0;
   return (totalPnl / initialMargin) * 100;
-}
-
-/**
- * Calculates ClosePositionParams for a position close, handling the difference
- * between taker and maker positions.
- *
- * For taker positions, the contract checks minAmt1Out (for longs) or maxAmt1In
- * (for shorts) against the raw USD swap delta — NOT netMargin. The swap amount
- * corresponds to the position's notional value at current price, so slippage
- * limits must be based on `notional`, not `expectedReturn`.
- *
- * For maker positions, the contract checks minAmt0Out and minAmt1Out against
- * the raw token amounts from Uniswap liquidity removal. The split between
- * perp tokens and USDC depends on where the current price sits in the LP range,
- * and quoteClosePosition only returns the aggregate netMargin. Since we cannot
- * predict the individual token amounts, both minimums are set to 0.
- */
-export function calculateClosePositionParams(opts: {
-  isMaker: boolean;
-  isLong?: boolean;
-  notional: number;
-  /** Slippage as a percentage, e.g. 1 = 1%. Compare with closePositionWithQuote which uses fractional form (0.01 = 1%). */
-  slippagePercent: number;
-}): ClosePositionParams {
-  if (opts.isMaker) {
-    return { minAmt0Out: 0, minAmt1Out: 0, maxAmt1In: 0 };
-  }
-
-  if (typeof opts.isLong !== "boolean") {
-    throw new Error("isLong must be explicitly set for taker positions");
-  }
-
-  const absNotional = Math.abs(opts.notional);
-
-  if (opts.isLong) {
-    // Long close: swap perps → USD. Contract checks minAmt1Out (min USD out).
-    return {
-      minAmt0Out: 0,
-      minAmt1Out: Math.max(0, absNotional * (1 - opts.slippagePercent / 100)),
-      maxAmt1In: 0,
-    };
-  } else {
-    // Short close: swap USD → perps. Contract checks maxAmt1In (max USD in).
-    return {
-      minAmt0Out: 0,
-      minAmt1Out: 0,
-      maxAmt1In: absNotional * (1 + opts.slippagePercent / 100),
-    };
-  }
 }

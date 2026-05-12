@@ -3,28 +3,37 @@ import type { PerpCityContext } from "../context";
 
 const DEFAULT_CONFIRMATIONS = 2;
 
-export async function getUsdcAllowance(context: PerpCityContext, owner: Address): Promise<bigint> {
-  const deployments = context.deployments();
+export async function getUsdcAllowance(
+  context: PerpCityContext,
+  owner: Address,
+  spender: Address
+): Promise<bigint> {
+  if (!spender) {
+    throw new Error("getUsdcAllowance requires a spender/perp address in v2");
+  }
   return context.publicClient.readContract({
-    address: deployments.usdc,
+    address: context.deployments().usdc,
     abi: erc20Abi,
     functionName: "allowance",
-    args: [owner, deployments.perpManager],
+    args: [owner, spender],
   }) as Promise<bigint>;
 }
 
 export async function approveUsdc(
   context: PerpCityContext,
   amount: bigint,
+  spender: Address,
   confirmations: number = DEFAULT_CONFIRMATIONS
 ) {
-  const deployments = context.deployments();
+  if (!spender) {
+    throw new Error("approveUsdc requires a spender/perp address in v2");
+  }
 
   const { request } = await context.publicClient.simulateContract({
-    address: deployments.usdc,
+    address: context.deployments().usdc,
     abi: erc20Abi,
     functionName: "approve",
-    args: [deployments.perpManager, amount],
+    args: [spender, amount],
     account: context.walletClient.account,
   });
 

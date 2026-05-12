@@ -1,14 +1,25 @@
 import type { Address, WalletClient } from "viem";
 
+export type PerpAddress = Address;
+
 export interface PerpCityDeployments {
-  perpManager: Address;
   usdc: Address;
-  // Module addresses - optional for now, can be fetched dynamically from perpId configs
-  // These are used as defaults when creating new perps
+
+  /** PerpFactory address for creating new markets. */
+  perpFactory?: Address;
+
+  /** ProtocolFeeManager address. Can also be read from a Perp contract. */
+  protocolFeeManager?: Address;
+
+  /** Optional default Perp address for apps that operate on one market. */
+  perpAddress?: Address;
+
+  // Module addresses used as defaults when creating new perps.
+  pricingModule?: Address;
+  fundingModule?: Address;
   feesModule?: Address;
   marginRatiosModule?: Address;
-  lockupPeriodModule?: Address;
-  sqrtPriceImpactLimitModule?: Address;
+  priceImpactModule?: Address;
 }
 
 export interface PerpCityContextConfig {

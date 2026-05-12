@@ -1,12 +1,7 @@
 import TTLCache from "@isaacs/ttlcache";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PerpCityContext } from "../../context";
-import {
-  type AnvilSetup,
-  setupAnvil,
-  setupMockPosition,
-  setupMockQuoteResult,
-} from "../helpers/anvil-setup";
+import { type AnvilSetup, setupAnvil, setupMockPosition } from "../helpers/anvil-setup";
 
 describe("Context Integration Tests", () => {
   let setup: AnvilSetup;
@@ -22,22 +17,10 @@ describe("Context Integration Tests", () => {
     await setupMockPosition(
       setup,
       TEST_POSITION_ID,
-      setup.testPerpId,
       TEST_POSITION_MARGIN, // margin (raw, 6 decimals)
       1000_000000n, // entryPerpDelta (long 1000 units)
       -1000_000000n, // entryUsdDelta (paid 1000 USD)
-      { min: 100000, max: 500000, liq: 50000 }
-    );
-
-    // Set up quote result for getOpenPositionData tests
-    await setupMockQuoteResult(
-      setup,
-      TEST_POSITION_ID,
-      50_000000n, // pnl: +50 USDC
-      -5_000000n, // funding: -5 USDC
-      545_000000n, // netMargin: 545 USDC
-      false, // not liquidated
-      1000_000000n // notional: 1000 USDC
+      50000
     );
   }, 60000);
 
@@ -54,7 +37,8 @@ describe("Context Integration Tests", () => {
     it("should have correct deployment addresses", () => {
       const deployments = context.deployments();
 
-      expect(deployments.perpManager).toBe(setup.addresses.perpManager);
+      expect(deployments.perpAddress).toBe(setup.addresses.perp);
+      expect(deployments.perpFactory).toBe(setup.addresses.perpFactory);
       expect(deployments.usdc).toBe(setup.addresses.usdc);
     });
 
@@ -74,7 +58,11 @@ describe("Context Integration Tests", () => {
       expect(perpConfig.key.tickSpacing).toBeTypeOf("number");
       expect(perpConfig.beacon).toBeDefined();
       expect(perpConfig.fees).toBeTypeOf("string");
+      expect(perpConfig.funding).toBeTypeOf("string");
       expect(perpConfig.marginRatios).toBeTypeOf("string");
+      expect(perpConfig.priceImpact).toBeTypeOf("string");
+      expect(perpConfig.pricing).toBeTypeOf("string");
+      expect(perpConfig.protocolFeeManager).toBe(setup.addresses.protocolFeeManager);
     });
 
     it("should cache perp config after first fetch", async () => {
@@ -191,12 +179,12 @@ describe("Context Integration Tests", () => {
       const nonExistentPositionId = 999999999n;
 
       await expect(async () => {
-        await context.getPositionRawData(nonExistentPositionId);
+        await context.getPositionRawData(setup.testPerpId, nonExistentPositionId);
       }).rejects.toThrow();
     });
 
     it("should fetch raw position data for valid position", async () => {
-      const rawData = await context.getPositionRawData(TEST_POSITION_ID);
+      const rawData = await context.getPositionRawData(setup.testPerpId, TEST_POSITION_ID);
 
       expect(rawData).toBeDefined();
       expect(rawData.perpId).toBeTypeOf("string");
@@ -211,7 +199,7 @@ describe("Context Integration Tests", () => {
     });
 
     it("should have valid margin ratios", async () => {
-      const rawData = await context.getPositionRawData(TEST_POSITION_ID);
+      const rawData = await context.getPositionRawData(setup.testPerpId, TEST_POSITION_ID);
 
       expect(rawData.marginRatios.min).toBeLessThan(rawData.marginRatios.max);
       expect(rawData.marginRatios.liq).toBeLessThanOrEqual(rawData.marginRatios.min);
@@ -224,7 +212,7 @@ describe("Context Integration Tests", () => {
     });
 
     it("should have consistent entry deltas", async () => {
-      const rawData = await context.getPositionRawData(TEST_POSITION_ID);
+      const rawData = await context.getPositionRawData(setup.testPerpId, TEST_POSITION_ID);
 
       const perpDeltaSign = rawData.entryPerpDelta > 0n ? 1 : rawData.entryPerpDelta < 0n ? -1 : 0;
       const usdDeltaSign = rawData.entryUsdDelta > 0n ? 1 : rawData.entryUsdDelta < 0n ? -1 : 0;
@@ -235,7 +223,7 @@ describe("Context Integration Tests", () => {
     });
 
     it("should have non-negative margin for open position", async () => {
-      const rawData = await context.getPositionRawData(TEST_POSITION_ID);
+      const rawData = await context.getPositionRawData(setup.testPerpId, TEST_POSITION_ID);
       expect(rawData.margin).toBeGreaterThanOrEqual(0);
     });
   });

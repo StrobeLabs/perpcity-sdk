@@ -118,8 +118,7 @@ describe("Trading Operations Integration Tests", () => {
         amt1Limit: 1000_000000n,
       });
 
-      // Full close returns null position with txHash
-      expect(closeResult.position).toBeNull();
+      // Full close returns just a txHash
       expect(closeResult.txHash).toBeDefined();
       expect(closeResult.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
@@ -135,7 +134,6 @@ describe("Trading Operations Integration Tests", () => {
         amt1Limit: 1000_000000n,
       });
 
-      expect(closeResult.position).toBeNull();
       expect(closeResult.txHash).toBeDefined();
       expect(closeResult.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });

@@ -1,5 +1,4 @@
 import type { Hex } from "viem";
-import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
 import type { PerpAddress } from "../types";
 import type {
@@ -44,16 +43,12 @@ export async function closePosition(
     let txHash: Hex;
 
     if (rawData.makerDetails) {
-      const makerDetails = await context.publicClient.readContract({
-        address: perpAddress,
-        abi: PERP_ABI,
-        functionName: "makerDetails",
-        args: [positionId],
-      });
+      // Reuse the liquidity already fetched by getPositionRawData instead of a second
+      // makerDetails read against the same position.
       const result = await adjustMaker(context, perpAddress, {
         posId: positionId,
         marginDelta: 0n,
-        liquidityDelta: -makerDetails[2],
+        liquidityDelta: -rawData.makerDetails.liquidity,
         amt0Limit: toContractAmount(params.amt0Limit),
         amt1Limit: toContractAmount(params.amt1Limit),
       });
@@ -70,7 +65,7 @@ export async function closePosition(
 
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
     if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
-    return { position: null, txHash };
+    return { txHash };
   }, `closePosition for position ${positionId}`);
 }
 

@@ -1,28 +1,15 @@
 import { OpenPosition } from '../dist';
 import { setup } from './setup';
 
-export async function closePosition(position: OpenPosition): Promise<OpenPosition | null> {
+export async function closePosition(position: OpenPosition): Promise<void> {
   const result = await position.closePosition({
-    maxAmt1In: 1000000,
-    minAmt0Out: 0,
-    minAmt1Out: 0,
+    amt1Limit: 1000000n,
   });
 
   console.log('Transaction Hash:', result.txHash);
-
-  if (result.position === null) {
-    console.log('Taker Position Closed');
-    console.log('Taker Position ID:', position.positionId);
-    console.log();
-    return null;
-  } else {
-    console.log('Maker Position Closed');
-    console.log('Maker Position ID:', position.positionId);
-    console.log('Taker Position Opened');
-    console.log('Taker Position ID: ', result.position.positionId);
-    console.log();
-    return result.position;
-  }
+  console.log('Position Closed');
+  console.log('Position ID:', position.positionId);
+  console.log();
 }
 
 async function main() {

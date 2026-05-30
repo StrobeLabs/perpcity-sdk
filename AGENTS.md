@@ -19,6 +19,22 @@ The SDK now targets the v2 contract model from `../perpcity-contracts`:
 - The old leverage-based taker open wrapper has been removed from the mutation path; `estimateTakerPosition` remains a client-side helper for deriving a best-effort delta.
 - Old quote helpers do not have exact v2 contract equivalents. The SDK only exposes best-effort estimates unless contract quote/preview methods are added.
 
+## Removed APIs
+
+The following were removed in the v0.1.0 contract migration because v2 has no equivalent on-chain surface:
+
+- `LiveDetails` (type) and on-chain live-detail fetching - PnL / liquidation are now computed client-side from `PositionRawData`.
+- `quoteClosePosition`
+- `closePositionWithQuote`
+- `calculateClosePositionParams`
+- `ClosePositionResult.position` - `closePosition` always returned `null` here; it now returns only `txHash`.
+
+## Breaking type changes
+
+- `MarginRatios` is now `{ liq, backstop }` (was `{ min, max, liq }`), mirroring the on-chain `Position` struct fields `liqMarginRatio` / `backstopMarginRatio`. The old `min` / `max` were fabricated.
+- `MakerDetails` dropped `unlockTimestamp` (no lockup field exists on the `Maker` struct) and added `liquidity` (from `Maker.liquidity`).
+- `getFundingRate` returns `fundingPerDayRaw` (signed `int88`, scaled by 1e18 per day) instead of the misnamed `rawX96`.
+
 ## Updated SDK Areas
 
 - ABIs regenerated from `../perpcity-contracts/out` for `Perp`, `PerpFactory`, modules, and `ProtocolFeeManager`.

@@ -193,22 +193,19 @@ describe("Context Integration Tests", () => {
       expect(rawData.entryPerpDelta).toBeTypeOf("bigint");
       expect(rawData.entryUsdDelta).toBeTypeOf("bigint");
       expect(rawData.marginRatios).toBeDefined();
-      expect(rawData.marginRatios.min).toBeTypeOf("number");
-      expect(rawData.marginRatios.max).toBeTypeOf("number");
       expect(rawData.marginRatios.liq).toBeTypeOf("number");
+      expect(rawData.marginRatios.backstop).toBeTypeOf("number");
     });
 
     it("should have valid margin ratios", async () => {
       const rawData = await context.getPositionRawData(setup.testPerpId, TEST_POSITION_ID);
 
-      expect(rawData.marginRatios.min).toBeLessThan(rawData.marginRatios.max);
-      expect(rawData.marginRatios.liq).toBeLessThanOrEqual(rawData.marginRatios.min);
-      expect(rawData.marginRatios.min).toBeGreaterThan(0);
-      expect(rawData.marginRatios.max).toBeGreaterThan(0);
+      // backstop is a tighter threshold than liq: backstop <= liq.
+      expect(rawData.marginRatios.backstop).toBeLessThanOrEqual(rawData.marginRatios.liq);
       expect(rawData.marginRatios.liq).toBeGreaterThan(0);
-      expect(rawData.marginRatios.min).toBeLessThanOrEqual(1000000);
-      expect(rawData.marginRatios.max).toBeLessThanOrEqual(1000000);
+      expect(rawData.marginRatios.backstop).toBeGreaterThan(0);
       expect(rawData.marginRatios.liq).toBeLessThanOrEqual(1000000);
+      expect(rawData.marginRatios.backstop).toBeLessThanOrEqual(1000000);
     });
 
     it("should have consistent entry deltas", async () => {

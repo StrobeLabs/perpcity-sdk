@@ -310,6 +310,8 @@ export async function estimateTakerPosition(
     });
     const absPerpDelta = perpDelta < 0n ? -perpDelta : perpDelta;
     const usdDelta = (absPerpDelta * scale6Decimals(perpData.mark)) / BigInt(NUMBER_1E6);
+    // NOTE: estimate only. fillPrice is the current mark with no slippage, fees, or
+    // price impact applied. Do not use it as an on-chain slippage/amt1Limit value.
     return {
       perpDelta,
       usdDelta: params.isLong ? -usdDelta : usdDelta,

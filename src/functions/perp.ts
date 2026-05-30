@@ -29,19 +29,21 @@ export function getPerpTickSpacing(perpData: PerpData): number {
 export async function getFundingRate(
   context: PerpCityContext,
   perpAddress: PerpAddress
-): Promise<{ ratePerDay: number; ratePerMinute: number; rawX96: bigint }> {
+): Promise<{ ratePerDay: number; ratePerMinute: number; fundingPerDayRaw: bigint }> {
   return withErrorHandling(async () => {
     const rates = await context.publicClient.readContract({
       address: perpAddress,
       abi: PERP_ABI,
       functionName: "rates",
     });
+    // rates[0] is Rates.fundingPerDay: a signed (int88) value scaled by 1e18 per day.
+    // It is NOT an X96 fixed-point or a per-second rate. viem returns it as a bigint.
     const ratePerDay = Number(rates[0]) / 1e18;
 
     return {
       ratePerDay: ratePerDay * 100,
       ratePerMinute: (ratePerDay * 100) / 1440,
-      rawX96: BigInt(rates[0]),
+      fundingPerDayRaw: rates[0],
     };
   }, `getFundingRate for perp ${perpAddress}`);
 }

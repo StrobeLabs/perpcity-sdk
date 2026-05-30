@@ -21,7 +21,6 @@ export type ClosePositionParams = {
 };
 
 export type ClosePositionResult = {
-  position: any | null; // Will be OpenPosition | null, but avoiding circular dependency
   txHash: Hex;
 };
 
@@ -79,15 +78,15 @@ export type OpenPositionData = {
 };
 
 export type MarginRatios = {
-  min: number; // Minimum margin ratio (scaled by 1e6)
-  max: number; // Maximum margin ratio (scaled by 1e6)
+  // Mirrors the on-chain Position struct (liqMarginRatio, backstopMarginRatio).
   liq: number; // Liquidation margin ratio (scaled by 1e6)
+  backstop: number; // Backstop margin ratio (scaled by 1e6)
 };
 
 export type MakerDetails = {
-  unlockTimestamp: number;
   tickLower: number;
   tickUpper: number;
+  liquidity: bigint; // Active range liquidity (Maker.liquidity, uint128)
 };
 
 export type PositionRawData = {

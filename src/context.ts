@@ -86,6 +86,9 @@ export class PerpCityContext {
     const cached = this.configCache.get(perpAddress);
     if (cached) return cached;
 
+    // These 7 reads are coalesced into a single JSON-RPC request because the public
+    // client's transport is configured with { batch: true } (see constructor). Keep the
+    // batching: removing it turns one config fetch into 7 separate round-trips.
     const [key, modules, protocolFeeManager, protocolFee, emaWindow, poolId, owner] =
       await Promise.all([
         this.publicClient.readContract({
@@ -237,14 +240,12 @@ export class PerpCityContext {
       args: [userAddress],
     });
 
-    const openPositionsData = await Promise.all(
-      positions.map(async ({ perpId, positionId, isLong, isMaker }) => ({
-        perpId,
-        positionId,
-        isLong,
-        isMaker,
-      }))
-    );
+    const openPositionsData = positions.map(({ perpId, positionId, isLong, isMaker }) => ({
+      perpId,
+      positionId,
+      isLong,
+      isMaker,
+    }));
 
     return {
       walletAddress: userAddress as Hex,
@@ -266,6 +267,9 @@ export class PerpCityContext {
     isLong: boolean,
     isMaker: boolean
   ): Promise<OpenPositionData> {
+    // Existence/liveness guard only: getPositionRawData throws if the position does
+    // not exist or is closed. We deliberately discard its result and trust the
+    // caller-supplied isLong/isMaker, which the contract does not expose here.
     await this.getPositionRawData(perpAddress, positionId);
     return {
       perpId: perpAddress,
@@ -292,6 +296,8 @@ export class PerpCityContext {
         }),
       ]);
 
+      // A zero margin + zero delta is indistinguishable on-chain between a position
+      // that was closed and one that never existed, so the message covers both cases.
       if (position[1] === 0n && position[0] === 0n) {
         throw new Error(`Position ${positionId} does not exist or is closed`);
       }
@@ -305,16 +311,16 @@ export class PerpCityContext {
         margin: Number(formatUnits(position[1], 6)),
         entryPerpDelta: delta.amount0,
         entryUsdDelta: delta.amount1,
+        // Position struct order: [delta, margin, liqMarginRatio, backstopMarginRatio, ...].
         marginRatios: {
-          min: Number(position[2]),
-          max: 1000000,
           liq: Number(position[2]),
+          backstop: Number(position[3]),
         },
         makerDetails: isMaker
           ? {
-              unlockTimestamp: 0,
               tickLower: Number(makerDetails[0]),
               tickUpper: Number(makerDetails[1]),
+              liquidity: makerDetails[2],
             }
           : null,
       };

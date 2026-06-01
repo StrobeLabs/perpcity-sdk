@@ -12,7 +12,7 @@ export interface PerpCityDeployments {
   protocolFeeManager?: Address;
 
   /** Optional default Perp address for apps that operate on one market. */
-  perpAddress?: Address;
+  perpAddress?: PerpAddress;
 
   // Module addresses used as defaults when creating new perps.
   pricingModule?: Address;

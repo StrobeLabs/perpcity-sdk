@@ -76,6 +76,9 @@ export async function createPerp(
     if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
 
     for (const log of receipt.logs) {
+      // Only decode logs emitted by the factory we called, so a same-signature
+      // event from another contract can't be mistaken for PerpCreated.
+      if (log.address.toLowerCase() !== perpFactory.toLowerCase()) continue;
       try {
         const decoded = decodeEventLog({
           abi: PERP_FACTORY_ABI,

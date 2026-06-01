@@ -221,6 +221,11 @@ contract MockPerp {
             delete owners[params.posId];
             delete margins[params.posId];
             delete deltas[params.posId];
+            delete liqRatios[params.posId];
+            delete backstopRatios[params.posId];
+            delete makerTickLower[params.posId];
+            delete makerTickUpper[params.posId];
+            delete makerLiquidity[params.posId];
             emit TakerClosed(params.posId, SwapResult({delta: 0, ammPrice: ammPriceX96_, totalFeeAmt: 0, lpFeeAmt: 0, protocolFeeAmt: 0, creatorFeeAmt: 0, insuranceFeeAmt: 0}), 0, 0, 0, false);
         } else {
             emit TakerAdjusted(params.posId, SwapResult({delta: deltas[params.posId], ammPrice: ammPriceX96_, totalFeeAmt: 0, lpFeeAmt: 0, protocolFeeAmt: 0, creatorFeeAmt: 0, insuranceFeeAmt: 0}), 0, 0);
@@ -237,6 +242,11 @@ contract MockPerp {
             delete owners[params.posId];
             delete margins[params.posId];
             delete deltas[params.posId];
+            delete liqRatios[params.posId];
+            delete backstopRatios[params.posId];
+            delete makerTickLower[params.posId];
+            delete makerTickUpper[params.posId];
+            delete makerLiquidity[params.posId];
             emit MakerClosed(params.posId, 0, 0, 0, 0, 0, false);
         } else {
             emit MakerAdjusted(params.posId, 0, 0, 0, 0);

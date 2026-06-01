@@ -32,15 +32,18 @@ const walletClient = createWalletClient({
 
 // Initialize context with configuration
 const context = new PerpCityContext({
+  rpcUrl,
   walletClient,
   deployments: {
-    perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
+    perpAddress: process.env.PERP_ADDRESS as `0x${string}`,
     usdc: process.env.USDC_ADDRESS as `0x${string}`,
     // Optional: Module addresses for creating new perps
+    perpFactory: process.env.PERP_FACTORY_ADDRESS as `0x${string}`,
     feesModule: process.env.FEES_MODULE_ADDRESS as `0x${string}`,
+    fundingModule: process.env.FUNDING_MODULE_ADDRESS as `0x${string}`,
     marginRatiosModule: process.env.MARGIN_RATIOS_MODULE_ADDRESS as `0x${string}`,
-    lockupPeriodModule: process.env.LOCKUP_PERIOD_MODULE_ADDRESS as `0x${string}`,
-    sqrtPriceImpactLimitModule: process.env.SQRT_PRICE_IMPACT_LIMIT_MODULE_ADDRESS as `0x${string}`,
+    priceImpactModule: process.env.PRICE_IMPACT_MODULE_ADDRESS as `0x${string}`,
+    pricingModule: process.env.PRICING_MODULE_ADDRESS as `0x${string}`,
   },
 });
 ```
@@ -86,7 +89,7 @@ Create a `.env.local` file:
 ```env
 # Required
 PRIVATE_KEY=your_private_key_here
-PERP_MANAGER_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
+PERP_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
 USDC_ADDRESS=0xC1a5D4E99BB224713dd179eA9CA2Fa6600706210
 
 # RPC Configuration

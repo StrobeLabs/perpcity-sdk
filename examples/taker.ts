@@ -1,57 +1,49 @@
-import type { Hex } from 'viem';
-import type { PerpCityContext } from '../src/context';
-import type { OpenPosition } from '../src/functions/open-position';
-import { openTakerPosition } from '../src/functions/perp-manager';
+import type { OpenPosition, PerpAddress, PerpCityContext } from '../dist';
+import { estimateTakerPosition, openTakerPosition } from '../dist';
 import { setup } from './setup';
 
-export async function openTakerLongPosition(
-  context: PerpCityContext,
-  perpId: Hex
-): Promise<OpenPosition> {
-  console.log('Opening taker long position...');
+// Slippage tolerance applied to the off-chain estimate, in basis points (100 = 1%).
+const SLIPPAGE_BPS = 100n;
 
-  const longPosition = await openTakerPosition(context, perpId, {
-    isLong: true,
-    margin: 25,
-    leverage: 1,
-    unspecifiedAmountLimit: 0,
+async function openTaker(
+  context: PerpCityContext,
+  perpId: PerpAddress,
+  isLong: boolean
+): Promise<OpenPosition> {
+  const margin = 25;
+  const leverage = 1;
+
+  console.log(`Opening taker ${isLong ? 'long' : 'short'} position...`);
+
+  // Derive the contract-native perpDelta off-chain. NOTE: estimateTakerPosition
+  // returns an estimate from the current mark only (no fees/price impact), so we
+  // wrap it with a slippage tolerance to build amt1Limit.
+  const estimate = await estimateTakerPosition(context, perpId, { isLong, margin, leverage });
+  const usd = estimate.usdDelta < 0n ? -estimate.usdDelta : estimate.usdDelta;
+
+  // amt1Limit caps USD paid for longs and floors USD received for shorts.
+  const amt1Limit = isLong
+    ? (usd * (10_000n + SLIPPAGE_BPS)) / 10_000n
+    : (usd * (10_000n - SLIPPAGE_BPS)) / 10_000n;
+
+  const position = await openTakerPosition(context, perpId, {
+    margin,
+    perpDelta: estimate.perpDelta,
+    amt1Limit,
   });
 
-  console.log('Taker Long Position Opened');
-  console.log('Position ID:', longPosition.positionId.toString());
+  console.log(`Taker ${isLong ? 'long' : 'short'} position opened`);
+  console.log('Position ID:', position.positionId.toString());
   console.log();
 
-  return longPosition;
-}
-
-export async function openTakerShortPosition(
-  context: PerpCityContext,
-  perpId: Hex
-): Promise<OpenPosition> {
-  console.log('Opening taker short position...');
-
-  const shortPosition = await openTakerPosition(context, perpId, {
-    isLong: false,
-    margin: 25,
-    leverage: 1,
-    unspecifiedAmountLimit: 1000000,
-  });
-
-  console.log('Taker Short Position Opened');
-  console.log('Position ID:', shortPosition.positionId.toString());
-  console.log();
-
-  return shortPosition;
+  return position;
 }
 
 async function main() {
   const { context, perpId } = setup();
 
-  // Open long position
-  await openTakerLongPosition(context, perpId);
-
-  // Open short position
-  await openTakerShortPosition(context, perpId);
+  await openTaker(context, perpId, true);
+  await openTaker(context, perpId, false);
 }
 
 main();

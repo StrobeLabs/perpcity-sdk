@@ -8,21 +8,32 @@
 import { useMemo, useState } from 'react';
 import type { Hex } from 'viem';
 import { useChainId, useWalletClient } from 'wagmi';
-import { PerpCityContext } from '../src/context';
-import { openMakerPosition, openTakerPosition } from '../src/functions/perp-manager';
+import {
+  type PerpAddress,
+  PerpCityContext,
+  calculateAlignedTicks,
+  estimateLiquidity,
+  estimateTakerPosition,
+  openMakerPosition,
+  openTakerPosition,
+  scale6Decimals,
+} from '../src';
+
+// Slippage tolerance applied to off-chain taker estimates, in basis points.
+const SLIPPAGE_BPS = 100n;
 
 // ============================================================================
 // Setup Functions
 // ============================================================================
 
 function getDeployments(chainId: number) {
-  const deployments: Record<number, { perpManager: Hex; usdc: Hex }> = {
+  // In the v0.1.0 model each market is its own Perp contract. Provide the USDC
+  // address here; pass the specific market (perp) address per-trade as perpId.
+  const deployments: Record<number, { usdc: Hex }> = {
     84532: {
-      perpManager: '0x...' as Hex, // Replace with actual address
       usdc: '0x...' as Hex, // Replace with actual address
     },
     8453: {
-      perpManager: '0x...' as Hex, // Replace with actual address
       usdc: '0x...' as Hex, // Replace with actual address
     },
   };
@@ -70,7 +81,7 @@ export function usePerpCity(): PerpCityContext | null {
 // React Component: Open Taker Long Position
 // ============================================================================
 
-export function OpenLongButton({ perpId }: { perpId: Hex }) {
+export function OpenLongButton({ perpId }: { perpId: PerpAddress }) {
   const context = usePerpCity();
   const [loading, setLoading] = useState(false);
 
@@ -82,11 +93,19 @@ export function OpenLongButton({ perpId }: { perpId: Hex }) {
 
     setLoading(true);
     try {
-      const position = await openTakerPosition(context, perpId, {
+      // Derive the contract-native perpDelta off-chain, then bound USD paid.
+      const estimate = await estimateTakerPosition(context, perpId, {
         isLong: true,
         margin: 100, // $100 USDC
         leverage: 2, // 2x leverage
-        unspecifiedAmountLimit: 0, // No limit (max slippage)
+      });
+      const usd = estimate.usdDelta < 0n ? -estimate.usdDelta : estimate.usdDelta;
+      const amt1Limit = (usd * (10_000n + SLIPPAGE_BPS)) / 10_000n; // max USD to pay
+
+      const position = await openTakerPosition(context, perpId, {
+        margin: 100,
+        perpDelta: estimate.perpDelta,
+        amt1Limit,
       });
 
       console.log('Position opened:', position.positionId);
@@ -110,7 +129,7 @@ export function OpenLongButton({ perpId }: { perpId: Hex }) {
 // React Component: Open Taker Short Position
 // ============================================================================
 
-export function OpenShortButton({ perpId }: { perpId: Hex }) {
+export function OpenShortButton({ perpId }: { perpId: PerpAddress }) {
   const context = usePerpCity();
   const [loading, setLoading] = useState(false);
 
@@ -122,11 +141,19 @@ export function OpenShortButton({ perpId }: { perpId: Hex }) {
 
     setLoading(true);
     try {
-      const position = await openTakerPosition(context, perpId, {
+      // Derive the contract-native perpDelta off-chain, then floor USD received.
+      const estimate = await estimateTakerPosition(context, perpId, {
         isLong: false,
         margin: 100, // $100 USDC
         leverage: 3, // 3x leverage
-        unspecifiedAmountLimit: 1000000,
+      });
+      const usd = estimate.usdDelta < 0n ? -estimate.usdDelta : estimate.usdDelta;
+      const amt1Limit = (usd * (10_000n - SLIPPAGE_BPS)) / 10_000n; // min USD to receive
+
+      const position = await openTakerPosition(context, perpId, {
+        margin: 100,
+        perpDelta: estimate.perpDelta,
+        amt1Limit,
       });
 
       console.log('Position opened:', position.positionId);
@@ -150,7 +177,7 @@ export function OpenShortButton({ perpId }: { perpId: Hex }) {
 // React Component: Open Maker Position
 // ============================================================================
 
-export function OpenMakerButton({ perpId }: { perpId: Hex }) {
+export function OpenMakerButton({ perpId }: { perpId: PerpAddress }) {
   const context = usePerpCity();
   const [loading, setLoading] = useState(false);
 
@@ -166,18 +193,30 @@ export function OpenMakerButton({ perpId }: { perpId: Hex }) {
       const perpData = await context.getPerpData(perpId);
       const markPrice = perpData.mark;
 
-      // Calculate liquidity for desired position size
-      // This is simplified - in production you'd use proper liquidity calculation
-      // based on desired position size and price range
-      const liquidity = BigInt(1000000); // Example: 1M liquidity units
+      const margin = 100;
+      const priceLower = markPrice * 0.9; // 10% below mark
+      const priceUpper = markPrice * 1.1; // 10% above mark
+
+      // Size liquidity off-chain from the USDC committed and the chosen range.
+      const { alignedTickLower, alignedTickUpper } = calculateAlignedTicks(
+        priceLower,
+        priceUpper,
+        perpData.tickSpacing
+      );
+      const liquidity = await estimateLiquidity(
+        context,
+        alignedTickLower,
+        alignedTickUpper,
+        scale6Decimals(margin)
+      );
 
       const position = await openMakerPosition(context, perpId, {
-        margin: 100,
-        priceLower: markPrice * 0.9, // 10% below mark
-        priceUpper: markPrice * 1.1, // 10% above mark
+        margin,
+        priceLower,
+        priceUpper,
         liquidity,
-        maxAmt0In: 1000000, // Max perps
-        maxAmt1In: 1000000, // Max USDC
+        maxAmt0In: margin, // Max underlying perp to pull in
+        maxAmt1In: margin, // Max USDC to pull in
       });
 
       console.log('Maker position opened:', position.positionId);
@@ -201,7 +240,7 @@ export function OpenMakerButton({ perpId }: { perpId: Hex }) {
 // Example: Full Trading Interface Component
 // ============================================================================
 
-export function TradingInterface({ perpId }: { perpId: Hex }) {
+export function TradingInterface({ perpId }: { perpId: PerpAddress }) {
   const context = usePerpCity();
 
   if (!context) {

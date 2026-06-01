@@ -24,4 +24,12 @@ contract MockMarginRatios {
         MAX_MAKER_RATIO = maxMaker;
         LIQUIDATION_MAKER_RATIO = liqMaker;
     }
+
+    function takerMarginRatios() external view returns (uint24 init, uint24 liq, uint24 backstop) {
+        return (MIN_TAKER_RATIO, LIQUIDATION_TAKER_RATIO, LIQUIDATION_TAKER_RATIO / 2);
+    }
+
+    function makerMarginRatios() external view returns (uint24 init, uint24 liq, uint24 backstop) {
+        return (MIN_MAKER_RATIO, LIQUIDATION_MAKER_RATIO, LIQUIDATION_MAKER_RATIO / 2);
+    }
 }

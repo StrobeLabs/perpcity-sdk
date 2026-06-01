@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-01
+
+### ⚠️ BREAKING CHANGES
+
+Contract-accurate types for the v0.1.0 per-market `Perp` contract model. Fields are now sourced
+directly from the on-chain `Position`, `Maker`, and `Rates` structs
+(`perpcity-contracts/src/libraries/Structs.sol`).
+
+- `MarginRatios` is now `{ liq, backstop }` (was `{ min, max, liq }`). `liq` maps to the
+  `Position.liqMarginRatio` field and `backstop` to `Position.backstopMarginRatio` (both scaled by
+  1e6). The previous `min`/`max` were fabricated and have been removed.
+- `MakerDetails` removed `unlockTimestamp` (the `Maker` struct has no lockup field, so it was always
+  `0`) and added `liquidity` (from `Maker.liquidity`).
+- `getFundingRate` returns `fundingPerDayRaw` (signed `int88`, scaled by 1e18 per day) instead of the
+  misnamed `rawX96`. The value is already a `bigint`.
+- `ClosePositionResult` no longer includes the always-`null` `position` field; it now returns only
+  `txHash`.
+
+### Removed
+
+These had no equivalent on-chain surface in the v0.1.0 contracts:
+
+- `LiveDetails` type and on-chain live-detail fetching (PnL / liquidation are computed client-side
+  from `PositionRawData`).
+- `quoteClosePosition`, `closePositionWithQuote`, `calculateClosePositionParams`.
+
+### Fixed
+
+- `closePosition` reuses the maker `liquidity` already read by `getPositionRawData` instead of
+  issuing a second `makerDetails` call.
+- `estimateTakerPosition` documents that `fillPrice` is an estimate (current mark, no slippage/fees/
+  price impact) and must not be used as an on-chain slippage limit.
+
+### Added
+
+- Unit tests for `unpackBalanceDelta` (int128 edge cases) and `derivePerpDelta` (long/short sign and
+  size math).
+
 ## [0.2.0] - 2025-10-09
 
 ### ⚠️ BREAKING CHANGES

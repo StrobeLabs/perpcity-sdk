@@ -1,0 +1,36 @@
+export const PRICING_ABI = [
+  {
+    type: "function",
+    name: "fairPrice",
+    inputs: [
+      {
+        name: "ammPrice",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "index",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "emaAmmPrice",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "emaIndex",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "pure",
+  },
+] as const;

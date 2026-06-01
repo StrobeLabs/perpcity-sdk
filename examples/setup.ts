@@ -1,48 +1,52 @@
 import 'dotenv/config';
-import type { Hex } from 'viem';
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
-import { getRpcUrl, PerpCityContext } from '../dist';
+import { getRpcUrl, type PerpAddress, PerpCityContext } from '../dist';
 
-export function setup(): { context: PerpCityContext; perpId: Hex } {
-  // Validate required environment variables
-  if (!process.env['RPC_URL']) {
-    throw new Error(`Missing required env var: RPC_URL`);
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required env var: ${name}`);
   }
-  if (!process.env['PRIVATE_KEY']) {
-    throw new Error(`Missing required env var: PRIVATE_KEY`);
-  }
-  if (!process.env['PERP_MANAGER_ADDRESS']) {
-    throw new Error(`Missing required env var: PERP_MANAGER_ADDRESS`);
-  }
-  if (!process.env['USDC_ADDRESS']) {
-    throw new Error(`Missing required env var: USDC_ADDRESS`);
-  }
-  if (!process.env['PERP_ID']) {
-    throw new Error(`Missing required env var: PERP_ID`);
-  }
+  return value;
+}
 
-  // Get RPC URL from environment
-  const rpcUrl = getRpcUrl();
+/**
+ * Shared setup for the examples.
+ *
+ * In the v0.1.0 contract model each market is its own `Perp` contract, so the
+ * market address IS the perp id. Optional module/factory addresses are passed
+ * through for the create-perp example.
+ */
+export function setup(): { context: PerpCityContext; perpId: PerpAddress } {
+  const rpcUrl = getRpcUrl(); // reads RPC_URL
+  const privateKey = requireEnv('PRIVATE_KEY') as `0x${string}`;
+  const usdc = requireEnv('USDC_ADDRESS') as `0x${string}`;
+  const perpAddress = requireEnv('PERP_ADDRESS') as PerpAddress;
 
   const walletClient = createWalletClient({
     chain: baseSepolia,
     transport: http(rpcUrl),
-    account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
+    account: privateKeyToAccount(privateKey),
   });
 
   const context = new PerpCityContext({
-    walletClient: walletClient,
-    rpcUrl: rpcUrl,
+    walletClient,
+    rpcUrl,
     deployments: {
-      perpManager: process.env.PERP_MANAGER_ADDRESS as `0x${string}`,
-      usdc: process.env.USDC_ADDRESS as `0x${string}`,
+      usdc,
+      perpAddress,
+      // Optional - only needed by the create-perp example.
+      perpFactory: process.env.PERP_FACTORY_ADDRESS as `0x${string}` | undefined,
+      protocolFeeManager: process.env.PROTOCOL_FEE_MANAGER_ADDRESS as `0x${string}` | undefined,
+      feesModule: process.env.FEES_MODULE_ADDRESS as `0x${string}` | undefined,
+      fundingModule: process.env.FUNDING_MODULE_ADDRESS as `0x${string}` | undefined,
+      marginRatiosModule: process.env.MARGIN_RATIOS_MODULE_ADDRESS as `0x${string}` | undefined,
+      priceImpactModule: process.env.PRICE_IMPACT_MODULE_ADDRESS as `0x${string}` | undefined,
+      pricingModule: process.env.PRICING_MODULE_ADDRESS as `0x${string}` | undefined,
     },
   });
 
-  return {
-    context,
-    perpId: process.env.PERP_ID as Hex,
-  };
+  return { context, perpId: perpAddress };
 }

@@ -19,10 +19,14 @@ export async function view(context: PerpCityContext, perpId: Hex): Promise<void>
   const perpConfig = await context.getPerpConfig(perpId);
   console.log("perpConfig:");
   console.log("  creator:", perpConfig.creator);
-  console.log("  vault:", perpConfig.vault);
   console.log("  beacon:", perpConfig.beacon);
   console.log("  fees module:", perpConfig.fees);
+  console.log("  funding module:", perpConfig.funding);
   console.log("  marginRatios module:", perpConfig.marginRatios);
+  console.log("  priceImpact module:", perpConfig.priceImpact);
+  console.log("  pricing module:", perpConfig.pricing);
+  console.log("  protocolFeeManager:", perpConfig.protocolFeeManager);
+  console.log("  poolId:", perpConfig.poolId);
   console.log();
 
   // Get user's USDC balance and positions

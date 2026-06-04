@@ -12,6 +12,7 @@ import {
   type PerpAddress,
   PerpCityContext,
   calculateAlignedTicks,
+  calculateTakerSlippageLimit,
   estimateLiquidity,
   estimateTakerPosition,
   openMakerPosition,
@@ -19,8 +20,8 @@ import {
   scale6Decimals,
 } from '../src';
 
-// Slippage tolerance applied to off-chain taker estimates, in basis points.
-const SLIPPAGE_BPS = 100n;
+// Slippage tolerance applied to off-chain taker estimates, in percent.
+const SLIPPAGE_PERCENT = 1;
 
 // ============================================================================
 // Setup Functions
@@ -99,8 +100,7 @@ export function OpenLongButton({ perpId }: { perpId: PerpAddress }) {
         margin: 100, // $100 USDC
         leverage: 2, // 2x leverage
       });
-      const usd = estimate.usdDelta < 0n ? -estimate.usdDelta : estimate.usdDelta;
-      const amt1Limit = (usd * (10_000n + SLIPPAGE_BPS)) / 10_000n; // max USD to pay
+      const amt1Limit = calculateTakerSlippageLimit(estimate, true, SLIPPAGE_PERCENT);
 
       const position = await openTakerPosition(context, perpId, {
         margin: 100,
@@ -147,8 +147,7 @@ export function OpenShortButton({ perpId }: { perpId: PerpAddress }) {
         margin: 100, // $100 USDC
         leverage: 3, // 3x leverage
       });
-      const usd = estimate.usdDelta < 0n ? -estimate.usdDelta : estimate.usdDelta;
-      const amt1Limit = (usd * (10_000n - SLIPPAGE_BPS)) / 10_000n; // min USD to receive
+      const amt1Limit = calculateTakerSlippageLimit(estimate, false, SLIPPAGE_PERCENT);
 
       const position = await openTakerPosition(context, perpId, {
         margin: 100,

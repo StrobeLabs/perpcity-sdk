@@ -51,6 +51,6 @@
   "dependencies": {
     "@isaacs/ttlcache": "^1.4.1",
     "@uniswap/v3-sdk": "^3.25.2",
-    "viem": "^2.37.8"
+    "viem": "^2.46.1"
   }
 }

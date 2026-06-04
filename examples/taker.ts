@@ -1,9 +1,9 @@
 import type { OpenPosition, PerpAddress, PerpCityContext } from '../dist';
-import { estimateTakerPosition, openTakerPosition } from '../dist';
+import { calculateTakerSlippageLimit, estimateTakerPosition, openTakerPosition } from '../dist';
 import { setup } from './setup';
 
-// Slippage tolerance applied to the off-chain estimate, in basis points (100 = 1%).
-const SLIPPAGE_BPS = 100n;
+// Slippage tolerance applied to the off-chain estimate, in percent.
+const SLIPPAGE_PERCENT = 1;
 
 async function openTaker(
   context: PerpCityContext,
@@ -19,12 +19,9 @@ async function openTaker(
   // returns an estimate from the current mark only (no fees/price impact), so we
   // wrap it with a slippage tolerance to build amt1Limit.
   const estimate = await estimateTakerPosition(context, perpId, { isLong, margin, leverage });
-  const usd = estimate.usdDelta < 0n ? -estimate.usdDelta : estimate.usdDelta;
 
   // amt1Limit caps USD paid for longs and floors USD received for shorts.
-  const amt1Limit = isLong
-    ? (usd * (10_000n + SLIPPAGE_BPS)) / 10_000n
-    : (usd * (10_000n - SLIPPAGE_BPS)) / 10_000n;
+  const amt1Limit = calculateTakerSlippageLimit(estimate, isLong, SLIPPAGE_PERCENT);
 
   const position = await openTakerPosition(context, perpId, {
     margin,

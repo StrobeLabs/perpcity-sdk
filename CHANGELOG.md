@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-06-05
+
+### Added
+
+- `calculateTakerSlippageLimit(quote, isLong, slippagePercent)` — derives the contract-native
+  `amt1Limit` for `openTakerPosition` from `usdDelta` (the currency1 / USD leg the contract checks
+  in `PerpLogic.checkTakerAmountLimits`): a ceiling on USD paid for longs, a floor on USD received
+  for shorts. The slippage math now lives in the SDK instead of being reimplemented per app.
+
+### Changed
+
+- `examples/taker.ts` and `examples/wagmi-integration.ts` use `calculateTakerSlippageLimit` instead
+  of inlining the basis-point math.
+- Bumped `viem` from `^2.37.8` to `^2.46.1` to align with the client and remove `as never`
+  walletClient casts there.
+- Switched `tsconfig` `moduleResolution` from `node` to `bundler` so the newer viem's transitive
+  `ox` resolves to its bundled declarations (skipped by `skipLibCheck`) instead of its raw `.ts`
+  source.
+
 ## [0.7.0] - 2026-06-01
 
 ### ⚠️ BREAKING CHANGES

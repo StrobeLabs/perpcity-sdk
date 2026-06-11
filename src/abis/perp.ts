@@ -1903,6 +1903,46 @@ export const PERP_ABI = [
   },
   {
     type: "error",
+    name: "InsufficientLiquidityToFill",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "LongUtilizationExceeded",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "MarginRatioTooLow",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "MarginTooLow",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "MaxAmtExceeded",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "MinAmtUnmet",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NegativeEquity",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NegativeMargin",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NewOwnerIsZeroAddress",
     inputs: [],
   },
@@ -1913,12 +1953,22 @@ export const PERP_ABI = [
   },
   {
     type: "error",
+    name: "NoSystemFunds",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NonMakerPosition",
     inputs: [],
   },
   {
     type: "error",
     name: "NonTakerPosition",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotLiquidatable",
     inputs: [],
   },
   {
@@ -1934,6 +1984,21 @@ export const PERP_ABI = [
   {
     type: "error",
     name: "PositionDoesNotExist",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "PriceImpactTooHigh",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ShortUtilizationExceeded",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "TicksOutOfBounds",
     inputs: [],
   },
   {
@@ -1974,6 +2039,16 @@ export const PERP_ABI = [
   {
     type: "error",
     name: "UnauthorizedCaller",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ZeroDelta",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ZeroLiquidity",
     inputs: [],
   },
 ] as const;

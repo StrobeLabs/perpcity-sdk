@@ -114,10 +114,7 @@ export function parseContractError(error: unknown): PerpCityError {
     // "revert" of the called function, which would otherwise parse as
     // ContractError "Unknown".
     const feeCapError = error.walk((err) => err instanceof FeeCapTooLowError);
-    if (
-      feeCapError ||
-      error.message?.includes("max fee per gas less than block base fee")
-    ) {
+    if (feeCapError || error.message?.includes("max fee per gas less than block base fee")) {
       return new RPCError(
         "Network fee spiked while the transaction was being submitted. No funds moved - please try again.",
         error as Error

@@ -22,6 +22,7 @@ import type {
   UserData,
 } from "./types/entity-data";
 import { marginRatioToLeverage, scaleFromX96 } from "./utils";
+import { MIN_OPENING_MARGIN_USD } from "./utils/constants";
 import { withErrorHandling } from "./utils/errors";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
@@ -196,7 +197,7 @@ export class PerpCityContext {
         tickSpacing: Number(cfg.key.tickSpacing),
         mark: scaleFromX96(poolState[2]),
         bounds: {
-          minMargin: 10,
+          minMargin: MIN_OPENING_MARGIN_USD,
           minTakerLeverage: 1,
           maxTakerLeverage: marginRatioToLeverage(Number(initialRatio)),
           liquidationTakerRatio: Number(liquidationTakerRatio) / 1e6,

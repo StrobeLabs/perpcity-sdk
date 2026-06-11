@@ -1,5 +1,6 @@
 import { type Address, erc20Abi } from "viem";
 import type { PerpCityContext } from "../context";
+import { estimateFeesWithHeadroom } from "./fees";
 
 const DEFAULT_CONFIRMATIONS = 2;
 
@@ -35,6 +36,7 @@ export async function approveUsdc(
     functionName: "approve",
     args: [spender, amount],
     account: context.walletClient.account,
+    ...(await estimateFeesWithHeadroom(context.publicClient)),
   });
 
   const hash = await context.walletClient.writeContract(request);

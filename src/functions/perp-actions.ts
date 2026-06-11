@@ -13,6 +13,7 @@ import type {
 import { MAX_TICK, MIN_TICK, NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
 import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
+import { estimateFeesWithHeadroom } from "../utils/fees";
 import { OpenPosition } from "./open-position";
 
 const MAKER_OPENED_TOPIC = keccak256(toBytes("MakerOpened(uint256)"));
@@ -69,6 +70,7 @@ export async function createPerp(
         params.salt,
       ],
       account: context.walletClient.account,
+      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
 
     const txHash = await context.walletClient.writeContract(request);
@@ -157,6 +159,7 @@ export async function openTakerPosition(
         },
       ],
       account: context.walletClient.account,
+      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
 
     const txHash = await context.walletClient.writeContract(request);
@@ -271,6 +274,7 @@ export async function openMakerPosition(
       functionName: "openMaker",
       args: [contractParams],
       account: context.walletClient.account,
+      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
 
     const txHash = await context.walletClient.writeContract(request);
@@ -338,6 +342,7 @@ export async function adjustTaker(
       functionName: "adjustTaker",
       args: [params],
       account: context.walletClient.account,
+      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
     const txHash = await context.walletClient.writeContract(request);
     return { txHash };
@@ -365,6 +370,7 @@ export async function adjustMaker(
       functionName: "adjustMaker",
       args: [params],
       account: context.walletClient.account,
+      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
     const txHash = await context.walletClient.writeContract(request);
     return { txHash };

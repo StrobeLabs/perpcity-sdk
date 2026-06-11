@@ -90,7 +90,7 @@ describe("Context Integration Tests", () => {
       const perpData = await context.getPerpData(setup.testPerpId);
 
       expect(perpData.bounds).toBeDefined();
-      expect(perpData.bounds.minMargin).toBe(10);
+      expect(perpData.bounds.minMargin).toBe(5);
       expect(perpData.bounds.minTakerLeverage).toBeTypeOf("number");
       expect(perpData.bounds.minTakerLeverage).toBeGreaterThan(0);
       expect(perpData.bounds.maxTakerLeverage).toBeTypeOf("number");

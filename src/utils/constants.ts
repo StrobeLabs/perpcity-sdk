@@ -10,3 +10,8 @@ export const MAX_PRICE = 1e6;
 
 export const UINT256_MAX = (1n << 256n) - 1n;
 export const INT256_THRESHOLD = 1n << 255n;
+
+// Mirrors MIN_OPENING_MARGIN (5e6 micro-USDC) in perpcity-contracts
+// src/libraries/Constants.sol. The contract constant is compile-time only
+// with no on-chain getter, so this mirror must be kept in sync manually.
+export const MIN_OPENING_MARGIN_USD = 5;

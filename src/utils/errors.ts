@@ -1,4 +1,4 @@
-import { BaseError, ContractFunctionRevertedError } from "viem";
+import { BaseError, ContractFunctionRevertedError, FeeCapTooLowError } from "viem";
 
 /**
  * Error category classification
@@ -110,6 +110,20 @@ export function parseContractError(error: unknown): PerpCityError {
 
   // Handle viem BaseError
   if (error instanceof BaseError) {
+    // Checked before the revert walk: some RPCs report a too-low fee cap as a
+    // "revert" of the called function, which would otherwise parse as
+    // ContractError "Unknown".
+    const feeCapError = error.walk((err) => err instanceof FeeCapTooLowError);
+    if (
+      feeCapError ||
+      error.message?.includes("max fee per gas less than block base fee")
+    ) {
+      return new RPCError(
+        "Network fee spiked while the transaction was being submitted. No funds moved - please try again.",
+        error as Error
+      );
+    }
+
     const revertError = error.walk((err) => err instanceof ContractFunctionRevertedError);
 
     if (revertError instanceof ContractFunctionRevertedError) {

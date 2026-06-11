@@ -18,3 +18,18 @@ export async function estimateFeesWithHeadroom(
     maxPriorityFeePerGas,
   };
 }
+
+/**
+ * Merge headroom fees into a prepared write request.
+ *
+ * The fees must ride on the write (eth_sendTransaction), NOT on the
+ * simulation: fee fields in an eth_call make nodes run the balance check
+ * against the RPC gas cap, which is uint64 max on some Arbitrum providers
+ * and therefore rejects every call. The cast is contained here because the
+ * prepared-request union includes legacy variants that forbid EIP-1559 fee
+ * fields; at runtime these chains always produce EIP-1559 requests.
+ */
+export async function withFeeHeadroom<T>(publicClient: PublicClient, request: T): Promise<T> {
+  const fees = await estimateFeesWithHeadroom(publicClient);
+  return { ...request, ...fees } as unknown as T;
+}

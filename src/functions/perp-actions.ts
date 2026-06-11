@@ -13,7 +13,7 @@ import type {
 import { MAX_TICK, MIN_TICK, NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
 import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
-import { estimateFeesWithHeadroom } from "../utils/fees";
+import { withFeeHeadroom } from "../utils/fees";
 import { OpenPosition } from "./open-position";
 
 const MAKER_OPENED_TOPIC = keccak256(toBytes("MakerOpened(uint256)"));
@@ -70,10 +70,11 @@ export async function createPerp(
         params.salt,
       ],
       account: context.walletClient.account,
-      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
 
-    const txHash = await context.walletClient.writeContract(request);
+    const txHash = await context.walletClient.writeContract(
+      await withFeeHeadroom(context.publicClient, request)
+    );
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
     if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
 
@@ -159,10 +160,11 @@ export async function openTakerPosition(
         },
       ],
       account: context.walletClient.account,
-      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
 
-    const txHash = await context.walletClient.writeContract(request);
+    const txHash = await context.walletClient.writeContract(
+      await withFeeHeadroom(context.publicClient, request)
+    );
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
     if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
 
@@ -274,10 +276,11 @@ export async function openMakerPosition(
       functionName: "openMaker",
       args: [contractParams],
       account: context.walletClient.account,
-      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
 
-    const txHash = await context.walletClient.writeContract(request);
+    const txHash = await context.walletClient.writeContract(
+      await withFeeHeadroom(context.publicClient, request)
+    );
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
     if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
 
@@ -342,9 +345,10 @@ export async function adjustTaker(
       functionName: "adjustTaker",
       args: [params],
       account: context.walletClient.account,
-      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
-    const txHash = await context.walletClient.writeContract(request);
+    const txHash = await context.walletClient.writeContract(
+      await withFeeHeadroom(context.publicClient, request)
+    );
     return { txHash };
   }, `adjustTaker for position ${params.posId}`);
 }
@@ -370,9 +374,10 @@ export async function adjustMaker(
       functionName: "adjustMaker",
       args: [params],
       account: context.walletClient.account,
-      ...(await estimateFeesWithHeadroom(context.publicClient)),
     });
-    const txHash = await context.walletClient.writeContract(request);
+    const txHash = await context.walletClient.writeContract(
+      await withFeeHeadroom(context.publicClient, request)
+    );
     return { txHash };
   }, `adjustMaker for position ${params.posId}`);
 }

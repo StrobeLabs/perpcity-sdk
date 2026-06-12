@@ -1,4 +1,5 @@
 import { BaseError, ContractFunctionRevertedError, FeeCapTooLowError } from "viem";
+import { MIN_OPENING_MARGIN_USD } from "./constants";
 
 /**
  * Error category classification
@@ -174,6 +175,31 @@ function detectErrorSource(errorName: string): ErrorSource {
 
   // Known Perp errors
   const perpErrors = [
+    // Current Errors.sol (perp contracts v0.1.x)
+    "Abdicated",
+    "ZeroDelta",
+    "MinAmtUnmet",
+    "MarginTooLow",
+    "NoSystemFunds",
+    "ZeroLiquidity",
+    "MaxAmtExceeded",
+    "NegativeEquity",
+    "NegativeMargin",
+    "NotLiquidatable",
+    "NonMakerPosition",
+    "NonTakerPosition",
+    "TicksOutOfBounds",
+    "DataNotTimelocked",
+    "MarginRatioTooLow",
+    "DataAlreadyPending",
+    "PriceImpactTooHigh",
+    "TimelockNotExpired",
+    "UnauthorizedCaller",
+    "PositionDoesNotExist",
+    "LongUtilizationExceeded",
+    "ShortUtilizationExceeded",
+    "InsufficientLiquidityToFill",
+    // Legacy names kept for older deployments
     "InvalidBeaconAddress",
     "InvalidTradingFeeSplits",
     "InvalidMaxOpeningLev",
@@ -188,7 +214,6 @@ function detectErrorSource(errorName: string): ErrorSource {
     "MakerPositionLocked",
     "MaximumAmountExceeded",
     "MinimumAmountInsufficient",
-    "PriceImpactTooHigh",
     "SwapReverted",
     "ZeroSizePosition",
     "InvalidFundingInterval",
@@ -222,7 +247,6 @@ function detectErrorSource(errorName: string): ErrorSource {
     "InvalidMarginRatio",
     "MakerNotAllowed",
     "PositionLocked",
-    "ZeroDelta",
     "NotPoolManager",
     "NoLiquidityToReceiveFees",
   ];
@@ -336,8 +360,120 @@ function formatContractError(
 
     case "PriceImpactTooHigh":
       return {
-        message: `Price impact too high. Current price: ${args[0]}, Min acceptable: ${args[1]}, Max acceptable: ${args[2]}`,
+        message:
+          args.length > 0
+            ? `Price impact too high. Current price: ${args[0]}, Min acceptable: ${args[1]}, Max acceptable: ${args[2]}`
+            : "This order would move the price too much. Try a smaller size or wait for more liquidity.",
         debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    // Current Errors.sol (perp contracts v0.1.x) trading errors
+    case "InsufficientLiquidityToFill":
+      return {
+        message:
+          "Not enough liquidity in this market to fill the order. Try a smaller size or wait for more liquidity.",
+        debug: { source, category: ErrorCategory.STATE_ERROR },
+      };
+
+    case "MarginTooLow":
+      return {
+        message: `Margin is below the market minimum of $${MIN_OPENING_MARGIN_USD}.`,
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "MinAmtUnmet":
+      return {
+        message:
+          "Execution moved beyond your slippage limit. Try again or increase your slippage tolerance.",
+        debug: { source, category: ErrorCategory.USER_ERROR, canRetry: true },
+      };
+
+    case "MaxAmtExceeded":
+      return {
+        message:
+          "Execution would cost more than your slippage limit allows. Try again or increase your slippage tolerance.",
+        debug: { source, category: ErrorCategory.USER_ERROR, canRetry: true },
+      };
+
+    case "MarginRatioTooLow":
+      return {
+        message:
+          "This position would be too close to liquidation. Increase your margin or reduce leverage.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "LongUtilizationExceeded":
+      return {
+        message:
+          "The market's long capacity is fully utilized. Try a smaller size or wait for more liquidity.",
+        debug: { source, category: ErrorCategory.STATE_ERROR },
+      };
+
+    case "ShortUtilizationExceeded":
+      return {
+        message:
+          "The market's short capacity is fully utilized. Try a smaller size or wait for more liquidity.",
+        debug: { source, category: ErrorCategory.STATE_ERROR },
+      };
+
+    case "NegativeEquity":
+      return {
+        message: "The position's equity would be negative after this action.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "NegativeMargin":
+      return {
+        message: "The resulting margin would be negative. Reduce the amount being withdrawn.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "NotLiquidatable":
+      return {
+        message: "This position is healthy and cannot be liquidated.",
+        debug: { source, category: ErrorCategory.STATE_ERROR },
+      };
+
+    case "ZeroLiquidity":
+      return {
+        message: "Liquidity must be greater than zero.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "TicksOutOfBounds":
+      return {
+        message: "The selected price range is outside the allowed bounds.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "NonMakerPosition":
+      return {
+        message: "This action only applies to LP positions.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "NonTakerPosition":
+      return {
+        message: "This action only applies to trading positions.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "PositionDoesNotExist":
+      return {
+        message: "This position no longer exists. It may have been closed or liquidated.",
+        debug: { source, category: ErrorCategory.STATE_ERROR },
+      };
+
+    case "UnauthorizedCaller":
+      return {
+        message: "Your wallet is not authorized to perform this action.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "NoSystemFunds":
+      return {
+        message: "The protocol has no system funds available for this operation.",
+        debug: { source, category: ErrorCategory.SYSTEM_ERROR },
       };
 
     case "SwapReverted":

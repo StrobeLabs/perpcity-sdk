@@ -688,3 +688,71 @@ describe("Perp Position/Trading Errors", () => {
     expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
   });
 });
+
+// The deployed contracts' Errors.sol error set. Every entry must be decodable
+// from PERP_ABI, or reverts surface as ContractError "Unknown" in the app
+// (this is exactly how InsufficientLiquidityToFill reached production
+// undecoded as selector 0xed126f97).
+describe("PERP_ABI covers the contracts' Errors.sol", () => {
+  const ERRORS_SOL = [
+    "Abdicated",
+    "ZeroDelta",
+    "MinAmtUnmet",
+    "MarginTooLow",
+    "NoSystemFunds",
+    "ZeroLiquidity",
+    "MaxAmtExceeded",
+    "NegativeEquity",
+    "NegativeMargin",
+    "NotPoolManager",
+    "NotLiquidatable",
+    "NonMakerPosition",
+    "NonTakerPosition",
+    "TicksOutOfBounds",
+    "DataNotTimelocked",
+    "MarginRatioTooLow",
+    "DataAlreadyPending",
+    "PriceImpactTooHigh",
+    "TimelockNotExpired",
+    "UnauthorizedCaller",
+    "PositionDoesNotExist",
+    "LongUtilizationExceeded",
+    "ShortUtilizationExceeded",
+    "InsufficientLiquidityToFill",
+  ];
+
+  it.each(ERRORS_SOL)("decodes %s from its selector", async (name) => {
+    const { decodeErrorResult, keccak256, toBytes } = await import("viem");
+    const { PERP_ABI } = await import("../abis/perp");
+    const selector = keccak256(toBytes(`${name}()`)).slice(0, 10) as `0x${string}`;
+    const decoded = decodeErrorResult({ abi: PERP_ABI, data: selector });
+    expect(decoded.errorName).toBe(name);
+  });
+
+  it("maps InsufficientLiquidityToFill to a liquidity message", () => {
+    const mockError = createMockContractError("InsufficientLiquidityToFill", []);
+    const result = parseContractError(mockError);
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("InsufficientLiquidityToFill");
+    expect(result.message).toContain("Not enough liquidity");
+    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
+  });
+
+  it("maps MarginTooLow to the contract minimum", () => {
+    const mockError = createMockContractError("MarginTooLow", []);
+    const result = parseContractError(mockError);
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect(result.message).toContain("$5");
+    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
+  });
+
+  it("maps no-arg PriceImpactTooHigh without printing undefined", () => {
+    const mockError = createMockContractError("PriceImpactTooHigh", []);
+    const result = parseContractError(mockError);
+
+    expect(result.message).not.toContain("undefined");
+    expect(result.message).toContain("move the price too much");
+  });
+});

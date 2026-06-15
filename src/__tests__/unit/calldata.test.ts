@@ -7,6 +7,7 @@ import {
   buildAdjustTakerCall,
   buildApproveUsdcCall,
   buildOpenTakerPositionCall,
+  buildOpenTakerPositionCalls,
 } from "../../functions/calldata";
 import type { PerpAddress } from "../../types";
 import { scale6Decimals } from "../../utils";
@@ -78,6 +79,43 @@ describe("buildOpenTakerPositionCall", () => {
     expect(() =>
       buildOpenTakerPositionCall(context, PERP, { margin: 100, perpDelta: 0n, amt1Limit: 0n })
     ).toThrow(/perpDelta/);
+  });
+});
+
+describe("buildOpenTakerPositionCalls (allowance gating)", () => {
+  function ctxWithAllowance(allowance: bigint): PerpCityContext {
+    return {
+      walletClient: { account: { address: HOLDER } },
+      deployments: () => ({ usdc: USDC }),
+      publicClient: { readContract: async () => allowance },
+    } as unknown as PerpCityContext;
+  }
+
+  const params = { margin: 100, perpDelta: 4_000_000n, amt1Limit: 0n };
+
+  it("prepends an approve against the perp spender when allowance is short", async () => {
+    const calls = await buildOpenTakerPositionCalls(ctxWithAllowance(0n), PERP, params);
+
+    expect(calls).toHaveLength(2);
+    const [approve, open] = calls;
+    expect(getAddress(approve.to)).toBe(USDC);
+    const decoded = decodeFunctionData({ abi: erc20Abi, data: approve.data });
+    expect(decoded.functionName).toBe("approve");
+    // Allowance is read and approved against the Perp contract, never USDC itself.
+    expect(getAddress((decoded.args as readonly unknown[])[0] as string)).toBe(PERP);
+    expect((decoded.args as readonly unknown[])[1]).toBe(scale6Decimals(100));
+    expect(getAddress(open.to)).toBe(PERP);
+  });
+
+  it("omits the approve when the existing allowance already covers the margin", async () => {
+    const calls = await buildOpenTakerPositionCalls(
+      ctxWithAllowance(scale6Decimals(1000)),
+      PERP,
+      params
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(getAddress(calls[0].to)).toBe(PERP);
   });
 });
 

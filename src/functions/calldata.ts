@@ -225,7 +225,12 @@ export async function buildOpenMakerPositionCalls(
   params: OpenMakerPositionParams
 ): Promise<CallData[]> {
   const calls: CallData[] = [];
-  const approval = await maybeApprovalCall(context, perpAddress, scale6Decimals(params.margin));
+  // `openMaker` can pull both the margin (collateral) and the USDC leg of the LP
+  // deposit (currency1, up to `maxAmt1In`), so the approval must cover the maximum
+  // possible transfer. A margin-only approval reverts whenever amt1 > 0 — and the
+  // batched single-userOp path has no standing allowance to fall back on.
+  const requiredApproval = scale6Decimals(params.margin) + toContractAmount(params.maxAmt1In);
+  const approval = await maybeApprovalCall(context, perpAddress, requiredApproval);
   if (approval) calls.push(approval);
   calls.push(await buildOpenMakerPositionCall(context, perpAddress, params));
   return calls;

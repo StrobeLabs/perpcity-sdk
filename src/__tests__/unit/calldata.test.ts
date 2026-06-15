@@ -83,11 +83,19 @@ describe("buildOpenTakerPositionCall", () => {
 });
 
 describe("buildOpenTakerPositionCalls (allowance gating)", () => {
+  let lastReadContract: Record<string, unknown> | undefined;
+
   function ctxWithAllowance(allowance: bigint): PerpCityContext {
+    lastReadContract = undefined;
     return {
       walletClient: { account: { address: HOLDER } },
       deployments: () => ({ usdc: USDC }),
-      publicClient: { readContract: async () => allowance },
+      publicClient: {
+        readContract: async (args: Record<string, unknown>) => {
+          lastReadContract = args;
+          return allowance;
+        },
+      },
     } as unknown as PerpCityContext;
   }
 
@@ -95,6 +103,14 @@ describe("buildOpenTakerPositionCalls (allowance gating)", () => {
 
   it("prepends an approve against the perp spender when allowance is short", async () => {
     const calls = await buildOpenTakerPositionCalls(ctxWithAllowance(0n), PERP, params);
+
+    // The allowance is read against the USDC token for (owner=HOLDER, spender=PERP);
+    // guards maybeApprovalCall from regressing the owner/spender/token wiring.
+    expect(getAddress(lastReadContract?.address as string)).toBe(USDC);
+    expect(lastReadContract?.functionName).toBe("allowance");
+    const readArgs = lastReadContract?.args as readonly string[];
+    expect(getAddress(readArgs[0])).toBe(HOLDER);
+    expect(getAddress(readArgs[1])).toBe(PERP);
 
     expect(calls).toHaveLength(2);
     const [approve, open] = calls;

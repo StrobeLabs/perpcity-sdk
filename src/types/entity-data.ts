@@ -24,6 +24,17 @@ export type ClosePositionResult = {
   txHash: Hex;
 };
 
+/**
+ * A single contract call as raw calldata, for callers that submit transactions
+ * themselves (e.g. batching into an ERC-4337 userOperation) instead of letting
+ * the SDK execute via `walletClient.writeContract`.
+ */
+export type CallData = {
+  to: Address;
+  data: Hex;
+  value: bigint;
+};
+
 export type OpenTakerPositionParams = {
   margin: number; // USDC amount in human units (e.g., 100 = $100)
   perpDelta: bigint;

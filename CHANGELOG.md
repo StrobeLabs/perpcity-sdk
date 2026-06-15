@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-06-15
+
+### Added
+
+- Calldata builders for callers that submit transactions themselves (e.g. batching into an
+  ERC-4337 userOperation) instead of letting the SDK execute via `walletClient.writeContract`.
+  Each mirrors the argument encoding of its execute-and-wait counterpart, so a built call hits the
+  same contract path; fee headroom is omitted because userOp gas is handled by the bundler/paymaster.
+  - `buildApproveUsdcCall(context, amount, spender)` — ERC-20 `approve` on the configured USDC.
+  - `buildOpenTakerPositionCall(context, perpAddress, params)` — `Perp.openTaker`.
+  - `buildOpenMakerPositionCall(context, perpAddress, params)` — `Perp.openMaker` (async; reads
+    `tickSpacing`).
+  - `buildAdjustTakerCall` / `buildAdjustMakerCall` — `Perp.adjustTaker` / `Perp.adjustMaker`.
+  - `buildClosePositionCall(context, perpAddress, positionId, params)` — async; reads the position
+    to pick the maker/taker unwind, mirroring `closePosition`.
+  - `buildOpenTakerPositionCalls` / `buildOpenMakerPositionCalls` — full ordered batch that prepends
+    a USDC `approve` only when the current allowance is short, the single-userOp equivalent of the
+    internal `ensureUsdcAllowance` → open sequence.
+- `CallData` type (`{ to, data, value }`) for the builders above.
+
 ## [0.8.0] - 2026-06-05
 
 ### Added

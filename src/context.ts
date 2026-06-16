@@ -161,6 +161,8 @@ export class PerpCityContext {
   private async fetchPerpContractData(perpAddress: PerpAddress): Promise<{
     tickSpacing: number;
     mark: number;
+    sqrtPriceX96: bigint;
+    liquidity: bigint;
     bounds: Bounds;
     fees: Fees;
   }> {
@@ -196,6 +198,8 @@ export class PerpCityContext {
       return {
         tickSpacing: Number(cfg.key.tickSpacing),
         mark: scaleFromX96(poolState[2]),
+        sqrtPriceX96: poolState[1],
+        liquidity: poolState[3],
         bounds: {
           minMargin: MIN_OPENING_MARGIN_USD,
           minTakerLeverage: 1,
@@ -223,6 +227,8 @@ export class PerpCityContext {
         id: perpAddress,
         tickSpacing: contractData.tickSpacing,
         mark: contractData.mark,
+        sqrtPriceX96: contractData.sqrtPriceX96,
+        liquidity: contractData.liquidity,
         beacon: config.beacon,
         bounds: contractData.bounds,
         fees: contractData.fees,

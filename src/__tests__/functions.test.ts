@@ -26,6 +26,8 @@ describe("Perp Functions", () => {
     id: "0x123" as any,
     tickSpacing: 60,
     mark: 50.0,
+    sqrtPriceX96: 0n,
+    liquidity: 0n,
     beacon: "0xbeacon",
     bounds: {
       minMargin: 100,

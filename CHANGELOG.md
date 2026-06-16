@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-06-16
+
+### Changed
+
+- `estimateTakerPosition` now returns a price-impacted quote instead of the flat mark price. It
+  simulates the exact-perp-in swap against the pool curve, so `fillPrice` and `usdDelta` reflect the
+  real cost of the order. `usdDelta` is now suitable to feed into `calculateTakerSlippageLimit` for
+  an `amt1Limit` that won't spuriously revert with `MaxAmtExceeded` on shallow pools.
+  - This is a single active-liquidity-region approximation: exact while the swap stays within the
+    current tick, and an approximation (understating impact) once it would cross an initialized tick,
+    because only the pool's current active `liquidity` is available — not the full per-tick map.
+  - New `exceedsLiquidity: boolean` field on `EstimateTakerPositionResult`, set when the order is
+    larger than the constant-liquidity region can fill — a strong signal the on-chain swap would
+    revert with `PriceImpactTooHigh`. Surface it before submitting.
+
+### Added
+
+- `PerpData` now exposes `sqrtPriceX96` and `liquidity` from `poolState` (previously fetched and
+  discarded), so callers can drive swap simulation without extra RPC reads.
+- `simulateTakerSwap(...)` utility — the constant-liquidity exact-perp-in swap math behind
+  `estimateTakerPosition`, exported for callers that already hold pool state.
+
 ## [0.9.0] - 2026-06-15
 
 ### Added

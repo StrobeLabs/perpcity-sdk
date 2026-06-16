@@ -70,6 +70,10 @@ export type PerpData = {
   id: PerpAddress;
   tickSpacing: number;
   mark: number;
+  /** Current pool sqrt price (X96), from `poolState`. Drives swap simulation. */
+  sqrtPriceX96: bigint;
+  /** Current active liquidity, from `poolState`. Drives swap simulation. */
+  liquidity: bigint;
   beacon: Address;
   bounds: Bounds;
   fees: Fees;
@@ -114,6 +118,12 @@ export type EstimateTakerPositionResult = {
   perpDelta: bigint;
   usdDelta: bigint;
   fillPrice: number;
+  /**
+   * True when the order is larger than the pool's current active-liquidity
+   * region can fill. A strong signal the on-chain swap would revert with
+   * `PriceImpactTooHigh`; callers should surface this before submitting.
+   */
+  exceedsLiquidity: boolean;
 };
 
 export type CacheConfig = {

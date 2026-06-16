@@ -10,7 +10,14 @@ import type {
   OpenMakerPositionParams,
   OpenTakerPositionParams,
 } from "../types/entity-data";
-import { MAX_TICK, MIN_TICK, NUMBER_1E6, priceToTick, scale6Decimals } from "../utils";
+import {
+  MAX_TICK,
+  MIN_TICK,
+  NUMBER_1E6,
+  priceToTick,
+  scale6Decimals,
+  simulateTakerSwap,
+} from "../utils";
 import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
 import { withFeeHeadroom } from "../utils/fees";
@@ -318,14 +325,21 @@ export async function estimateTakerPosition(
       price: perpData.mark,
       isLong: params.isLong,
     });
-    const absPerpDelta = perpDelta < 0n ? -perpDelta : perpDelta;
-    const usdDelta = (absPerpDelta * scale6Decimals(perpData.mark)) / BigInt(NUMBER_1E6);
-    // NOTE: estimate only. fillPrice is the current mark with no slippage, fees, or
-    // price impact applied. Do not use it as an on-chain slippage/amt1Limit value.
+    // Simulate the swap against the pool curve so fillPrice/usdDelta reflect
+    // real price impact. This is a single active-liquidity-region approximation
+    // (see simulateTakerSwap) and does not model fees — the caller's slippage
+    // tolerance is expected to cover those.
+    const swap = simulateTakerSwap({
+      sqrtPriceX96: perpData.sqrtPriceX96,
+      liquidity: perpData.liquidity,
+      perpDelta,
+      markPrice: perpData.mark,
+    });
     return {
       perpDelta,
-      usdDelta: params.isLong ? -usdDelta : usdDelta,
-      fillPrice: perpData.mark,
+      usdDelta: swap.usdDelta,
+      fillPrice: swap.fillPrice,
+      exceedsLiquidity: swap.exceedsLiquidity,
     };
   }, "estimateTakerPosition");
 }

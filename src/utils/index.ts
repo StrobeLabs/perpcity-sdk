@@ -7,3 +7,4 @@ export * from "./funding";
 export * from "./liquidity";
 export * from "./rpc";
 export * from "./slippage";
+export * from "./swap";

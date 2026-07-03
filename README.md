@@ -1,9 +1,9 @@
 # PerpCity SDK
 
-TypeScript SDK for interacting with Perp City perpetual futures contracts on Base.
+TypeScript SDK for interacting with Perp City perpetual futures contracts on Arbitrum.
 
 # Docs
-You can find detailed docs in the strobe [docsite](docs.strobe.org/docs/developer/sdk)
+You can find detailed docs in the [Perp City docsite](https://docs.perp.city)
 
 ## Installation
 
@@ -17,7 +17,7 @@ pnpm add @strobelabs/perpcity-sdk
 import { PerpCityContext, getRpcUrl } from '@strobelabs/perpcity-sdk';
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
+import { arbitrumSepolia } from 'viem/chains';
 
 // Get RPC URL from environment
 const rpcUrl = getRpcUrl();
@@ -26,7 +26,7 @@ const rpcUrl = getRpcUrl();
 const account = privateKeyToAccount(process.env.PRIVATE_KEY);
 const walletClient = createWalletClient({
   account,
-  chain: baseSepolia,
+  chain: arbitrumSepolia,
   transport: http(rpcUrl)
 });
 
@@ -89,15 +89,15 @@ Create a `.env.local` file:
 ```env
 # Required
 PRIVATE_KEY=your_private_key_here
-PERP_ADDRESS=0x59F1766b77fd67af6c80217C2025A0D536998000
-USDC_ADDRESS=0xC1a5D4E99BB224713dd179eA9CA2Fa6600706210
+PERP_ADDRESS=0x...  # Address of the perp market you want to trade
+USDC_ADDRESS=0xBEF280BefeE2Cb28c20D1E4Cc1da999B4DA0f1fD  # Perp City test USDC on Arbitrum Sepolia
 
 # RPC Configuration
 # For production, use a private RPC provider URL
-RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+RPC_URL=https://arb-sepolia.g.alchemy.com/v2/YOUR_API_KEY
 
 # Or for development/testing with public RPC
-# RPC_URL=https://sepolia.base.org
+# RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
 ```
 
 ## License
@@ -106,5 +106,5 @@ MIT
 
 ## Links
 
-- [Perp City Documentation](https://docs.perpcity.io)
-- [Strobe Labs](https://strobelabs.io)
+- [Perp City Documentation](https://docs.perp.city)
+- [Perp City App](https://app.perp.city)

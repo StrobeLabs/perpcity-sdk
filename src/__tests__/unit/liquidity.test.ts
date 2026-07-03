@@ -1,302 +1,311 @@
-import { createWalletClient, http } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
-import { beforeEach, describe, expect, it } from "vitest";
-import { PerpCityContext } from "../../context";
+import { describe, expect, it, vi } from "vitest";
+import type { PerpCityContext } from "../../context";
+import type { PerpAddress } from "../../types";
 import { estimateLiquidity } from "../../utils/liquidity";
 
-describe("Liquidity Calculations", () => {
-  let mockContext: PerpCityContext;
+const PERP = "0x8ac0179073a9eb5aaee58e5ebe9882066b9e7b6c" as PerpAddress;
+const MARGIN_RATIOS = "0x8afca53c52b1f02d76aefb811c6b08f4bd3e4cf9";
+const BEACON = "0xd3ac79e96148b420f86fb5fc57573a767d00ec16";
+const Q96 = 1n << 96n;
 
-  beforeEach(() => {
-    // Create a minimal mock context for testing
-    // We only need the context object structure, not actual blockchain connectivity
-    const account = privateKeyToAccount(
-      "0x1234567890123456789012345678901234567890123456789012345678901234"
-    );
-    const walletClient = createWalletClient({
-      account,
-      chain: baseSepolia,
-      transport: http("https://sepolia.base.org"),
+// sqrt price high enough that every tested range sits below the current
+// price, matching the common maker use case of pure USD exposure.
+const SQRT_PRICE_ABOVE_ALL_RANGES = 23000n * Q96;
+
+type MockOptions = {
+  sqrtPriceX96?: bigint;
+  markPriceX96?: bigint;
+  beaconIndexX96?: bigint;
+  makerInitRatio?: number;
+  callImpl?: (args: { data: string }) => Promise<unknown>;
+};
+
+function makeContext(options: MockOptions = {}) {
+  const sqrtPriceX96 = options.sqrtPriceX96 ?? SQRT_PRICE_ABOVE_ALL_RANGES;
+  const ammPriceX96 = options.markPriceX96 ?? (sqrtPriceX96 * sqrtPriceX96) / Q96;
+
+  const readContract = vi.fn(
+    async ({ address, functionName }: { address: string; functionName: string }) => {
+      const assertAddress = (expected: string) => {
+        if (address.toLowerCase() !== expected.toLowerCase()) {
+          throw new Error(`${functionName} read from ${address}, expected ${expected}`);
+        }
+      };
+      if (functionName === "poolState") {
+        assertAddress(PERP);
+        return [0, sqrtPriceX96, ammPriceX96, 0n];
+      }
+      if (functionName === "makerMarginRatios") {
+        assertAddress(MARGIN_RATIOS);
+        return [options.makerInitRatio ?? 1_000_000, 900_000, 800_000];
+      }
+      if (functionName === "index") {
+        assertAddress(BEACON);
+        return options.beaconIndexX96 ?? 0n;
+      }
+      throw new Error(`Unexpected readContract call: ${functionName}`);
+    }
+  );
+
+  const call = vi.fn(options.callImpl ?? (async () => ({ data: "0x" })));
+
+  const context = {
+    publicClient: { readContract, call },
+    getPerpConfig: vi.fn(async () => ({
+      marginRatios: MARGIN_RATIOS,
+      beacon: BEACON,
+    })),
+  } as unknown as PerpCityContext;
+
+  return { context, readContract, call };
+}
+
+describe("estimateLiquidity", () => {
+  describe("range below current price (pure USD exposure)", () => {
+    it("reproduces the on-chain margin check boundary exactly", async () => {
+      // Mainnet regression: margin of 200 USDC over ticks 33990-40080 (range
+      // below the current price). The naive amount1 formula returns
+      // 102712534, which reverts with MarginRatioTooLow on-chain; the max
+      // liquidity accepted by the contract is 102712533.
+      const { context } = makeContext();
+
+      const liquidity = await estimateLiquidity(context, PERP, 33990, 40080, 200_000_000n);
+
+      expect(liquidity).toBe(102712533n);
     });
 
-    mockContext = new PerpCityContext({
-      walletClient,
-      rpcUrl: "https://sepolia.base.org",
-      deployments: {
-        perpAddress: "0x0000000000000000000000000000000000000000",
-        usdc: "0x0000000000000000000000000000000000000000",
-      },
+    it("calculates liquidity for a normal tick range", async () => {
+      const { context } = makeContext();
+
+      const liquidity = await estimateLiquidity(context, PERP, -1000, 1000, 1000_000_000n);
+
+      expect(liquidity).toBeGreaterThan(0n);
+      expect(liquidity).toBeTypeOf("bigint");
+    });
+
+    it("calculates liquidity for negative tick ranges", async () => {
+      const { context } = makeContext();
+
+      const liquidity = await estimateLiquidity(context, PERP, -2000, -1000, 500_000_000n);
+
+      expect(liquidity).toBeGreaterThan(0n);
+    });
+
+    it("handles extreme tick ranges", async () => {
+      const { context } = makeContext();
+
+      const positive = await estimateLiquidity(context, PERP, 100000, 200000, 1000_000_000n);
+      const negative = await estimateLiquidity(context, PERP, -200000, -100000, 1000_000_000n);
+
+      expect(positive).toBeGreaterThan(0n);
+      expect(negative).toBeGreaterThan(0n);
+    });
+
+    it("produces higher liquidity for narrower ranges at the same margin", async () => {
+      const { context } = makeContext();
+      const usdScaled = 1000_000_000n;
+
+      const wide = await estimateLiquidity(context, PERP, -1000, 1000, usdScaled);
+      const narrow = await estimateLiquidity(context, PERP, -100, 100, usdScaled);
+
+      expect(narrow).toBeGreaterThan(wide);
+    });
+
+    it("produces proportional liquidity for proportional margins", async () => {
+      const { context } = makeContext();
+
+      const liquidity1x = await estimateLiquidity(context, PERP, -500, 500, 1000_000_000n);
+      const liquidity2x = await estimateLiquidity(context, PERP, -500, 500, 2000_000_000n);
+
+      expect(Number(liquidity2x) / Number(liquidity1x)).toBeCloseTo(2, 1);
+    });
+
+    it("scales liquidity up when the maker initial margin ratio is below 100%", async () => {
+      const full = await estimateLiquidity(makeContext().context, PERP, -500, 500, 1000_000_000n);
+      const half = await estimateLiquidity(
+        makeContext({ makerInitRatio: 500_000 }).context,
+        PERP,
+        -500,
+        500,
+        1000_000_000n
+      );
+
+      expect(Number(half) / Number(full)).toBeCloseTo(2, 1);
     });
   });
 
-  describe("estimateLiquidity", () => {
-    it("should calculate liquidity for a normal tick range", async () => {
-      const tickLower = -1000;
-      const tickUpper = 1000;
-      const usdScaled = 1000_000_000n; // 1000 USDC (scaled)
+  describe("range at or above current price (mark-priced exposure)", () => {
+    // Current price of ~60.9 (mainnet snapshot): sqrtPrice = sqrt(60.9) * 2^96
+    const SQRT_PRICE_60_9 = 618371252740528218980151607296n;
+    const MARK_60_9 = (SQRT_PRICE_60_9 * SQRT_PRICE_60_9) / Q96;
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
+    it("computes liquidity for a range straddling the current price", async () => {
+      const { context } = makeContext({
+        sqrtPriceX96: SQRT_PRICE_60_9,
+        markPriceX96: MARK_60_9,
+      });
 
-      expect(liquidity).toBeGreaterThan(0n);
-      expect(liquidity).toBeTypeOf("bigint");
-    });
-
-    it("should calculate liquidity for tick range around current price", async () => {
-      const tickLower = -100;
-      const tickUpper = 100;
-      const usdScaled = 100_000_000n; // 100 USDC (scaled)
-
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
+      // Price 60.9 sits inside ticks 33990 (price ~29.9) to 44280 (price ~83.8)
+      const liquidity = await estimateLiquidity(context, PERP, 33990, 44280, 200_000_000n);
 
       expect(liquidity).toBeGreaterThan(0n);
+      // The perp side of a straddling range is worth less per liquidity unit
+      // than the same span valued as USD, so the estimate exceeds the pure
+      // amount1 valuation of the full range.
+      const naive = makeContext();
+      const usdOnly = await estimateLiquidity(naive.context, PERP, 33990, 44280, 200_000_000n);
+      expect(liquidity).toBeGreaterThan(usdOnly);
     });
 
-    it("should calculate liquidity for tick 0 to positive range", async () => {
-      const tickLower = 0;
-      const tickUpper = 1000;
-      const usdScaled = 1000_000_000n;
+    it("computes liquidity for a range entirely above the current price", async () => {
+      const { context } = makeContext({
+        sqrtPriceX96: SQRT_PRICE_60_9,
+        markPriceX96: MARK_60_9,
+      });
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      expect(liquidity).toBeGreaterThan(0n);
-    });
-
-    it("should calculate liquidity for negative tick range", async () => {
-      const tickLower = -2000;
-      const tickUpper = -1000;
-      const usdScaled = 500_000_000n; // 500 USDC
-
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
+      // Ticks 42000 (price ~66.6) to 44280 (price ~83.8), above price 60.9
+      const liquidity = await estimateLiquidity(context, PERP, 42000, 44280, 200_000_000n);
 
       expect(liquidity).toBeGreaterThan(0n);
     });
 
-    it("should calculate liquidity for very wide tick range", async () => {
-      const tickLower = -10000;
-      const tickUpper = 10000;
-      const usdScaled = 10000_000_000n; // 10,000 USDC
+    it("returns less liquidity when the mark price is higher", async () => {
+      const cheap = makeContext({
+        sqrtPriceX96: SQRT_PRICE_60_9,
+        markPriceX96: MARK_60_9,
+      });
+      const expensive = makeContext({
+        sqrtPriceX96: SQRT_PRICE_60_9,
+        markPriceX96: MARK_60_9 * 2n,
+      });
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
+      const cheapLiquidity = await estimateLiquidity(
+        cheap.context,
+        PERP,
+        42000,
+        44280,
+        200_000_000n
+      );
+      const expensiveLiquidity = await estimateLiquidity(
+        expensive.context,
+        PERP,
+        42000,
+        44280,
+        200_000_000n
+      );
 
-      expect(liquidity).toBeGreaterThan(0n);
+      expect(expensiveLiquidity).toBeLessThan(cheapLiquidity);
+    });
+  });
+
+  describe("simulation verification", () => {
+    it("bisects down to the contract's boundary when the estimate reports MarginRatioTooLow", async () => {
+      // Simulate a contract whose true max healthy liquidity (100_000_000) is
+      // below the analytic estimate (102_712_533), as happens when the mark
+      // price sits above both the AMM price and the beacon index.
+      const CONTRACT_MAX = 100_000_000n;
+      const { context } = makeContext({
+        callImpl: async ({ data }: { data: string }) => {
+          const liquidity = BigInt(`0x${data.slice(10 + 64 * 4, 10 + 64 * 5)}`);
+          if (liquidity > CONTRACT_MAX) {
+            throw new Error("execution reverted with reason: 0xb2c649db");
+          }
+          return { data: "0x" };
+        },
+      });
+
+      const liquidity = await estimateLiquidity(context, PERP, 33990, 40080, 200_000_000n);
+
+      expect(liquidity).toBeLessThanOrEqual(CONTRACT_MAX);
+      // Bisection stops within 0.1% of the boundary.
+      expect(liquidity).toBeGreaterThan((CONTRACT_MAX * 998n) / 1000n);
     });
 
-    it("should calculate liquidity for very narrow tick range", async () => {
-      const tickLower = 0;
-      const tickUpper = 10;
-      const usdScaled = 100_000_000n; // 100 USDC
+    it("treats the probe sender's margin-transfer revert as a passing margin check", async () => {
+      // transferMargin runs after the health check; the allowance-less probe
+      // triggers solady's TransferFromFailed() there on a healthy position.
+      const { context, call } = makeContext({
+        callImpl: async () => {
+          throw new Error("execution reverted with reason: 0x7939f424");
+        },
+      });
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
+      const liquidity = await estimateLiquidity(context, PERP, 33990, 40080, 200_000_000n);
 
-      expect(liquidity).toBeGreaterThan(0n);
+      expect(liquidity).toBe(102712533n);
+      expect(call).toHaveBeenCalledTimes(1);
     });
 
-    it("should handle small USD amounts", async () => {
-      const tickLower = -100;
-      const tickUpper = 100;
-      const usdScaled = 1_000_000n; // 1 USDC
+    it("treats ERC20 allowance reason strings as a passing margin check", async () => {
+      const { context, call } = makeContext({
+        callImpl: async () => {
+          throw new Error("ERC20: transfer amount exceeds allowance");
+        },
+      });
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
+      const liquidity = await estimateLiquidity(context, PERP, 33990, 40080, 200_000_000n);
 
-      expect(liquidity).toBeGreaterThan(0n);
+      expect(liquidity).toBe(102712533n);
+      expect(call).toHaveBeenCalledTimes(1);
     });
 
-    it("should handle very small USD amounts", async () => {
-      const tickLower = -100;
-      const tickUpper = 100;
-      const usdScaled = 1000n; // 0.001 USDC
+    it("rethrows errors that are neither margin-check nor margin-transfer reverts", async () => {
+      const { context } = makeContext({
+        callImpl: async () => {
+          throw new Error("fetch failed: connection refused");
+        },
+      });
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      // Very small amounts might result in 0 liquidity due to rounding
-      expect(liquidity).toBeTypeOf("bigint");
+      await expect(estimateLiquidity(context, PERP, 33990, 40080, 200_000_000n)).rejects.toThrow(
+        "fetch failed: connection refused"
+      );
     });
 
-    it("should handle large USD amounts", async () => {
-      const tickLower = -1000;
-      const tickUpper = 1000;
-      const usdScaled = 1_000_000_000_000n; // 1,000,000 USDC (1M)
+    it("throws when no liquidity amount passes the margin check", async () => {
+      const { context } = makeContext({
+        callImpl: async () => {
+          throw new Error("execution reverted with reason: 0xb2c649db");
+        },
+      });
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      expect(liquidity).toBeGreaterThan(0n);
+      await expect(estimateLiquidity(context, PERP, 33990, 40080, 200_000_000n)).rejects.toThrow(
+        "Could not find a liquidity amount passing the maker margin check"
+      );
     });
+  });
 
-    it("should return 0 liquidity for 0 USD amount", async () => {
-      const tickLower = -100;
-      const tickUpper = 100;
-      const usdScaled = 0n;
+  describe("input validation", () => {
+    it("returns 0 liquidity for 0 margin without touching the chain", async () => {
+      const { context, readContract } = makeContext();
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
+      const liquidity = await estimateLiquidity(context, PERP, -100, 100, 0n);
 
       expect(liquidity).toBe(0n);
+      expect(readContract).not.toHaveBeenCalled();
     });
 
-    it("should validate tickLower < tickUpper", async () => {
-      const tickLower = 1000;
-      const tickUpper = -1000; // Invalid: lower > upper
-      const usdScaled = 1000_000_000n;
+    it("rejects tickLower > tickUpper", async () => {
+      const { context } = makeContext();
 
-      // Should throw an error for invalid tick range
-      await expect(async () => {
-        await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-      }).rejects.toThrow(
+      await expect(estimateLiquidity(context, PERP, 1000, -1000, 1000_000_000n)).rejects.toThrow(
         "Invalid tick range: tickLower (1000) must be less than tickUpper (-1000)"
       );
     });
 
-    it("should validate tickLower == tickUpper and throw error", async () => {
-      const tickLower = 100;
-      const tickUpper = 100; // Invalid: same tick
-      const usdScaled = 1000_000_000n;
+    it("rejects tickLower == tickUpper", async () => {
+      const { context } = makeContext();
 
-      // The function validates tickLower >= tickUpper and throws an error
-      // This prevents division by zero when calculating sqrtPriceDiff
-      await expect(async () => {
-        await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-      }).rejects.toThrow("Invalid tick range: tickLower (100) must be less than tickUpper (100)");
+      await expect(estimateLiquidity(context, PERP, 100, 100, 1000_000_000n)).rejects.toThrow(
+        "Invalid tick range: tickLower (100) must be less than tickUpper (100)"
+      );
     });
 
-    it("should handle extreme positive ticks", async () => {
-      const tickLower = 100000;
-      const tickUpper = 200000;
-      const usdScaled = 1000_000_000n;
+    it("rejects margins too small to survive the rounding slack", async () => {
+      const { context } = makeContext();
 
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      expect(liquidity).toBeGreaterThan(0n);
-    });
-
-    it("should handle extreme negative ticks", async () => {
-      const tickLower = -200000;
-      const tickUpper = -100000;
-      const usdScaled = 1000_000_000n;
-
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      expect(liquidity).toBeGreaterThan(0n);
-    });
-
-    it("should produce higher liquidity for narrower ranges (same USD)", async () => {
-      const usdScaled = 1000_000_000n;
-
-      const wideRangeLiquidity = await estimateLiquidity(mockContext, -1000, 1000, usdScaled);
-      const narrowRangeLiquidity = await estimateLiquidity(mockContext, -100, 100, usdScaled);
-
-      // Narrower range should produce more liquidity for same USD amount
-      // because liquidity = USD / (sqrtUpper - sqrtLower)
-      expect(narrowRangeLiquidity).toBeGreaterThan(wideRangeLiquidity);
-    });
-
-    it("should produce proportional liquidity for proportional USD amounts", async () => {
-      const tickLower = -500;
-      const tickUpper = 500;
-
-      const liquidity1x = await estimateLiquidity(mockContext, tickLower, tickUpper, 1000_000_000n);
-      const liquidity2x = await estimateLiquidity(mockContext, tickLower, tickUpper, 2000_000_000n);
-
-      // Liquidity should be approximately 2x for 2x USD
-      const ratio = Number(liquidity2x) / Number(liquidity1x);
-      expect(ratio).toBeCloseTo(2, 1);
-    });
-
-    it("should handle ticks at common Uniswap V3 spacing boundaries", async () => {
-      // Common tick spacings: 1, 10, 60, 200
-      const tickSpacing = 60;
-      const tickLower = -1000 * tickSpacing; // Aligned to spacing
-      const tickUpper = 1000 * tickSpacing;
-      const usdScaled = 1000_000_000n;
-
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      expect(liquidity).toBeGreaterThan(0n);
-    });
-
-    it("should handle asymmetric tick ranges", async () => {
-      const tickLower = -5000;
-      const tickUpper = 1000; // More range below than above
-      const usdScaled = 1000_000_000n;
-
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      expect(liquidity).toBeGreaterThan(0n);
-    });
-  });
-
-  describe("getSqrtRatioAtTick (tested indirectly)", () => {
-    it("should calculate consistent sqrt ratios for positive and negative ticks", async () => {
-      const usdScaled = 1000_000_000n;
-
-      // Test symmetric ranges
-      const liquidityPos = await estimateLiquidity(mockContext, 0, 1000, usdScaled);
-      const liquidityNeg = await estimateLiquidity(mockContext, -1000, 0, usdScaled);
-
-      // Both should be valid positive values
-      expect(liquidityPos).toBeGreaterThan(0n);
-      expect(liquidityNeg).toBeGreaterThan(0n);
-    });
-
-    it("should handle tick 0 correctly", async () => {
-      const usdScaled = 1000_000_000n;
-
-      // Ranges that include tick 0
-      const liquidity = await estimateLiquidity(mockContext, -100, 100, usdScaled);
-
-      expect(liquidity).toBeGreaterThan(0n);
-    });
-
-    it("should handle all bit flags in tick calculation", async () => {
-      // These tick values will exercise different bit flags in getSqrtRatioAtTick
-      // Using larger tick ranges to avoid 0 liquidity from rounding with tiny ranges
-      const testTicks = [
-        10, // Small range
-        100, // 0x64
-        256, // 0x100
-        512, // 0x200
-        1024, // 0x400
-        2048, // 0x800
-        4096, // 0x1000
-        8192, // 0x2000
-        16384, // 0x4000
-        32768, // 0x8000
-        65536, // 0x10000
-        131072, // 0x20000
-      ];
-
-      const usdScaled = 1000_000_000n;
-
-      for (const tick of testTicks) {
-        const liquidity = await estimateLiquidity(mockContext, 0, tick, usdScaled);
-        // Very small tick ranges (like 0 to 1) might result in 0 liquidity due to rounding
-        expect(liquidity).toBeGreaterThanOrEqual(0n);
-        expect(typeof liquidity).toBe("bigint");
-      }
-    });
-  });
-
-  describe("Edge cases and validation", () => {
-    it("should handle minimum representable liquidity", async () => {
-      const tickLower = -100;
-      const tickUpper = 100;
-      const usdScaled = 1n; // Minimum possible amount
-
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      // Might be 0 due to rounding, but should not throw
-      expect(typeof liquidity).toBe("bigint");
-    });
-
-    it("should maintain precision for intermediate calculations", async () => {
-      const tickLower = -1000;
-      const tickUpper = 1000;
-      const usdScaled = 123_456_789n; // Odd number to test precision
-
-      const liquidity = await estimateLiquidity(mockContext, tickLower, tickUpper, usdScaled);
-
-      expect(liquidity).toBeGreaterThan(0n);
-      // Liquidity should maintain reasonable precision
-      expect(liquidity.toString().length).toBeGreaterThan(1);
+      await expect(estimateLiquidity(context, PERP, -100, 100, 2n)).rejects.toThrow(
+        "too small to collateralize"
+      );
     });
   });
 });

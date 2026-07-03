@@ -24,7 +24,7 @@ pnpm build
 # Run unit tests
 pnpm test:unit
 
-# Run integration tests (requires Base Sepolia RPC)
+# Run integration tests (requires Arbitrum Sepolia RPC)
 pnpm test:integration
 
 # Lint

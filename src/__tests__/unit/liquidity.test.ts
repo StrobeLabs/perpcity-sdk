@@ -4,6 +4,8 @@ import type { PerpAddress } from "../../types";
 import { estimateLiquidity } from "../../utils/liquidity";
 
 const PERP = "0x8ac0179073a9eb5aaee58e5ebe9882066b9e7b6c" as PerpAddress;
+const MARGIN_RATIOS = "0x8afca53c52b1f02d76aefb811c6b08f4bd3e4cf9";
+const BEACON = "0xd3ac79e96148b420f86fb5fc57573a767d00ec16";
 const Q96 = 1n << 96n;
 
 // sqrt price high enough that every tested range sits below the current
@@ -22,26 +24,36 @@ function makeContext(options: MockOptions = {}) {
   const sqrtPriceX96 = options.sqrtPriceX96 ?? SQRT_PRICE_ABOVE_ALL_RANGES;
   const ammPriceX96 = options.markPriceX96 ?? (sqrtPriceX96 * sqrtPriceX96) / Q96;
 
-  const readContract = vi.fn(async ({ functionName }: { functionName: string }) => {
-    if (functionName === "poolState") {
-      return [0, sqrtPriceX96, ammPriceX96, 0n];
+  const readContract = vi.fn(
+    async ({ address, functionName }: { address: string; functionName: string }) => {
+      const assertAddress = (expected: string) => {
+        if (address.toLowerCase() !== expected.toLowerCase()) {
+          throw new Error(`${functionName} read from ${address}, expected ${expected}`);
+        }
+      };
+      if (functionName === "poolState") {
+        assertAddress(PERP);
+        return [0, sqrtPriceX96, ammPriceX96, 0n];
+      }
+      if (functionName === "makerMarginRatios") {
+        assertAddress(MARGIN_RATIOS);
+        return [options.makerInitRatio ?? 1_000_000, 900_000, 800_000];
+      }
+      if (functionName === "index") {
+        assertAddress(BEACON);
+        return options.beaconIndexX96 ?? 0n;
+      }
+      throw new Error(`Unexpected readContract call: ${functionName}`);
     }
-    if (functionName === "makerMarginRatios") {
-      return [options.makerInitRatio ?? 1_000_000, 900_000, 800_000];
-    }
-    if (functionName === "index") {
-      return options.beaconIndexX96 ?? 0n;
-    }
-    throw new Error(`Unexpected readContract call: ${functionName}`);
-  });
+  );
 
   const call = vi.fn(options.callImpl ?? (async () => ({ data: "0x" })));
 
   const context = {
     publicClient: { readContract, call },
     getPerpConfig: vi.fn(async () => ({
-      marginRatios: "0x8afca53c52b1f02d76aefb811c6b08f4bd3e4cf9",
-      beacon: "0xd3ac79e96148b420f86fb5fc57573a767d00ec16",
+      marginRatios: MARGIN_RATIOS,
+      beacon: BEACON,
     })),
   } as unknown as PerpCityContext;
 
@@ -209,7 +221,22 @@ describe("estimateLiquidity", () => {
       expect(liquidity).toBeGreaterThan((CONTRACT_MAX * 998n) / 1000n);
     });
 
-    it("treats unrelated reverts (e.g. missing allowance) as a passing margin check", async () => {
+    it("treats the probe sender's margin-transfer revert as a passing margin check", async () => {
+      // transferMargin runs after the health check; the allowance-less probe
+      // triggers solady's TransferFromFailed() there on a healthy position.
+      const { context, call } = makeContext({
+        callImpl: async () => {
+          throw new Error("execution reverted with reason: 0x7939f424");
+        },
+      });
+
+      const liquidity = await estimateLiquidity(context, PERP, 33990, 40080, 200_000_000n);
+
+      expect(liquidity).toBe(102712533n);
+      expect(call).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats ERC20 allowance reason strings as a passing margin check", async () => {
       const { context, call } = makeContext({
         callImpl: async () => {
           throw new Error("ERC20: transfer amount exceeds allowance");
@@ -220,6 +247,18 @@ describe("estimateLiquidity", () => {
 
       expect(liquidity).toBe(102712533n);
       expect(call).toHaveBeenCalledTimes(1);
+    });
+
+    it("rethrows errors that are neither margin-check nor margin-transfer reverts", async () => {
+      const { context } = makeContext({
+        callImpl: async () => {
+          throw new Error("fetch failed: connection refused");
+        },
+      });
+
+      await expect(estimateLiquidity(context, PERP, 33990, 40080, 200_000_000n)).rejects.toThrow(
+        "fetch failed: connection refused"
+      );
     });
 
     it("throws when no liquidity amount passes the margin check", async () => {

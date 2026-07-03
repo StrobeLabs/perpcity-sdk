@@ -23,6 +23,17 @@ const EQUITY_ROUNDING_SLACK = 2n;
 const PRICE_DEPENDENT_BUFFER_BPS = 10n;
 
 const MARGIN_RATIO_TOO_LOW_SELECTOR = "b2c649db";
+
+// The health check is the last revert before transferMargin pulls USDC from
+// the sender. The probe sender has no allowance, so a healthy position
+// reverts there: solady's TransferFromFailed() selector, plus the reason
+// strings ERC20 implementations raise for the same failure.
+const POST_MARGIN_CHECK_REVERT_MARKERS = [
+  "7939f424", // solady SafeTransferLib.TransferFromFailed()
+  "transfer amount exceeds",
+  "allowance",
+];
+
 const BISECTION_MAX_ITERATIONS = 16;
 
 /**
@@ -165,8 +176,10 @@ function maxLiquidityForMargin(
 /**
  * Simulate openMaker to confirm the margin health check passes. The check runs
  * before the margin transfer, so a MarginRatioTooLow revert is conclusive
- * while any later revert (e.g. missing allowance for the probe sender) or a
- * success means the liquidity amount is healthy.
+ * unhealthy, while a success or the margin-transfer revert the allowance-less
+ * probe sender triggers means the liquidity amount is healthy. Anything else
+ * (transport failures, unrelated reverts such as misaligned ticks) is rethrown
+ * rather than misread as a verdict.
  */
 async function passesMarginCheck(
   context: PerpCityContext,
@@ -196,7 +209,13 @@ async function passesMarginCheck(
     await context.publicClient.call({ to: perpAddress, data });
     return true;
   } catch (error) {
-    return !errorChainContains(error, MARGIN_RATIO_TOO_LOW_SELECTOR);
+    if (errorChainContains(error, MARGIN_RATIO_TOO_LOW_SELECTOR)) {
+      return false;
+    }
+    if (POST_MARGIN_CHECK_REVERT_MARKERS.some((marker) => errorChainContains(error, marker))) {
+      return true;
+    }
+    throw error;
   }
 }
 

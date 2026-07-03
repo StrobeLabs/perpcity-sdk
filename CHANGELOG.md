@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-07-03
+
+### Changed
+
+- **Breaking:** `estimateLiquidity` now requires the perp address as its second argument:
+  `estimateLiquidity(context, perpAddress, tickLower, tickUpper, usdScaled)`.
+- `estimateLiquidity` now sizes liquidity to the on-chain maker margin check instead of the naive
+  amount1 formula. The old formula targeted a notional exactly equal to the margin, which the
+  contract's rounding (amounts pulled rounded up, position value floored) pushed 1-2 units past the
+  100% maker initial margin ratio, so `openMaker` reverted with `MarginRatioTooLow`. The estimate
+  now:
+  - values below-range positions exactly, replicating the contract rounding (max healthy liquidity
+    is `floor((margin - 2) * Q96 / sqrtPriceDiff)`, validated against mainnet);
+  - values straddling and above-range positions at the larger of the AMM price and beacon index
+    (ranges above the current price were previously sized as USD exposure and always reverted);
+  - verifies the result with an `eth_call` simulation of `openMaker` and bisects down to the true
+    boundary when the mark price sits above both proxies.
+- `getSqrtRatioAtTick` now rounds up the final shift to match the contract's TickMath.
+
 ## [0.10.0] - 2026-06-16
 
 ### Changed

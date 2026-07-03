@@ -1,20 +1,50 @@
+import { encodeFunctionData } from "viem";
+import { BEACON_ABI } from "../abis/beacon";
+import { MARGIN_RATIOS_ABI } from "../abis/margin-ratios";
+import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
+import type { PerpAddress } from "../types";
 import { sqrtPriceX96ToPrice, tickToPrice } from "./conversions";
 
+const Q96 = 1n << 96n;
+const E6 = 1_000_000n;
+const MAX_UINT128 = (1n << 128n) - 1n;
+const MAX_UINT256 = (1n << 256n) - 1n;
+
+// openMaker pulls amounts rounded up in the pool's favor while the health
+// check values the position rounded down, so equity lands up to two units
+// below margin. Validated against deployed markets: the max healthy liquidity
+// is exactly floor((margin - 2) * Q96 / sqrtPriceDiff) for below-range makers.
+const EQUITY_ROUNDING_SLACK = 2n;
+
+// Ranges at or straddling the current price are valued at the mark price,
+// which accrues per block; leave headroom so the estimate survives until the
+// transaction lands.
+const PRICE_DEPENDENT_BUFFER_BPS = 10n;
+
+const MARGIN_RATIO_TOO_LOW_SELECTOR = "b2c649db";
+const BISECTION_MAX_ITERATIONS = 16;
+
 /**
- * Calculate liquidity from USDC amount (amount1) using Uniswap v3 formula
- * liquidity = amount1 / (sqrt(priceUpper) - sqrt(priceLower))
+ * Calculate the maximum maker liquidity a margin deposit can collateralize
+ * over a tick range, mirroring the contract's openMaker health check
+ * (equity / position value >= maker initial margin ratio).
  *
- * This replicates the estimateLiquidityForAmount1 function that existed in older contracts
- * but is not present in the deployed contracts.
+ * The position value depends on where the range sits relative to the current
+ * price: below the current price it is pure quote (USD) exposure, above it is
+ * pure perp exposure valued at the mark price, and a straddling range is a mix.
+ * The mark price blends the AMM price with the beacon index and is not
+ * directly readable, so perp exposure is valued at the larger of the two and
+ * the estimate is verified with an eth_call simulation of openMaker,
+ * bisecting down if the contract still reports MarginRatioTooLow.
  */
 export async function estimateLiquidity(
-  _context: PerpCityContext,
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
   tickLower: number,
   tickUpper: number,
   usdScaled: bigint
 ): Promise<bigint> {
-  // Validate inputs
   if (tickLower >= tickUpper) {
     throw new Error(
       `Invalid tick range: tickLower (${tickLower}) must be less than tickUpper (${tickUpper})`
@@ -25,26 +55,177 @@ export async function estimateLiquidity(
     return 0n;
   }
 
-  // Calculate sqrt prices from ticks using Uniswap v3 formula
-  // sqrtPriceX96 = sqrt(1.0001^tick) * 2^96
-  const Q96 = 1n << 96n;
+  const cfg = await context.getPerpConfig(perpAddress);
+  const [poolState, makerRatios, beaconIndex] = await Promise.all([
+    context.publicClient.readContract({
+      address: perpAddress,
+      abi: PERP_ABI,
+      functionName: "poolState",
+    }),
+    context.publicClient.readContract({
+      address: cfg.marginRatios,
+      abi: MARGIN_RATIOS_ABI,
+      functionName: "makerMarginRatios",
+    }),
+    context.publicClient.readContract({
+      address: cfg.beacon,
+      abi: BEACON_ABI,
+      functionName: "index",
+    }),
+  ]);
+  const sqrtPriceX96 = poolState[1];
+  const ammPriceX96 = poolState[2];
+  const markPriceX96 = beaconIndex > ammPriceX96 ? beaconIndex : ammPriceX96;
 
-  const sqrtPriceLowerX96 = getSqrtRatioAtTick(tickLower);
-  const sqrtPriceUpperX96 = getSqrtRatioAtTick(tickUpper);
+  const candidate = maxLiquidityForMargin(
+    usdScaled,
+    getSqrtRatioAtTick(tickLower),
+    getSqrtRatioAtTick(tickUpper),
+    sqrtPriceX96,
+    markPriceX96,
+    BigInt(makerRatios[0])
+  );
 
-  // Calculate liquidity using the formula:
-  // L = amount1 / (sqrtPriceUpper - sqrtPriceLower) * Q96
-  const sqrtPriceDiff = sqrtPriceUpperX96 - sqrtPriceLowerX96;
-
-  if (sqrtPriceDiff === 0n) {
+  if (candidate <= 0n) {
     throw new Error(
-      `Division by zero: sqrtPriceDiff is 0 for ticks ${tickLower} to ${tickUpper}. sqrtLower=${sqrtPriceLowerX96}, sqrtUpper=${sqrtPriceUpperX96}`
+      `Margin ${usdScaled} is too small to collateralize any liquidity over ticks ${tickLower} to ${tickUpper}`
     );
   }
 
-  const liquidity = (usdScaled * Q96) / sqrtPriceDiff;
+  if (await passesMarginCheck(context, perpAddress, tickLower, tickUpper, usdScaled, candidate)) {
+    return candidate;
+  }
 
-  return liquidity;
+  // The analytic estimate over-shot (e.g. the mark price sits above both the
+  // AMM price and the index). Bisect between zero and the failing candidate
+  // against the simulated margin check to recover the largest healthy amount.
+  let lo = 0n;
+  let hi = candidate;
+  for (let i = 0; i < BISECTION_MAX_ITERATIONS && hi - lo > 1n + hi / 1000n; i++) {
+    const mid = (lo + hi) / 2n;
+    if (await passesMarginCheck(context, perpAddress, tickLower, tickUpper, usdScaled, mid)) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  if (lo <= 0n) {
+    throw new Error(
+      `Could not find a liquidity amount passing the maker margin check for margin ${usdScaled} over ticks ${tickLower} to ${tickUpper}`
+    );
+  }
+  return lo;
+}
+
+function maxLiquidityForMargin(
+  usdScaled: bigint,
+  sqrtLowerX96: bigint,
+  sqrtUpperX96: bigint,
+  sqrtPriceX96: bigint,
+  markPriceX96: bigint,
+  makerInitRatio: bigint
+): bigint {
+  // Worst-case equity after the contract's rounding, spread over the margin
+  // ratio to get the largest position value the margin can back.
+  const equity = usdScaled - EQUITY_ROUNDING_SLACK;
+  if (equity <= 0n || makerInitRatio <= 0n) {
+    return 0n;
+  }
+  const maxPositionValue = (equity * E6) / makerInitRatio;
+
+  if (sqrtPriceX96 >= sqrtUpperX96) {
+    // Range entirely below the current price: pure USD exposure of
+    // L * (sqrtUpper - sqrtLower) / Q96, independent of price movement.
+    return clampUint128((maxPositionValue * Q96) / (sqrtUpperX96 - sqrtLowerX96));
+  }
+
+  const bufferedValue = (maxPositionValue * (10_000n - PRICE_DEPENDENT_BUFFER_BPS)) / 10_000n;
+
+  if (sqrtPriceX96 <= sqrtLowerX96) {
+    // Range entirely above the current price: pure perp exposure of
+    // L * Q96 * (sqrtUpper - sqrtLower) / (sqrtLower * sqrtUpper), valued at mark.
+    const valuePerLiquidityX96 = ceilDiv(
+      (sqrtUpperX96 - sqrtLowerX96) * markPriceX96 * Q96,
+      sqrtLowerX96 * sqrtUpperX96
+    );
+    return clampUint128((bufferedValue * Q96) / valuePerLiquidityX96);
+  }
+
+  // Straddling range: USD exposure below the current price plus perp exposure
+  // above it, the latter valued at mark.
+  const usdPerLiquidityX96 = sqrtPriceX96 - sqrtLowerX96;
+  const perpValuePerLiquidityX96 = ceilDiv(
+    (sqrtUpperX96 - sqrtPriceX96) * markPriceX96 * Q96,
+    sqrtPriceX96 * sqrtUpperX96
+  );
+  return clampUint128((bufferedValue * Q96) / (usdPerLiquidityX96 + perpValuePerLiquidityX96));
+}
+
+/**
+ * Simulate openMaker to confirm the margin health check passes. The check runs
+ * before the margin transfer, so a MarginRatioTooLow revert is conclusive
+ * while any later revert (e.g. missing allowance for the probe sender) or a
+ * success means the liquidity amount is healthy.
+ */
+async function passesMarginCheck(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  tickLower: number,
+  tickUpper: number,
+  margin: bigint,
+  liquidity: bigint
+): Promise<boolean> {
+  const data = encodeFunctionData({
+    abi: PERP_ABI,
+    functionName: "openMaker",
+    args: [
+      {
+        holder: perpAddress,
+        margin,
+        tickLower,
+        tickUpper,
+        liquidity,
+        maxAmt0In: MAX_UINT256,
+        maxAmt1In: MAX_UINT256,
+      },
+    ],
+  });
+
+  try {
+    await context.publicClient.call({ to: perpAddress, data });
+    return true;
+  } catch (error) {
+    return !errorChainContains(error, MARGIN_RATIO_TOO_LOW_SELECTOR);
+  }
+}
+
+function errorChainContains(error: unknown, needle: string): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 10 && current instanceof Error; depth++) {
+    const { message, data, details, cause } = current as Error & {
+      data?: unknown;
+      details?: unknown;
+      cause?: unknown;
+    };
+    if (
+      message.includes(needle) ||
+      (typeof data === "string" && data.includes(needle)) ||
+      (typeof details === "string" && details.includes(needle))
+    ) {
+      return true;
+    }
+    current = cause;
+  }
+  return false;
+}
+
+function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
+}
+
+function clampUint128(value: bigint): bigint {
+  return value > MAX_UINT128 ? MAX_UINT128 : value < 0n ? 0n : value;
 }
 
 /**
@@ -76,8 +257,10 @@ function getSqrtRatioAtTick(tick: number): bigint {
   if (absTick & 0x40000) ratio = (ratio * 0x2216e584f5fa1ea926041bedfe98n) >> 128n;
   if (absTick & 0x80000) ratio = (ratio * 0x48a170391f7dc42444e8fa2n) >> 128n;
 
-  if (tick > 0) ratio = (1n << 256n) / ratio;
-  return ratio >> 32n;
+  if (tick > 0) ratio = MAX_UINT256 / ratio;
+  // Round up like the contract's TickMath so amounts derived from these
+  // sqrt prices match on-chain values exactly.
+  return (ratio >> 32n) + (ratio % (1n << 32n) === 0n ? 0n : 1n);
 }
 
 /**

@@ -206,7 +206,11 @@ async function passesMarginCheck(
   });
 
   try {
-    await context.publicClient.call({ to: perpAddress, data });
+    // batch: false keeps this probe out of the client's Multicall3 aggregation:
+    // routing it through aggregate3 would make Multicall3 the inner msg.sender
+    // (instead of the zero address), which can change which allowance-failure
+    // revert the margin transfer produces and break the marker matching below.
+    await context.publicClient.call({ to: perpAddress, data, batch: false });
     return true;
   } catch (error) {
     if (errorChainContains(error, MARGIN_RATIO_TOO_LOW_SELECTOR)) {

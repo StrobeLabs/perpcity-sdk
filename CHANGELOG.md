@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-07-06
+
+### Changed
+
+- The public client now enables viem's client-level `batch.multicall`: concurrent `readContract`
+  reads (e.g. the 7 config reads in `getPerpConfig` and the 4 in `fetchPerpContractData`) are
+  aggregated into a single Multicall3 `aggregate3` `eth_call` instead of a JSON-RPC batch of N
+  requests, cutting billed RPC calls roughly in proportion to the read fan-out. Transport-level
+  HTTP batching is kept for requests multicall cannot aggregate (`simulateContract`, calls with
+  an account or value). On chains without a Multicall3 deployment configured (e.g. bare Anvil
+  test chains) viem falls back to individual `eth_call`s automatically.
+- The `estimateLiquidity` margin-check probe opts out of multicall aggregation (`batch: false`)
+  so its revert-marker classification keeps seeing the same inner `msg.sender` as before.
+
 ## [0.11.0] - 2026-07-03
 
 ### Changed

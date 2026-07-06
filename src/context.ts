@@ -58,9 +58,14 @@ export class PerpCityContext {
       );
     }
 
+    // batch.multicall aggregates concurrent readContract/call requests into a
+    // single Multicall3 aggregate3 eth_call (one billed RPC request). The
+    // transport-level batch stays for the requests multicall cannot aggregate
+    // (simulateContract, calls with an account/value, opted-out probes).
     this.publicClient = createPublicClient({
       chain: config.walletClient.chain,
       transport: http(config.rpcUrl, { batch: true }),
+      batch: { multicall: true },
     });
 
     this._deployments = config.deployments;
@@ -87,9 +92,9 @@ export class PerpCityContext {
     const cached = this.configCache.get(perpAddress);
     if (cached) return cached;
 
-    // These 7 reads are coalesced into a single JSON-RPC request because the public
-    // client's transport is configured with { batch: true } (see constructor). Keep the
-    // batching: removing it turns one config fetch into 7 separate round-trips.
+    // These 7 reads are coalesced into a single Multicall3 eth_call because the
+    // public client is configured with batch.multicall (see constructor). Keep the
+    // batching: removing it turns one config fetch into 7 separate billed requests.
     const [key, modules, protocolFeeManager, protocolFee, emaWindow, poolId, owner] =
       await Promise.all([
         this.publicClient.readContract({

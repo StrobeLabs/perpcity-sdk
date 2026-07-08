@@ -218,6 +218,56 @@ export async function buildOpenTakerPositionCalls(
   return calls;
 }
 
+/**
+ * Full ordered call batch for a taker adjustment: a USDC `approve` (only when
+ * margin is being added and the current allowance is short) followed by
+ * `adjustTaker`. Margin is the only USDC the contract pulls on a taker adjust
+ * (the swap's USD leg settles inside position inventory), so the approval
+ * covers exactly `marginDelta`.
+ */
+export async function buildAdjustTakerCalls(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  params: { posId: bigint; marginDelta: bigint; perpDelta: bigint; amt1Limit: bigint }
+): Promise<CallData[]> {
+  const calls: CallData[] = [];
+  if (params.marginDelta > 0n) {
+    const approval = await maybeApprovalCall(context, perpAddress, params.marginDelta);
+    if (approval) calls.push(approval);
+  }
+  calls.push(buildAdjustTakerCall(perpAddress, params));
+  return calls;
+}
+
+/**
+ * Full ordered call batch for a maker adjustment; see
+ * {@link buildAdjustTakerCalls}. Like `openMaker`, an `adjustMaker` that adds
+ * liquidity can pull the USDC leg of the LP deposit (up to `amt1Limit`) on top
+ * of the margin, so the approval covers both.
+ */
+export async function buildAdjustMakerCalls(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  params: {
+    posId: bigint;
+    marginDelta: bigint;
+    liquidityDelta: bigint;
+    amt0Limit: bigint;
+    amt1Limit: bigint;
+  }
+): Promise<CallData[]> {
+  const calls: CallData[] = [];
+  const marginIn = params.marginDelta > 0n ? params.marginDelta : 0n;
+  const usdLegIn = params.liquidityDelta > 0n ? params.amt1Limit : 0n;
+  const requiredApproval = marginIn + usdLegIn;
+  if (requiredApproval > 0n) {
+    const approval = await maybeApprovalCall(context, perpAddress, requiredApproval);
+    if (approval) calls.push(approval);
+  }
+  calls.push(buildAdjustMakerCall(perpAddress, params));
+  return calls;
+}
+
 /** Full ordered call batch for opening a maker position; see {@link buildOpenTakerPositionCalls}. */
 export async function buildOpenMakerPositionCalls(
   context: PerpCityContext,

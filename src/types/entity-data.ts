@@ -126,6 +126,13 @@ export type EstimateTakerPositionResult = {
   exceedsLiquidity: boolean;
 };
 
+export type EstimateTakerAdjustResult = {
+  usdDelta: bigint;
+  fillPrice: number;
+  /** See {@link EstimateTakerPositionResult.exceedsLiquidity}. */
+  exceedsLiquidity: boolean;
+};
+
 export type CacheConfig = {
   ttl: number; // Time to live in milliseconds
   maxSize: number; // Maximum cache size

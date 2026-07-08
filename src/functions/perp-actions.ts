@@ -6,6 +6,7 @@ import type { PerpCityContext } from "../context";
 import type { PerpAddress } from "../types";
 import type {
   CreatePerpParams,
+  EstimateTakerAdjustResult,
   EstimateTakerPositionResult,
   OpenMakerPositionParams,
   OpenTakerPositionParams,
@@ -344,6 +345,39 @@ export async function estimateTakerPosition(
   }, "estimateTakerPosition");
 }
 
+/**
+ * Quote an arbitrary signed taker adjustment delta against current pool state.
+ *
+ * The `adjustTaker` companion to {@link estimateTakerPosition}: pass the exact
+ * signed `perpDelta` the adjust call will submit (positive buys perp, negative
+ * sells — an add for a long is positive, a reduce negative, a flip the full
+ * signed total) and get the simulated USD leg, average fill price, and depth
+ * flag. Pure client-side math against the constant-liquidity model
+ * (`simulateTakerSwap`) — no eth_call, so it is safe on reactive quote paths.
+ * Fees are not modeled; slippage tolerance is expected to absorb them.
+ */
+export async function estimateTakerAdjust(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  params: { perpDelta: bigint }
+): Promise<EstimateTakerAdjustResult> {
+  return withErrorHandling(async () => {
+    if (params.perpDelta === 0n) throw new Error("perpDelta must be non-zero");
+    const perpData = await context.getPerpData(perpAddress);
+    const swap = simulateTakerSwap({
+      sqrtPriceX96: perpData.sqrtPriceX96,
+      liquidity: perpData.liquidity,
+      perpDelta: params.perpDelta,
+      markPrice: perpData.mark,
+    });
+    return {
+      usdDelta: swap.usdDelta,
+      fillPrice: swap.fillPrice,
+      exceedsLiquidity: swap.exceedsLiquidity,
+    };
+  }, "estimateTakerAdjust");
+}
+
 export async function adjustTaker(
   context: PerpCityContext,
   perpAddress: PerpAddress,
@@ -363,6 +397,8 @@ export async function adjustTaker(
     const txHash = await context.walletClient.writeContract(
       await withFeeHeadroom(context.publicClient, request)
     );
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
     return { txHash };
   }, `adjustTaker for position ${params.posId}`);
 }
@@ -392,6 +428,8 @@ export async function adjustMaker(
     const txHash = await context.walletClient.writeContract(
       await withFeeHeadroom(context.publicClient, request)
     );
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
     return { txHash };
   }, `adjustMaker for position ${params.posId}`);
 }

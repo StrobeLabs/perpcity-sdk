@@ -16,6 +16,7 @@ const perpData = {
   sqrtPriceX96: 10n * Q96,
   liquidity: 10n ** 18n,
   mark: 100,
+  fees: { creatorFee: 0.001, insuranceFee: 0.0005, lpFee: 0.0015, liquidationFee: 0.01 },
 };
 
 function makeContext(opts: { allowance?: bigint } = {}): PerpCityContext {
@@ -38,6 +39,11 @@ describe("estimateTakerAdjust", () => {
     expect(quote.fillPrice).toBeGreaterThan(99.9);
     expect(quote.fillPrice).toBeLessThan(100.1);
     expect(quote.exceedsLiquidity).toBe(false);
+    // Total taker fee = 0.001 + 0.0005 + 0.0015 = 0.003 (30 bps). A buy pays
+    // more, so the effective fill is higher and the effective USD out is larger.
+    expect(quote.feeRate).toBeCloseTo(0.003, 12);
+    expect(quote.effectiveFillPrice).toBeCloseTo(quote.fillPrice * 1.003, 9);
+    expect(quote.effectiveUsdDelta).toBeLessThan(quote.usdDelta); // more negative
   });
 
   it("quotes a negative (sell) delta with a positive usd leg at ~mark", async () => {
@@ -48,6 +54,10 @@ describe("estimateTakerAdjust", () => {
     expect(quote.fillPrice).toBeGreaterThan(99.9);
     expect(quote.fillPrice).toBeLessThan(100.1);
     expect(quote.exceedsLiquidity).toBe(false);
+    // A sell receives less, so the effective fill and effective USD in are lower.
+    expect(quote.feeRate).toBeCloseTo(0.003, 12);
+    expect(quote.effectiveFillPrice).toBeCloseTo(quote.fillPrice * 0.997, 9);
+    expect(quote.effectiveUsdDelta).toBeLessThan(quote.usdDelta);
   });
 
   it("rejects a zero delta", async () => {

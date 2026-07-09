@@ -21,7 +21,7 @@ import {
 } from "../utils";
 import { approveUsdc } from "../utils/approve";
 import { withErrorHandling } from "../utils/errors";
-import { withFeeHeadroom } from "../utils/fees";
+import { totalTakerFeeRate, withFeeHeadroom } from "../utils/fees";
 import { OpenPosition } from "./open-position";
 
 const MAKER_OPENED_TOPIC = keccak256(toBytes("MakerOpened(uint256)"));
@@ -328,19 +328,25 @@ export async function estimateTakerPosition(
     });
     // Simulate the swap against the pool curve so fillPrice/usdDelta reflect
     // real price impact. This is a single active-liquidity-region approximation
-    // (see simulateTakerSwap) and does not model fees — the caller's slippage
-    // tolerance is expected to cover those.
+    // (see simulateTakerSwap). `feeRate` folds the total taker fee into the
+    // `effective*` fields so the displayed cost is fee-inclusive, while the raw
+    // `fillPrice`/`usdDelta` keep price impact separable from fees.
     const swap = simulateTakerSwap({
       sqrtPriceX96: perpData.sqrtPriceX96,
       liquidity: perpData.liquidity,
       perpDelta,
       markPrice: perpData.mark,
+      feeRate: totalTakerFeeRate(perpData.fees),
     });
     return {
       perpDelta,
       usdDelta: swap.usdDelta,
       fillPrice: swap.fillPrice,
+      feeRate: swap.feeRate,
+      effectiveUsdDelta: swap.effectiveUsdDelta,
+      effectiveFillPrice: swap.effectiveFillPrice,
       exceedsLiquidity: swap.exceedsLiquidity,
+      liquidityLimited: swap.liquidityLimited,
     };
   }, "estimateTakerPosition");
 }
@@ -354,7 +360,8 @@ export async function estimateTakerPosition(
  * signed total) and get the simulated USD leg, average fill price, and depth
  * flag. Pure client-side math against the constant-liquidity model
  * (`simulateTakerSwap`) — no eth_call, so it is safe on reactive quote paths.
- * Fees are not modeled; slippage tolerance is expected to absorb them.
+ * The total taker fee is folded into the `effective*` fields; the raw
+ * `fillPrice`/`usdDelta` remain fee-exclusive price impact.
  */
 export async function estimateTakerAdjust(
   context: PerpCityContext,
@@ -369,11 +376,16 @@ export async function estimateTakerAdjust(
       liquidity: perpData.liquidity,
       perpDelta: params.perpDelta,
       markPrice: perpData.mark,
+      feeRate: totalTakerFeeRate(perpData.fees),
     });
     return {
       usdDelta: swap.usdDelta,
       fillPrice: swap.fillPrice,
+      feeRate: swap.feeRate,
+      effectiveUsdDelta: swap.effectiveUsdDelta,
+      effectiveFillPrice: swap.effectiveFillPrice,
       exceedsLiquidity: swap.exceedsLiquidity,
+      liquidityLimited: swap.liquidityLimited,
     };
   }, "estimateTakerAdjust");
 }

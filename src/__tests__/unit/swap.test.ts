@@ -97,3 +97,108 @@ describe("simulateTakerSwap", () => {
     expect(result.exceedsLiquidity).toBe(false);
   });
 });
+
+describe("simulateTakerSwap fee inclusion", () => {
+  const BASE = {
+    sqrtPriceX96: SQRT_PRICE_X96_AT_4,
+    liquidity: 1_000_000_000n,
+    markPrice: MARK_AT_4,
+  };
+  const FEE_RATE = 0.003; // 30 bps total taker fee
+
+  it("defaults to no fee: effective fields equal the raw ones", () => {
+    const result = simulateTakerSwap({ ...BASE, perpDelta: 1_000_000n });
+    expect(result.feeRate).toBe(0);
+    expect(result.effectiveFillPrice).toBe(result.fillPrice);
+    expect(result.effectiveUsdDelta).toBe(result.usdDelta);
+  });
+
+  it("makes a long pay exactly feeRate more (worse fill by the fee bps)", () => {
+    const raw = simulateTakerSwap({ ...BASE, perpDelta: 1_000_000n });
+    const withFee = simulateTakerSwap({ ...BASE, perpDelta: 1_000_000n, feeRate: FEE_RATE });
+    // Raw impact is unchanged.
+    expect(withFee.fillPrice).toBe(raw.fillPrice);
+    expect(withFee.usdDelta).toBe(raw.usdDelta);
+    // Effective fill is worse (higher) by exactly the fee rate.
+    expect(withFee.effectiveFillPrice).toBeCloseTo(raw.fillPrice * (1 + FEE_RATE), 12);
+    // Long pays more USD: effective magnitude larger by the fee bps.
+    const rawMag = -raw.usdDelta; // long usdDelta is negative
+    const effMag = -withFee.effectiveUsdDelta;
+    expect(effMag).toBe((rawMag * 1_003_000n) / 1_000_000n);
+    expect(withFee.effectiveUsdDelta).toBeLessThan(raw.usdDelta); // more negative
+  });
+
+  it("makes a short receive exactly feeRate less (worse fill by the fee bps)", () => {
+    const raw = simulateTakerSwap({ ...BASE, perpDelta: -1_000_000n });
+    const withFee = simulateTakerSwap({ ...BASE, perpDelta: -1_000_000n, feeRate: FEE_RATE });
+    expect(withFee.fillPrice).toBe(raw.fillPrice);
+    expect(withFee.usdDelta).toBe(raw.usdDelta);
+    // Effective fill is worse (lower) by exactly the fee rate.
+    expect(withFee.effectiveFillPrice).toBeCloseTo(raw.fillPrice * (1 - FEE_RATE), 12);
+    // Short receives less USD.
+    expect(withFee.effectiveUsdDelta).toBe((raw.usdDelta * 997_000n) / 1_000_000n);
+    expect(withFee.effectiveUsdDelta).toBeLessThan(raw.usdDelta);
+  });
+
+  it("folds the fee into the flat-mark fallback (no liquidity)", () => {
+    const long = simulateTakerSwap({
+      ...BASE,
+      liquidity: 0n,
+      perpDelta: 1_000_000n,
+      feeRate: FEE_RATE,
+    });
+    expect(long.effectiveFillPrice).toBeCloseTo(MARK_AT_4 * (1 + FEE_RATE), 12);
+    const short = simulateTakerSwap({
+      ...BASE,
+      liquidity: 0n,
+      perpDelta: -1_000_000n,
+      feeRate: FEE_RATE,
+    });
+    expect(short.effectiveFillPrice).toBeCloseTo(MARK_AT_4 * (1 - FEE_RATE), 12);
+  });
+
+  it("rejects a negative or non-finite feeRate", () => {
+    expect(() => simulateTakerSwap({ ...BASE, perpDelta: 1_000_000n, feeRate: -0.01 })).toThrow(
+      /feeRate/
+    );
+    expect(() =>
+      simulateTakerSwap({ ...BASE, perpDelta: 1_000_000n, feeRate: Number.NaN })
+    ).toThrow(/feeRate/);
+  });
+});
+
+describe("simulateTakerSwap liquidityLimited flag", () => {
+  it("is false for a small order well within the current region", () => {
+    const result = simulateTakerSwap({
+      sqrtPriceX96: SQRT_PRICE_X96_AT_4,
+      liquidity: 1_000_000_000_000n,
+      perpDelta: 1_000_000n,
+      markPrice: MARK_AT_4,
+    });
+    expect(result.liquidityLimited).toBe(false);
+  });
+
+  it("is true for an order that moves the price a large fraction", () => {
+    // Draining most of the region's token0 moves sqrtPrice far past the warn
+    // threshold, so the single-region estimate is flagged as an underestimate.
+    const result = simulateTakerSwap({
+      sqrtPriceX96: SQRT_PRICE_X96_AT_4,
+      liquidity: 1_000_000_000n,
+      perpDelta: 400_000_000n, // capacity is 5e8; this is 80% of it
+      markPrice: MARK_AT_4,
+    });
+    expect(result.exceedsLiquidity).toBe(false);
+    expect(result.liquidityLimited).toBe(true);
+  });
+
+  it("is true when the order exceeds the region entirely", () => {
+    const result = simulateTakerSwap({
+      sqrtPriceX96: SQRT_PRICE_X96_AT_4,
+      liquidity: 1_000_000_000n,
+      perpDelta: 600_000_000n,
+      markPrice: MARK_AT_4,
+    });
+    expect(result.exceedsLiquidity).toBe(true);
+    expect(result.liquidityLimited).toBe(true);
+  });
+});

@@ -20,9 +20,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      # OIDC trusted publishing needs a recent npm. npm@latest dropped Node 20
+      # (npm@12 requires Node >=22.22 || >=24.15), so this runs on Node 24.
       - name: Upgrade npm for OIDC support
         run: npm install -g npm@latest
 

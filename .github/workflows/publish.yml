@@ -3,6 +3,7 @@ name: Publish to npm
 on:
   release:
     types: [published]
+  workflow_dispatch: # manual publish of the current package.json version on the selected ref
 
 jobs:
   publish:
@@ -23,10 +24,11 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      # OIDC trusted publishing needs a recent npm. npm@latest dropped Node 20
-      # (npm@12 requires Node >=22.22 || >=24.15), so this runs on Node 24.
+      # OIDC provenance needs a recent npm. Pinned to npm@11 (not @latest): npm@12
+      # ships a broken provenance path that can't resolve its `sigstore` dependency.
+      # npm@11 is what published every release through 0.13.0.
       - name: Upgrade npm for OIDC support
-        run: npm install -g npm@latest
+        run: npm install -g npm@11
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

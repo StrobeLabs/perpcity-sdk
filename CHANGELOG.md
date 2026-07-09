@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.1] - 2026-07-09
+
+Re-release of 0.14.0. The 0.14.0 GitHub Release failed to publish (the npm-publish
+workflow ran on Node 20, which `npm@latest` had just dropped), and immutable
+releases reserve the `v0.14.0` tag permanently, so the fixed pipeline ships under
+0.14.1. No source changes from 0.14.0 — same completed `PERP_ABI`.
+
 ## [0.14.0] - 2026-07-09
+
+Never published to npm (release-pipeline failure; see 0.14.1).
 
 ### Added
 

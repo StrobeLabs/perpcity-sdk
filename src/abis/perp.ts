@@ -1871,6 +1871,759 @@ export const PERP_ABI = [
     ],
     anonymous: false,
   },
+  // v0.1.0 free events, vendored from the deployed contract (perpcity-indexer/abis/Perp.json,
+  // cross-checked against v0.1.0:src/libraries/Events.sol + SharedStructs.sol).
+  // forge inspect omits Solidity "free events", so DO NOT regenerate these from
+  // ../perpcity-contracts/out (now v0.2.x, where signatures have drifted).
+  {
+    type: "event",
+    name: "BadDebtAccounted",
+    inputs: [
+      {
+        name: "badDebt",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "insuranceAfter",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "badDebtAfter",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "CapacityUpdated",
+    inputs: [
+      {
+        name: "cap",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct Capacity",
+        components: [
+          {
+            name: "long",
+            type: "uint128",
+            internalType: "uint128",
+          },
+          {
+            name: "short",
+            type: "uint128",
+            internalType: "uint128",
+          },
+        ],
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "CumulativesAccrued",
+    inputs: [
+      {
+        name: "cumls",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct Cumulatives",
+        components: [
+          {
+            name: "fundingX96",
+            type: "int256",
+            internalType: "int256",
+          },
+          {
+            name: "fundingDivSqrtPX96",
+            type: "int256",
+            internalType: "int256",
+          },
+          {
+            name: "longUtilPaymentsX96",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "shortUtilPaymentsX96",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "longUtilEarningsX96",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "shortUtilEarningsX96",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Donated",
+    inputs: [
+      {
+        name: "donor",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+      {
+        name: "badDebt",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+      {
+        name: "insurance",
+        type: "uint80",
+        indexed: false,
+        internalType: "uint80",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "LossSocialized",
+    inputs: [
+      {
+        name: "originalAmount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "feeCharged",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "badDebtAfter",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MakerAdjusted",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "longUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "shortUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "lpFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MakerBackstopped",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "marginIn",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+      {
+        name: "posRecipient",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "longUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "shortUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "lpFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MakerClosed",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "longUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "shortUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "lpFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "liqFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "isLiquidation",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MakerConverted",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "longUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "shortUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "lpFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "liqFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "isLiquidation",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MakerOpened",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MarginTransferred",
+    inputs: [
+      {
+        name: "marginDelta",
+        type: "int128",
+        indexed: false,
+        internalType: "int128",
+      },
+      {
+        name: "totalMargin",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "OpenInterestUpdated",
+    inputs: [
+      {
+        name: "oi",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct OpenInterest",
+        components: [
+          {
+            name: "long",
+            type: "uint128",
+            internalType: "uint128",
+          },
+          {
+            name: "short",
+            type: "uint128",
+            internalType: "uint128",
+          },
+        ],
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RatesAndEmasRefreshed",
+    inputs: [
+      {
+        name: "rates",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct Rates",
+        components: [
+          {
+            name: "fundingPerDay",
+            type: "int88",
+            internalType: "int88",
+          },
+          {
+            name: "longUtilFeePerDay",
+            type: "uint64",
+            internalType: "uint64",
+          },
+          {
+            name: "shortUtilFeePerDay",
+            type: "uint64",
+            internalType: "uint64",
+          },
+          {
+            name: "lastTouch",
+            type: "uint40",
+            internalType: "uint40",
+          },
+        ],
+      },
+      {
+        name: "emas",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct PricePair",
+        components: [
+          {
+            name: "ammPrice",
+            type: "uint128",
+            internalType: "uint128",
+          },
+          {
+            name: "index",
+            type: "uint128",
+            internalType: "uint128",
+          },
+        ],
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TakerAdjusted",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "sr",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct SwapResult",
+        components: [
+          {
+            name: "delta",
+            type: "int256",
+            internalType: "BalanceDelta",
+          },
+          {
+            name: "ammPrice",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "totalFeeAmt",
+            type: "int256",
+            internalType: "int256",
+          },
+          {
+            name: "lpFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "protocolFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "creatorFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "insuranceFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "utilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TakerBackstopped",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "marginIn",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+      {
+        name: "posRecipient",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "utilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TakerClosed",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "sr",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct SwapResult",
+        components: [
+          {
+            name: "delta",
+            type: "int256",
+            internalType: "BalanceDelta",
+          },
+          {
+            name: "ammPrice",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "totalFeeAmt",
+            type: "int256",
+            internalType: "int256",
+          },
+          {
+            name: "lpFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "protocolFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "creatorFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "insuranceFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "utilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "liqFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "isLiquidation",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TakerOpened",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "sr",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct SwapResult",
+        components: [
+          {
+            name: "delta",
+            type: "int256",
+            internalType: "BalanceDelta",
+          },
+          {
+            name: "ammPrice",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "totalFeeAmt",
+            type: "int256",
+            internalType: "int256",
+          },
+          {
+            name: "lpFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "protocolFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "creatorFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "insuranceFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TickDeleted",
+    inputs: [
+      {
+        name: "tick",
+        type: "int24",
+        indexed: false,
+        internalType: "int24",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TickInitialized",
+    inputs: [
+      {
+        name: "tick",
+        type: "int24",
+        indexed: false,
+        internalType: "int24",
+      },
+      {
+        name: "cumlFundingOppX96",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "cumlFundingDivSqrtPOppX96",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TicksCrossed",
+    inputs: [
+      {
+        name: "startingTick",
+        type: "int24",
+        indexed: false,
+        internalType: "int24",
+      },
+      {
+        name: "endingTick",
+        type: "int24",
+        indexed: false,
+        internalType: "int24",
+      },
+      {
+        name: "zeroForOne",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
   {
     type: "error",
     name: "Abdicated",

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-07-09
+
+### Added
+
+- `PERP_ABI` now includes all 20 Perp trade/position "free events" — `TakerOpened`,
+  `TakerAdjusted`, `TakerClosed`, `TakerBackstopped`, `MakerOpened`, `MakerAdjusted`,
+  `MakerClosed`, `MakerConverted`, `MakerBackstopped`, plus the pool/market-state and
+  tick events (`MarginTransferred`, `OpenInterestUpdated`, `RatesAndEmasRefreshed`,
+  `CumulativesAccrued`, `CapacityUpdated`, `Donated`, `LossSocialized`, `BadDebtAccounted`,
+  `TickInitialized`, `TickDeleted`, `TicksCrossed`). These are Solidity "free events" that
+  `forge inspect` omits, so every forge-derived copy of the ABI was previously missing them.
+  Consumers can now `decodeEventLog({ abi: PERP_ABI, ... })` on any Perp trade log. The
+  definitions are vendored from the deployed v0.1.0 contract, not from the contracts repo's
+  Foundry output (now v0.2.x, where several of these signatures have drifted).
+
+## [0.13.0] - 2026-07-08
+
+### Changed
+
+- Adjusted primitives to support position adjustment.
+
 ## [0.12.0] - 2026-07-06
 
 ### Changed

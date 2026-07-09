@@ -1,4 +1,17 @@
 import type { PublicClient } from "viem";
+import type { Fees } from "../types/entity-data";
+
+/**
+ * Total taker fee charged on a swap, as a fraction (e.g. 0.003 = 30 bps).
+ *
+ * A taker pays the creator, insurance, and LP fees on every fill; these are the
+ * three legs the contract deducts from the swapped USD. The liquidation fee is
+ * NOT part of a normal open/adjust/close and is excluded. Pass the result to
+ * `simulateTakerSwap({ feeRate })` to get a fee-inclusive effective fill price.
+ */
+export function totalTakerFeeRate(fees: Fees): number {
+  return fees.creatorFee + fees.insuranceFee + fees.lpFee;
+}
 
 /**
  * Estimate EIP-1559 fees with extra headroom on the cap.

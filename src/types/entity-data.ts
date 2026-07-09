@@ -116,21 +116,48 @@ export type PositionRawData = {
 
 export type EstimateTakerPositionResult = {
   perpDelta: bigint;
+  /** Signed USD delta, price impact only (fees excluded). Negative for longs. */
   usdDelta: bigint;
+  /** Average fill price, price impact only (fees excluded). */
   fillPrice: number;
+  /** Total taker fee rate folded into the effective fields (fraction, e.g. 0.003). */
+  feeRate: number;
+  /** Fee-inclusive signed USD delta — the true USD the user pays/receives. */
+  effectiveUsdDelta: bigint;
+  /**
+   * Fee-inclusive average fill price — the true per-unit cost. Derive the
+   * displayed "Est %" price impact from this so fees are reflected.
+   */
+  effectiveFillPrice: number;
   /**
    * True when the order is larger than the pool's current active-liquidity
    * region can fill. A strong signal the on-chain swap would revert with
    * `PriceImpactTooHigh`; callers should surface this before submitting.
    */
   exceedsLiquidity: boolean;
+  /**
+   * True when the order moves the pool price enough that it very likely crosses
+   * an initialized tick, so the single-region impact estimate is an
+   * underestimate. The UI should warn on this.
+   */
+  liquidityLimited: boolean;
 };
 
 export type EstimateTakerAdjustResult = {
+  /** Signed USD delta, price impact only (fees excluded). */
   usdDelta: bigint;
+  /** Average fill price, price impact only (fees excluded). */
   fillPrice: number;
+  /** Total taker fee rate folded into the effective fields (fraction, e.g. 0.003). */
+  feeRate: number;
+  /** Fee-inclusive signed USD delta — the true USD the user pays/receives. */
+  effectiveUsdDelta: bigint;
+  /** Fee-inclusive average fill price — the true per-unit cost. */
+  effectiveFillPrice: number;
   /** See {@link EstimateTakerPositionResult.exceedsLiquidity}. */
   exceedsLiquidity: boolean;
+  /** See {@link EstimateTakerPositionResult.liquidityLimited}. */
+  liquidityLimited: boolean;
 };
 
 export type CacheConfig = {

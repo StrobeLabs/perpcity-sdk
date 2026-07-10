@@ -63,7 +63,7 @@ export type SimulatedTakerSwap = {
 };
 
 /** 6-dp fixed-point scale for the fee rate (fees are read as `uint24 / 1e6`). */
-const FEE_SCALE = 1_000_000n;
+export const FEE_SCALE = 1_000_000n;
 
 /**
  * Fractional pool-price move above which the single-region (constant-liquidity)
@@ -118,7 +118,7 @@ function getAmount1Delta(sqrtLowerX96: bigint, sqrtUpperX96: bigint, liquidity: 
  * trader actually pays it: a long pays `feeScaled` more USD, a short receives
  * `feeScaled` less. `feeScaled` is the fee rate in 6-dp fixed point.
  */
-function applyFeeToUsd(absUsd: bigint, isLong: boolean, feeScaled: bigint): bigint {
+export function applyFeeToUsd(absUsd: bigint, isLong: boolean, feeScaled: bigint): bigint {
   return isLong
     ? (absUsd * (FEE_SCALE + feeScaled)) / FEE_SCALE
     : (absUsd * (FEE_SCALE - feeScaled)) / FEE_SCALE;

@@ -101,12 +101,18 @@ export function calculateLiquidationPrice(
   const margin = effectiveMargin ?? rawData.margin;
   if (positionSize === 0 || margin <= 0) return null;
 
+  // Per IMarginRatios, the margin ratio is equity / value against the *current*
+  // notional (size * price). Solving `equity == liqRatio * size * liqPrice` for
+  // the liquidation price gives:
+  //   long:  (entry - margin/size) / (1 - liqRatio)
+  //   short: (entry + margin/size) / (1 + liqRatio)
   const liqMarginRatio = rawData.marginRatios.liq / 1e6;
-  const entryNotional = positionSize * entryPrice;
   if (isLong) {
-    return Math.max(0, entryPrice - (margin - liqMarginRatio * entryNotional) / positionSize);
+    const denom = 1 - liqMarginRatio;
+    if (denom <= 0) return null; // liq ratio >= 100%: no positive liquidation price
+    return Math.max(0, (entryPrice - margin / positionSize) / denom);
   }
-  return entryPrice + (margin - liqMarginRatio * entryNotional) / positionSize;
+  return (entryPrice + margin / positionSize) / (1 + liqMarginRatio);
 }
 
 export function calculatePnlPercentage(pnl: number, funding: number, margin: number): number {

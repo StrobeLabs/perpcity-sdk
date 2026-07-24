@@ -1,5 +1,5 @@
 import { applyFeeToUsd, FEE_SCALE, type SimulatedTakerSwap } from "./swap";
-import { computeSwapStepToken0, getAmount0Delta } from "./swapMath";
+import { computeSwapStepToken0, getAmount0Delta, getAmount1Delta } from "./swapMath";
 import { getSqrtPriceAtTick } from "./tickMath";
 
 /**
@@ -127,6 +127,70 @@ export function maxFillablePerpDelta(opts: {
     sqrtPrice = target;
   }
   return total;
+}
+
+/** One constant-liquidity region of a pool's one-sided depth, in walk order. */
+export type DepthRegion = {
+  /** Region bounds; start is nearer spot, end is the initialized tick's price. */
+  sqrtPriceStartX96: bigint;
+  sqrtPriceEndX96: bigint;
+  /** The initialized tick that terminates the region (crossed at its end). */
+  tick: number;
+  /** Active liquidity within the region. */
+  liquidity: bigint;
+  /** Perp (token0) fillable within the region, 6-dp units. */
+  perpDelta: bigint;
+  /** USD (token1) leg for filling the region, 6-dp units. */
+  usdDelta: bigint;
+};
+
+/**
+ * The pool's one-sided depth as per-region rows: `maxFillablePerpDelta`'s walk
+ * emitting each constant-liquidity region instead of a single sum. Feeds order
+ * book style depth displays. Zero-liquidity regions are skipped (they fill
+ * nothing). Does not check freshness — callers should `assertTickMapFresh`
+ * first, exactly like `simulateTakerSwapExact` does internally.
+ *
+ * Amount rounding matches `computeSwapStepToken0` at a tick boundary, so a
+ * fill to any region's end reproduces `simulateTakerSwapExact`'s USD leg to
+ * the wei when summed over the preceding regions.
+ */
+export function walkPoolDepth(opts: {
+  sqrtPriceX96: bigint;
+  liquidity: bigint;
+  tickMap: PoolTickMap;
+  isLong: boolean;
+}): DepthRegion[] {
+  const { sqrtPriceX96, liquidity, tickMap, isLong } = opts;
+  let sqrtPrice = sqrtPriceX96;
+  let active = liquidity;
+  const regions: DepthRegion[] = [];
+
+  const path = isLong ? ticksAbove(tickMap, sqrtPriceX96) : ticksAtOrBelow(tickMap, sqrtPriceX96);
+  for (const { tick, liquidityNet } of path) {
+    const target = getSqrtPriceAtTick(tick);
+    const perpDelta = isLong
+      ? getAmount0Delta(sqrtPrice, target, active, false)
+      : getAmount0Delta(target, sqrtPrice, active, true);
+
+    if (active > 0n && perpDelta > 0n) {
+      const usdDelta = isLong
+        ? getAmount1Delta(sqrtPrice, target, active, true)
+        : getAmount1Delta(target, sqrtPrice, active, false);
+      regions.push({
+        sqrtPriceStartX96: sqrtPrice,
+        sqrtPriceEndX96: target,
+        tick,
+        liquidity: active,
+        perpDelta,
+        usdDelta,
+      });
+    }
+
+    active += isLong ? liquidityNet : -liquidityNet;
+    sqrtPrice = target;
+  }
+  return regions;
 }
 
 export function simulateTakerSwapExact(opts: {

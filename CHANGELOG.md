@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-07-24
+
+### Added
+
+- `walkPoolDepth(...)` — the pool's one-sided depth as per-region rows: the same tick walk as
+  `maxFillablePerpDelta`, emitting each constant-liquidity region (`DepthRegion`: price bounds,
+  terminating tick, active liquidity, perp and USD legs) instead of a single sum. Feeds order
+  book style depth displays. Amount rounding matches `computeSwapStepToken0` at tick boundaries,
+  so cumulative USD over a prefix of regions reproduces `simulateTakerSwapExact` to the wei;
+  per-side totals equal `maxFillablePerpDelta` exactly. Zero-liquidity regions are skipped.
+  Freshness is not checked — callers should `assertTickMapFresh` first.
+
+## [0.16.0] - 2026-07-10
+
+### Added
+
+- Exact multi-tick taker swap simulation. `simulateTakerSwap` assumes the pool's current active
+  liquidity holds across the whole trade, which is wrong in both directions once an order crosses
+  an initialized tick: bands of liquidity above spot make real fills cheaper than the flat model
+  predicts, while the band's edge means the pool runs dry far sooner (the flat model quoted orders
+  that revert on-chain with `InsufficientLiquidityToFill`). A perp's fill is settled by a real
+  Uniswap v4 `PoolManager.swap` against a hookless fee-0 pool, so the exact fill is reproduced by
+  walking the same ticks the chain walks:
+  - `tickMath.ts` — exact bigint port of `TickMath.getSqrtPriceAtTick`.
+  - `swapMath.ts` — `SqrtPriceMath` / `SwapMath` primitives, zero-fee token0-specified paths.
+  - `swapExact.ts` — `simulateTakerSwapExact` (differential-tested to the wei against Uniswap's
+    live V4Quoter), `maxFillablePerpDelta`, `activeLiquidityAt`, `assertTickMapFresh`, and
+    `StaleTickMapError` for maps invalidated by LP mints/burns.
+  - `poolTicks.ts` — `fetchPoolTickMap` reads every initialized tick straight from the
+    `PoolManager` via two batched `extsload` `eth_call`s (tick bitmap words, then tick info).
+
+## [0.15.0] - 2026-07-10
+
+### Changed
+
+- `simulateTakerSwap` now takes an optional `feeRate` and returns fee-inclusive
+  `effectiveFillPrice` / `effectiveUsdDelta` alongside the raw curve `fillPrice` / `usdDelta`,
+  so callers can separate price impact from fees. Direction is side-signed: long `*(1+feeRate)`,
+  short `*(1-feeRate)`. Previously the displayed price impact understated the true cost by the
+  pool fee bps on every trade.
+- New `totalTakerFeeRate(fees)` (creator + insurance + LP) wired into `estimateTakerPosition` /
+  `estimateTakerAdjust`.
+- New `liquidityLimited` flag: the single-region simulation understates impact once a trade
+  crosses an initialized tick; set when the swap moves the pool price past
+  `APPROX_TICK_CROSS_WARN_FRACTION` so UIs can warn. Raw `fillPrice` / `usdDelta` /
+  `exceedsLiquidity` and `calculateTakerSlippageLimit` are unchanged.
+
 ## [0.14.1] - 2026-07-09
 
 Re-release of 0.14.0. The 0.14.0 GitHub Release failed to publish (the npm-publish

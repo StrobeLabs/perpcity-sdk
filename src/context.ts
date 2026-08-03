@@ -328,6 +328,7 @@ export class PerpCityContext {
           liq: Number(position[2]),
           backstop: Number(position[3]),
         },
+        lastCumlFundingX96: position[4],
         makerDetails: isMaker
           ? {
               tickLower: Number(makerDetails[0]),

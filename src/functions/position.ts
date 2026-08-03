@@ -8,7 +8,7 @@ import type {
   PositionRawData,
 } from "../types/entity-data";
 import { scale6Decimals } from "../utils";
-import { TransactionRevertedError, withErrorHandling } from "../utils/errors";
+import { withErrorHandling } from "../utils/errors";
 import { adjustMaker, adjustTaker } from "./perp-actions";
 
 export function getPositionPerpId(positionData: OpenPositionData): PerpAddress {
@@ -38,35 +38,40 @@ export async function closePosition(
   positionId: bigint,
   params: ClosePositionParams
 ): Promise<ClosePositionResult> {
-  return withErrorHandling(async () => {
-    const rawData = await context.getPositionRawData(perpAddress, positionId);
-    let txHash: Hex;
+  return withErrorHandling(
+    async () => {
+      const rawData = await context.getPositionRawData(perpAddress, positionId);
+      let txHash: Hex;
 
-    if (rawData.makerDetails) {
-      // Reuse the liquidity already fetched by getPositionRawData instead of a second
-      // makerDetails read against the same position.
-      const result = await adjustMaker(context, perpAddress, {
-        posId: positionId,
-        marginDelta: 0n,
-        liquidityDelta: -rawData.makerDetails.liquidity,
-        amt0Limit: toContractAmount(params.amt0Limit),
-        amt1Limit: toContractAmount(params.amt1Limit),
-      });
-      txHash = result.txHash;
-    } else {
-      const result = await adjustTaker(context, perpAddress, {
-        posId: positionId,
-        marginDelta: 0n,
-        perpDelta: -rawData.entryPerpDelta,
-        amt1Limit: toContractAmount(params.amt1Limit),
-      });
-      txHash = result.txHash;
-    }
+      if (rawData.makerDetails) {
+        // Reuse the liquidity already fetched by getPositionRawData instead of a second
+        // makerDetails read against the same position.
+        const result = await adjustMaker(context, perpAddress, {
+          posId: positionId,
+          marginDelta: 0n,
+          liquidityDelta: -rawData.makerDetails.liquidity,
+          amt0Limit: toContractAmount(params.amt0Limit),
+          amt1Limit: toContractAmount(params.amt1Limit),
+        });
+        txHash = result.txHash;
+      } else {
+        const result = await adjustTaker(context, perpAddress, {
+          posId: positionId,
+          marginDelta: 0n,
+          perpDelta: -rawData.entryPerpDelta,
+          amt1Limit: toContractAmount(params.amt1Limit),
+        });
+        txHash = result.txHash;
+      }
 
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-    return { txHash };
-  }, `closePosition for position ${positionId}`);
+      // The inner adjust call already confirmed the receipt (and fired the tx
+      // hooks) via sendAndConfirm; re-waiting on the same hash would only cost
+      // an extra RPC round trip.
+      return { txHash };
+    },
+    `closePosition for position ${positionId}`,
+    context.hooks
+  );
 }
 
 export function calculateEntryPrice(rawData: PositionRawData): number {

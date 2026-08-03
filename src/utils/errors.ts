@@ -854,9 +854,15 @@ function formatContractError(
 /**
  * Wrap an async function with error handling. The thrown error keeps the
  * human-readable "{operation}: {message}" text, while `operation` and
- * `shortMessage` expose the parts separately for programmatic use.
+ * `shortMessage` expose the parts separately for programmatic use. When
+ * hooks are given, onError fires with the parsed error before it is thrown;
+ * a throwing hook is swallowed and never masks the real error.
  */
-export async function withErrorHandling<T>(fn: () => Promise<T>, context: string): Promise<T> {
+export async function withErrorHandling<T>(
+  fn: () => Promise<T>,
+  context: string,
+  hooks?: { onError?(event: { operation: string; error: PerpCityError }): void }
+): Promise<T> {
   try {
     return await fn();
   } catch (error) {
@@ -864,6 +870,11 @@ export async function withErrorHandling<T>(fn: () => Promise<T>, context: string
     parsedError.operation = context;
     parsedError.shortMessage ??= parsedError.message;
     parsedError.message = `${context}: ${parsedError.message}`;
+    try {
+      hooks?.onError?.({ operation: context, error: parsedError });
+    } catch (_hookError) {
+      // Hooks are fire-and-forget; see PerpCityHooks.
+    }
     throw parsedError;
   }
 }

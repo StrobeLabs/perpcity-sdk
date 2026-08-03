@@ -11,7 +11,12 @@ import {
 import { FEES_ABI } from "./abis/fees";
 import { MARGIN_RATIOS_ABI } from "./abis/margin-ratios";
 import { PERP_ABI } from "./abis/perp";
-import type { PerpAddress, PerpCityContextConfig, PerpCityDeployments } from "./types";
+import type {
+  PerpAddress,
+  PerpCityContextConfig,
+  PerpCityDeployments,
+  PerpCityHooks,
+} from "./types";
 import type {
   Bounds,
   Fees,
@@ -44,6 +49,7 @@ export function unpackBalanceDelta(delta: bigint): { amount0: bigint; amount1: b
 export class PerpCityContext {
   public readonly walletClient;
   public readonly publicClient: PublicClient;
+  public readonly hooks?: PerpCityHooks;
   private readonly _deployments: PerpCityDeployments;
   private readonly configCache: TTLCache<Address, PerpConfig>;
 
@@ -62,12 +68,17 @@ export class PerpCityContext {
     // single Multicall3 aggregate3 eth_call (one billed RPC request). The
     // transport-level batch stays for the requests multicall cannot aggregate
     // (simulateContract, calls with an account/value, opted-out probes).
-    this.publicClient = createPublicClient({
-      chain: config.walletClient.chain,
-      transport: http(config.rpcUrl, { batch: true }),
-      batch: { multicall: true },
-    });
+    // A caller-supplied publicClient (e.g. with a metrics-wrapping transport)
+    // takes precedence and is used as-is.
+    this.publicClient =
+      config.publicClient ??
+      createPublicClient({
+        chain: config.walletClient.chain,
+        transport: http(config.rpcUrl, { batch: true }),
+        batch: { multicall: true },
+      });
 
+    this.hooks = config.hooks;
     this._deployments = config.deployments;
   }
 

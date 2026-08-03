@@ -112,6 +112,9 @@ export type PositionRawData = {
   entryUsdDelta: bigint; // Entry notional value in USDC (raw)
   marginRatios: MarginRatios;
   makerDetails: MakerDetails | null;
+  // Funding checkpoint at the position's last on-chain interaction
+  // (Position.lastCumlFundingX96); feeds the funding leg of position health.
+  lastCumlFundingX96?: bigint;
 };
 
 export type EstimateTakerPositionResult = {

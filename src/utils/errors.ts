@@ -377,7 +377,7 @@ const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
     code: "PRICE_IMPACT_TOO_HIGH",
     category: ErrorCategory.USER_ERROR,
     message: (args) =>
-      args.length > 0
+      args.length >= 3
         ? `Price impact too high. Current price: ${args[0]}, Min acceptable: ${args[1]}, Max acceptable: ${args[2]}`
         : "This order would move the price too much. Try a smaller size or wait for more liquidity.",
   },

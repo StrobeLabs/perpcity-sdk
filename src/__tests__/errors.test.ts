@@ -759,6 +759,14 @@ describe("PERP_ABI covers the contracts' Errors.sol", () => {
     expect(result.message).not.toContain("undefined");
     expect(result.message).toContain("move the price too much");
   });
+
+  it("maps partial-arg PriceImpactTooHigh without printing undefined", () => {
+    const mockError = createMockContractError("PriceImpactTooHigh", [1000n]);
+    const result = parseContractError(mockError);
+
+    expect(result.message).not.toContain("undefined");
+    expect(result.message).toContain("move the price too much");
+  });
 });
 
 // A revert whose selector viem could not decode against the call's ABI:

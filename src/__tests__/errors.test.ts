@@ -1,7 +1,9 @@
-import { BaseError, ContractFunctionRevertedError } from "viem";
+import { BaseError, ContractFunctionRevertedError, keccak256, toBytes } from "viem";
 import { describe, expect, it } from "vitest";
+import { ERROR_SELECTORS, EXTENDED_ERROR_DECODE_ABI } from "../abis/error-decode";
 import {
   ContractError,
+  codeForErrorName,
   ErrorCategory,
   ErrorSource,
   InsufficientFundsError,
@@ -9,7 +11,9 @@ import {
   parseContractError,
   RPCError,
   TransactionRejectedError,
+  TransactionRevertedError,
   ValidationError,
+  withErrorHandling,
 } from "../utils/errors";
 
 describe("Error Classes", () => {
@@ -754,5 +758,223 @@ describe("PERP_ABI covers the contracts' Errors.sol", () => {
 
     expect(result.message).not.toContain("undefined");
     expect(result.message).toContain("move the price too much");
+  });
+});
+
+// A revert whose selector viem could not decode against the call's ABI:
+// data is undefined but the raw revert bytes and 4-byte signature are present.
+function createMockRawRevertError(raw: `0x${string}`) {
+  const mockRevertError = new ContractFunctionRevertedError({
+    abi: [],
+    functionName: "test",
+  } as any);
+  (mockRevertError as any).data = undefined;
+  (mockRevertError as any).raw = raw;
+  (mockRevertError as any).signature = raw.slice(0, 10);
+
+  const mockError = new BaseError("Contract execution reverted", {
+    cause: mockRevertError,
+  });
+  (mockError as any).walk = (fn: (err: any) => any) => {
+    if (fn(mockRevertError)) return mockRevertError;
+    return null;
+  };
+
+  return mockError;
+}
+
+function selectorFor(signature: string): `0x${string}` {
+  return keccak256(toBytes(signature)).slice(0, 10) as `0x${string}`;
+}
+
+describe("machine-readable error codes", () => {
+  it("defaults PerpCityError code to UNKNOWN", () => {
+    const error = new PerpCityError("Test error");
+    expect(error.code).toBe("UNKNOWN");
+  });
+
+  it("accepts an explicit code on PerpCityError", () => {
+    const error = new PerpCityError("Test error", undefined, "VALIDATION_ERROR");
+    expect(error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("sets subclass default codes", () => {
+    expect(new TransactionRejectedError().code).toBe("USER_REJECTED");
+    expect(new InsufficientFundsError().code).toBe("INSUFFICIENT_GAS");
+    expect(new RPCError("rpc down").code).toBe("RPC_ERROR");
+    expect(new ValidationError("bad input").code).toBe("VALIDATION_ERROR");
+  });
+
+  const NAME_TO_CODE: [string, string][] = [
+    ["TransferFromFailed", "INSUFFICIENT_USDC_BALANCE"],
+    ["MarginTooLow", "MARGIN_BELOW_MINIMUM"],
+    ["MarginRatioTooLow", "MARGIN_RATIO_TOO_LOW"],
+    ["MinAmtUnmet", "SLIPPAGE_EXCEEDED"],
+    ["MaxAmtExceeded", "SLIPPAGE_EXCEEDED"],
+    ["MinimumAmountInsufficient", "SLIPPAGE_EXCEEDED"],
+    ["MaximumAmountExceeded", "SLIPPAGE_EXCEEDED"],
+    ["PriceImpactTooHigh", "PRICE_IMPACT_TOO_HIGH"],
+    ["LongUtilizationExceeded", "UTILIZATION_EXCEEDED"],
+    ["ShortUtilizationExceeded", "UTILIZATION_EXCEEDED"],
+    ["InsufficientLiquidityToFill", "INSUFFICIENT_LIQUIDITY"],
+    ["CouldNotFullyFill", "INSUFFICIENT_LIQUIDITY"],
+    ["PositionDoesNotExist", "POSITION_NOT_FOUND"],
+    ["TokenDoesNotExist", "POSITION_NOT_FOUND"],
+    ["NonMakerPosition", "WRONG_POSITION_KIND"],
+    ["NonTakerPosition", "WRONG_POSITION_KIND"],
+    ["NotLiquidatable", "NOT_LIQUIDATABLE"],
+    ["Abdicated", "MARKET_ABDICATED"],
+    ["PositionLocked", "POSITION_LOCKED"],
+    ["MakerPositionLocked", "POSITION_LOCKED"],
+    ["Unauthorized", "UNAUTHORIZED"],
+    ["UnauthorizedCaller", "UNAUTHORIZED"],
+    ["NotOwnerNorApproved", "UNAUTHORIZED"],
+    ["NegativeMargin", "CONTRACT_REVERT"],
+    ["ZeroDelta", "CONTRACT_REVERT"],
+    ["ManagerLocked", "CONTRACT_REVERT"],
+  ];
+
+  it.each(NAME_TO_CODE)("codeForErrorName(%s) is %s", (name, code) => {
+    expect(codeForErrorName(name)).toBe(code);
+  });
+
+  it("returns UNKNOWN for an undecoded error name", () => {
+    expect(codeForErrorName("Unknown")).toBe("UNKNOWN");
+    expect(codeForErrorName("SomethingNeverSeen")).toBe("CONTRACT_REVERT");
+  });
+
+  it("carries the code on ContractError produced by parseContractError", () => {
+    const result = parseContractError(createMockContractError("MarginTooLow", []));
+    expect(result).toBeInstanceOf(ContractError);
+    expect(result.code).toBe("MARGIN_BELOW_MINIMUM");
+  });
+});
+
+describe("raw revert data decode fallback", () => {
+  it("decodes solady TransferFromFailed from raw bytes as insufficient USDC", () => {
+    const result = parseContractError(createMockRawRevertError("0x7939f424"));
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("TransferFromFailed");
+    expect(result.code).toBe("INSUFFICIENT_USDC_BALANCE");
+    expect(result.message).not.toContain("Unknown");
+    expect((result as ContractError).debug?.errorSelector).toBe("0x7939f424");
+    expect((result as ContractError).debug?.rawData).toBe("0x7939f424");
+  });
+
+  it("decodes legacy v0.0.1 CouldNotFullyFill from raw bytes", () => {
+    const result = parseContractError(createMockRawRevertError(selectorFor("CouldNotFullyFill()")));
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("CouldNotFullyFill");
+    expect(result.code).toBe("INSUFFICIENT_LIQUIDITY");
+  });
+
+  it("decodes V4 ManagerLocked from raw bytes with retry guidance", () => {
+    const result = parseContractError(createMockRawRevertError(selectorFor("ManagerLocked()")));
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("ManagerLocked");
+    expect((result as ContractError).debug?.canRetry).toBe(true);
+    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
+  });
+
+  it("keeps Unknown for an unrecognized selector but reports the selector", () => {
+    const result = parseContractError(createMockRawRevertError("0xdeadbeef"));
+
+    expect(result).toBeInstanceOf(ContractError);
+    expect((result as ContractError).errorName).toBe("Unknown");
+    expect(result.code).toBe("UNKNOWN");
+    expect((result as ContractError).debug?.errorSelector).toBe("0xdeadbeef");
+  });
+
+  it("populates errorSelector and rawData on ABI-decoded reverts too", () => {
+    const mockError = createMockContractError("MarginTooLow", []);
+    const revertError = (mockError as any).walk(() => true);
+    (revertError as any).raw = selectorFor("MarginTooLow()");
+    (revertError as any).signature = selectorFor("MarginTooLow()");
+
+    const result = parseContractError(mockError);
+    expect((result as ContractError).debug?.errorSelector).toBe(selectorFor("MarginTooLow()"));
+    expect((result as ContractError).debug?.rawData).toBe(selectorFor("MarginTooLow()"));
+  });
+
+  it("exports selector constants that match their signatures", () => {
+    expect(ERROR_SELECTORS.TransferFromFailed).toBe("0x7939f424");
+    expect(ERROR_SELECTORS.MarginRatioTooLow).toBe(selectorFor("MarginRatioTooLow()"));
+    expect(ERROR_SELECTORS.MarginRatioTooLow).toBe("0xb2c649db");
+  });
+
+  it("every EXTENDED_ERROR_DECODE_ABI entry has a non-generic mapping and a code", () => {
+    for (const entry of EXTENDED_ERROR_DECODE_ABI) {
+      const result = parseContractError(
+        createMockContractError(entry.name, new Array(entry.inputs.length).fill(0n))
+      );
+      expect(result, entry.name).toBeInstanceOf(ContractError);
+      expect(result.message, entry.name).not.toContain("Contract error:");
+      expect(result.message, entry.name).not.toContain("undefined");
+      expect(result.code, entry.name).not.toBe("UNKNOWN");
+    }
+  });
+});
+
+describe("withErrorHandling structured fields", () => {
+  it("prefixes the message but preserves shortMessage and sets operation", async () => {
+    const failing = async () => {
+      throw createMockContractError("MarginTooLow", []);
+    };
+
+    try {
+      await withErrorHandling(failing, "openTakerPosition");
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      const parsed = error as PerpCityError;
+      expect(parsed).toBeInstanceOf(ContractError);
+      expect(parsed.operation).toBe("openTakerPosition");
+      expect(parsed.message).toContain("openTakerPosition: ");
+      expect(parsed.shortMessage).not.toContain("openTakerPosition");
+      expect(parsed.message).toContain(parsed.shortMessage as string);
+      expect(parsed.code).toBe("MARGIN_BELOW_MINIMUM");
+    }
+  });
+});
+
+describe("TransactionRevertedError", () => {
+  it("is a PerpCityError carrying the tx hash and TX_REVERTED_ONCHAIN", () => {
+    const error = new TransactionRevertedError("0xabc123");
+    expect(error).toBeInstanceOf(PerpCityError);
+    expect(error.name).toBe("TransactionRevertedError");
+    expect(error.txHash).toBe("0xabc123");
+    expect(error.code).toBe("TX_REVERTED_ONCHAIN");
+    expect(error.message).toBe("Transaction reverted. Hash: 0xabc123");
+  });
+});
+
+describe("newly mapped Errors.sol names", () => {
+  const NEWLY_MAPPED = [
+    "Abdicated",
+    "DataAlreadyPending",
+    "DataNotTimelocked",
+    "TimelockNotExpired",
+  ];
+
+  it.each(NEWLY_MAPPED)("gives %s a real message, not the generic fallback", (name) => {
+    const result = parseContractError(createMockContractError(name, []));
+    expect(result).toBeInstanceOf(ContractError);
+    expect(result.message).not.toContain("Contract error:");
+    expect(result.message).not.toContain("undefined");
+  });
+
+  it("maps Abdicated as a dead-market state error", () => {
+    const result = parseContractError(createMockContractError("Abdicated", []));
+    expect(result.code).toBe("MARKET_ABDICATED");
+    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
+  });
+
+  it("does not print undefined for zero-arg legacy InvalidCaller and InvalidMargin", () => {
+    for (const name of ["InvalidCaller", "InvalidMargin"]) {
+      const result = parseContractError(createMockContractError(name, []));
+      expect(result.message, name).not.toContain("undefined");
+    }
   });
 });

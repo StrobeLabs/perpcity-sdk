@@ -20,8 +20,9 @@ import {
   simulateTakerSwap,
 } from "../utils";
 import { approveUsdc } from "../utils/approve";
-import { TransactionRevertedError, withErrorHandling } from "../utils/errors";
-import { totalTakerFeeRate, withFeeHeadroom } from "../utils/fees";
+import { withErrorHandling } from "../utils/errors";
+import { totalTakerFeeRate } from "../utils/fees";
+import { sendAndConfirm } from "../utils/tx";
 import { OpenPosition } from "./open-position";
 
 const MAKER_OPENED_TOPIC = keccak256(toBytes("MakerOpened(uint256)"));
@@ -33,76 +34,76 @@ export async function createPerp(
   context: PerpCityContext,
   params: CreatePerpParams
 ): Promise<PerpAddress> {
-  return withErrorHandling(async () => {
-    const deployments = context.deployments();
-    const perpFactory = deployments.perpFactory;
-    if (!perpFactory) throw new Error("perpFactory deployment address is required");
+  return withErrorHandling(
+    async () => {
+      const deployments = context.deployments();
+      const perpFactory = deployments.perpFactory;
+      if (!perpFactory) throw new Error("perpFactory deployment address is required");
 
-    const modules = {
-      beacon: params.beacon,
-      fees: params.fees ?? deployments.feesModule,
-      funding: params.funding ?? deployments.fundingModule,
-      marginRatios: params.marginRatios ?? deployments.marginRatiosModule,
-      priceImpact: params.priceImpact ?? deployments.priceImpactModule,
-      pricing: params.pricing ?? deployments.pricingModule,
-    };
+      const modules = {
+        beacon: params.beacon,
+        fees: params.fees ?? deployments.feesModule,
+        funding: params.funding ?? deployments.fundingModule,
+        marginRatios: params.marginRatios ?? deployments.marginRatiosModule,
+        priceImpact: params.priceImpact ?? deployments.priceImpactModule,
+        pricing: params.pricing ?? deployments.pricingModule,
+      };
 
-    if (
-      !modules.fees ||
-      !modules.funding ||
-      !modules.marginRatios ||
-      !modules.priceImpact ||
-      !modules.pricing
-    ) {
-      throw new Error("All module addresses must be provided in params or deployment config");
-    }
+      if (
+        !modules.fees ||
+        !modules.funding ||
+        !modules.marginRatios ||
+        !modules.priceImpact ||
+        !modules.pricing
+      ) {
+        throw new Error("All module addresses must be provided in params or deployment config");
+      }
 
-    const { request } = await context.publicClient.simulateContract({
-      address: perpFactory,
-      abi: PERP_FACTORY_ABI,
-      functionName: "createPerp",
-      args: [
-        params.owner,
-        params.name,
-        params.symbol,
-        params.tokenUri,
-        modules as {
-          beacon: Address;
-          fees: Address;
-          funding: Address;
-          marginRatios: Address;
-          priceImpact: Address;
-          pricing: Address;
-        },
-        params.emaWindow,
-        params.salt,
-      ],
-      account: context.walletClient.account,
-    });
+      const { request } = await context.publicClient.simulateContract({
+        address: perpFactory,
+        abi: PERP_FACTORY_ABI,
+        functionName: "createPerp",
+        args: [
+          params.owner,
+          params.name,
+          params.symbol,
+          params.tokenUri,
+          modules as {
+            beacon: Address;
+            fees: Address;
+            funding: Address;
+            marginRatios: Address;
+            priceImpact: Address;
+            pricing: Address;
+          },
+          params.emaWindow,
+          params.salt,
+        ],
+        account: context.walletClient.account,
+      });
 
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
+      const { receipt } = await sendAndConfirm(context, "createPerp", request);
 
-    for (const log of receipt.logs) {
-      // Only decode logs emitted by the factory we called, so a same-signature
-      // event from another contract can't be mistaken for PerpCreated.
-      if (log.address.toLowerCase() !== perpFactory.toLowerCase()) continue;
-      try {
-        const decoded = decodeEventLog({
-          abi: PERP_FACTORY_ABI,
-          data: log.data,
-          topics: log.topics,
-          eventName: "PerpCreated",
-        });
-        return decoded.args.perp as PerpAddress;
-      } catch (_e) {}
-    }
+      for (const log of receipt.logs) {
+        // Only decode logs emitted by the factory we called, so a same-signature
+        // event from another contract can't be mistaken for PerpCreated.
+        if (log.address.toLowerCase() !== perpFactory.toLowerCase()) continue;
+        try {
+          const decoded = decodeEventLog({
+            abi: PERP_FACTORY_ABI,
+            data: log.data,
+            topics: log.topics,
+            eventName: "PerpCreated",
+          });
+          return decoded.args.perp as PerpAddress;
+        } catch (_e) {}
+      }
 
-    throw new Error("PerpCreated event not found in transaction receipt");
-  }, "createPerp");
+      throw new Error("PerpCreated event not found in transaction receipt");
+    },
+    "createPerp",
+    context.hooks
+  );
 }
 
 export function derivePerpDelta(opts: {
@@ -148,49 +149,58 @@ export async function openTakerPosition(
   perpAddress: PerpAddress,
   params: OpenTakerPositionParams
 ): Promise<OpenPosition> {
-  return withErrorHandling(async () => {
-    if (params.margin <= 0) throw new Error("Margin must be greater than 0");
-    if (params.perpDelta === 0n) throw new Error("perpDelta must be non-zero");
+  return withErrorHandling(
+    async () => {
+      if (params.margin <= 0) throw new Error("Margin must be greater than 0");
+      if (params.perpDelta === 0n) throw new Error("perpDelta must be non-zero");
 
-    const marginScaled = scale6Decimals(params.margin);
-    await ensureUsdcAllowance(context, perpAddress, marginScaled);
+      const marginScaled = scale6Decimals(params.margin);
+      await ensureUsdcAllowance(context, perpAddress, marginScaled);
 
-    const { request } = await context.publicClient.simulateContract({
-      address: perpAddress,
-      abi: PERP_ABI,
-      functionName: "openTaker",
-      args: [
-        {
-          holder: context.walletClient.account!.address,
-          margin: marginScaled,
-          perpDelta: params.perpDelta,
-          amt1Limit: params.amt1Limit,
-        },
-      ],
-      account: context.walletClient.account,
-    });
+      const { request } = await context.publicClient.simulateContract({
+        address: perpAddress,
+        abi: PERP_ABI,
+        functionName: "openTaker",
+        args: [
+          {
+            holder: context.walletClient.account!.address,
+            margin: marginScaled,
+            perpDelta: params.perpDelta,
+            amt1Limit: params.amt1Limit,
+          },
+        ],
+        account: context.walletClient.account,
+      });
 
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
+      const { txHash, receipt } = await sendAndConfirm(context, "openTakerPosition", request, {
+        perpAddress,
+      });
 
-    for (const log of receipt.logs) {
-      try {
-        if (
-          log.address.toLowerCase() !== perpAddress.toLowerCase() ||
-          log.topics[0] !== TAKER_OPENED_TOPIC ||
-          log.data === "0x"
-        ) {
-          continue;
-        }
-        const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
-        return new OpenPosition(context, perpAddress, posId, params.perpDelta > 0n, false, txHash);
-      } catch (_e) {}
-    }
-    throw new Error(`TakerOpened event not found in transaction receipt. Hash: ${txHash}`);
-  }, "openTakerPosition");
+      for (const log of receipt.logs) {
+        try {
+          if (
+            log.address.toLowerCase() !== perpAddress.toLowerCase() ||
+            log.topics[0] !== TAKER_OPENED_TOPIC ||
+            log.data === "0x"
+          ) {
+            continue;
+          }
+          const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
+          return new OpenPosition(
+            context,
+            perpAddress,
+            posId,
+            params.perpDelta > 0n,
+            false,
+            txHash
+          );
+        } catch (_e) {}
+      }
+      throw new Error(`TakerOpened event not found in transaction receipt. Hash: ${txHash}`);
+    },
+    "openTakerPosition",
+    context.hooks
+  );
 }
 
 function buildMakerContractParams(
@@ -248,65 +258,67 @@ export async function openMakerPosition(
   perpAddress: PerpAddress,
   params: OpenMakerPositionParams
 ): Promise<OpenPosition> {
-  return withErrorHandling(async () => {
-    if (params.margin <= 0) throw new Error("Margin must be greater than 0");
-    if (params.priceLower >= params.priceUpper)
-      throw new Error("priceLower must be less than priceUpper");
+  return withErrorHandling(
+    async () => {
+      if (params.margin <= 0) throw new Error("Margin must be greater than 0");
+      if (params.priceLower >= params.priceUpper)
+        throw new Error("priceLower must be less than priceUpper");
 
-    const marginScaled = scale6Decimals(params.margin);
-    const perpData = await context.getPerpData(perpAddress);
-    const { alignedTickLower, alignedTickUpper } = calculateAlignedTicks(
-      params.priceLower,
-      params.priceUpper,
-      perpData.tickSpacing
-    );
+      const marginScaled = scale6Decimals(params.margin);
+      const perpData = await context.getPerpData(perpAddress);
+      const { alignedTickLower, alignedTickUpper } = calculateAlignedTicks(
+        params.priceLower,
+        params.priceUpper,
+        perpData.tickSpacing
+      );
 
-    const maxAmt0In =
-      typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
-    const maxAmt1In =
-      typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
+      const maxAmt0In =
+        typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
+      const maxAmt1In =
+        typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
 
-    await ensureUsdcAllowance(context, perpAddress, marginScaled);
+      await ensureUsdcAllowance(context, perpAddress, marginScaled);
 
-    const contractParams = buildMakerContractParams(
-      context,
-      marginScaled,
-      params,
-      alignedTickLower,
-      alignedTickUpper,
-      maxAmt0In,
-      maxAmt1In
-    );
+      const contractParams = buildMakerContractParams(
+        context,
+        marginScaled,
+        params,
+        alignedTickLower,
+        alignedTickUpper,
+        maxAmt0In,
+        maxAmt1In
+      );
 
-    const { request } = await context.publicClient.simulateContract({
-      address: perpAddress,
-      abi: PERP_ABI,
-      functionName: "openMaker",
-      args: [contractParams],
-      account: context.walletClient.account,
-    });
+      const { request } = await context.publicClient.simulateContract({
+        address: perpAddress,
+        abi: PERP_ABI,
+        functionName: "openMaker",
+        args: [contractParams],
+        account: context.walletClient.account,
+      });
 
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
+      const { txHash, receipt } = await sendAndConfirm(context, "openMakerPosition", request, {
+        perpAddress,
+      });
 
-    for (const log of receipt.logs) {
-      try {
-        if (
-          log.address.toLowerCase() !== perpAddress.toLowerCase() ||
-          log.topics[0] !== MAKER_OPENED_TOPIC ||
-          log.data === "0x"
-        ) {
-          continue;
-        }
-        const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
-        return new OpenPosition(context, perpAddress, posId, undefined, true, txHash);
-      } catch (_e) {}
-    }
-    throw new Error(`MakerOpened event not found in transaction receipt. Hash: ${txHash}`);
-  }, "openMakerPosition");
+      for (const log of receipt.logs) {
+        try {
+          if (
+            log.address.toLowerCase() !== perpAddress.toLowerCase() ||
+            log.topics[0] !== MAKER_OPENED_TOPIC ||
+            log.data === "0x"
+          ) {
+            continue;
+          }
+          const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
+          return new OpenPosition(context, perpAddress, posId, undefined, true, txHash);
+        } catch (_e) {}
+      }
+      throw new Error(`MakerOpened event not found in transaction receipt. Hash: ${txHash}`);
+    },
+    "openMakerPosition",
+    context.hooks
+  );
 }
 
 export async function estimateTakerPosition(
@@ -395,24 +407,24 @@ export async function adjustTaker(
   perpAddress: PerpAddress,
   params: { posId: bigint; marginDelta: bigint; perpDelta: bigint; amt1Limit: bigint }
 ): Promise<{ txHash: Hex }> {
-  return withErrorHandling(async () => {
-    if (params.marginDelta > 0n)
-      await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
+  return withErrorHandling(
+    async () => {
+      if (params.marginDelta > 0n)
+        await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
 
-    const { request } = await context.publicClient.simulateContract({
-      address: perpAddress,
-      abi: PERP_ABI,
-      functionName: "adjustTaker",
-      args: [params],
-      account: context.walletClient.account,
-    });
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-    return { txHash };
-  }, `adjustTaker for position ${params.posId}`);
+      const { request } = await context.publicClient.simulateContract({
+        address: perpAddress,
+        abi: PERP_ABI,
+        functionName: "adjustTaker",
+        args: [params],
+        account: context.walletClient.account,
+      });
+      const { txHash } = await sendAndConfirm(context, "adjustTaker", request, { perpAddress });
+      return { txHash };
+    },
+    `adjustTaker for position ${params.posId}`,
+    context.hooks
+  );
 }
 
 export async function adjustMaker(
@@ -426,24 +438,24 @@ export async function adjustMaker(
     amt1Limit: bigint;
   }
 ): Promise<{ txHash: Hex }> {
-  return withErrorHandling(async () => {
-    if (params.marginDelta > 0n)
-      await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
+  return withErrorHandling(
+    async () => {
+      if (params.marginDelta > 0n)
+        await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
 
-    const { request } = await context.publicClient.simulateContract({
-      address: perpAddress,
-      abi: PERP_ABI,
-      functionName: "adjustMaker",
-      args: [params],
-      account: context.walletClient.account,
-    });
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-    return { txHash };
-  }, `adjustMaker for position ${params.posId}`);
+      const { request } = await context.publicClient.simulateContract({
+        address: perpAddress,
+        abi: PERP_ABI,
+        functionName: "adjustMaker",
+        args: [params],
+        account: context.walletClient.account,
+      });
+      const { txHash } = await sendAndConfirm(context, "adjustMaker", request, { perpAddress });
+      return { txHash };
+    },
+    `adjustMaker for position ${params.posId}`,
+    context.hooks
+  );
 }
 
 export async function adjustMargin(

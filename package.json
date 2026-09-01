@@ -2,7 +2,7 @@
   "name": "@strobelabs/perpcity-sdk",
   "author": "Strobe Labs",
   "description": "TypeScript SDK for interacting with Perp City contracts",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -12,9 +12,38 @@
   "publishConfig": {
     "access": "public"
   },
+  "sideEffects": false,
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./abis": {
+      "types": "./dist/abis.d.ts",
+      "import": "./dist/abis.js",
+      "require": "./dist/abis.cjs"
+    },
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js",
+      "require": "./dist/context.cjs"
+    },
+    "./functions": {
+      "types": "./dist/functions.d.ts",
+      "import": "./dist/functions.js",
+      "require": "./dist/functions.cjs"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.ts",
+      "import": "./dist/utils.js",
+      "require": "./dist/utils.cjs"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist"
   ],

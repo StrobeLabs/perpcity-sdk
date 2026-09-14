@@ -8,7 +8,7 @@ import type {
   PositionRawData,
 } from "../types/entity-data";
 import { scale6Decimals } from "../utils";
-import { withErrorHandling } from "../utils/errors";
+import { TransactionRevertedError, withErrorHandling } from "../utils/errors";
 import { adjustMaker, adjustTaker } from "./perp-actions";
 
 export function getPositionPerpId(positionData: OpenPositionData): PerpAddress {
@@ -64,7 +64,7 @@ export async function closePosition(
     }
 
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
     return { txHash };
   }, `closePosition for position ${positionId}`);
 }

@@ -291,4 +291,86 @@ export const PERP_FACTORY_ABI = [
     name: "StartingPriceTooLow",
     inputs: [],
   },
+  // v0.2.2-upgradeable PerpFactory (perpcity-contracts 198559a).
+  {
+    type: "function",
+    name: "ACCOUNTING_TOKEN_IMPL",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "PERP_GUARD_HOOK",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "PERP_IMPLEMENTATION",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setPerpImplementation",
+    inputs: [
+      {
+        name: "implementation",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "PerpImplementationSet",
+    inputs: [
+      {
+        name: "previousImplementation",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "implementation",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "error",
+    name: "InvalidPerpImplementation",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotProtocolOwner",
+    inputs: [],
+  },
 ] as const;

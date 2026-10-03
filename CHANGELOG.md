@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.2] - 2026-10-03
+
+### Added
+
+- `PERP_ABI` carries both contract eras. Build `58b42b7` (every live market) and
+  `v0.2.2-upgradeable` (perpcity-contracts 198559a, new markets from 2026-10-05) differ in:
+  `liquidateTaker` / `liquidateMaker` take a third `uint128` amount (partial liquidations);
+  `TakerClosed`, `MakerClosed`, `MakerConverted` dropped `liqFee` and `isLiquidation` (new
+  topic0); new events `TakerLiquidated`, `MakerLiquidated`, `SurplusRecovered`. The old
+  entries stay first, so name lookups keep resolving to the deployed shape; select the new
+  overloads by full signature.
+- Perp errors `NoSurplus`, `ZeroAddress`, `UnauthorizedPoolAction` (guard hook) and the
+  OpenZeppelin proxy errors, with `parseContractError` messages. `NoSystemFunds` and `emas`
+  stay for the old era.
+- `PERP_FACTORY_ABI`: `PERP_IMPLEMENTATION`, `PERP_GUARD_HOOK`, `ACCOUNTING_TOKEN_IMPL`,
+  `setPerpImplementation`, `PerpImplementationSet`, `InvalidPerpImplementation`,
+  `NotProtocolOwner`.
+
 ## [0.17.0] - 2026-07-24
 
 ### Added

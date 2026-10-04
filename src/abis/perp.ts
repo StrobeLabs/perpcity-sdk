@@ -618,6 +618,55 @@ export const PERP_ABI = [
     outputs: [],
     stateMutability: "nonpayable",
   },
+  // v0.2.2-upgradeable partial liquidations (perpcity-contracts 198559a). The
+  // 2-arg entries above are build 58b42b7; both selectors stay so either era
+  // decodes. Callers must pick the overload by its full signature.
+  {
+    type: "function",
+    name: "liquidateMaker",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "liquidationFeeRecipient",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "liquidityAmount",
+        type: "uint128",
+        internalType: "uint128",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "liquidateTaker",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "liquidationFeeRecipient",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "perpAmount",
+        type: "uint128",
+        internalType: "uint128",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
   {
     type: "function",
     name: "makerDetails",
@@ -2624,6 +2673,222 @@ export const PERP_ABI = [
     ],
     anonymous: false,
   },
+  // v0.2.2-upgradeable (perpcity-contracts 198559a) event shapes, from
+  // out/PerpLogic.sol + out/Perp.sol at the tag. TakerClosed, MakerClosed and
+  // MakerConverted dropped liqFee / isLiquidation (new topic0); the fee moved to
+  // TakerLiquidated / MakerLiquidated. Old perps keep emitting the shapes above,
+  // so both sets stay. Look events up by full signature, not by name.
+  {
+    type: "event",
+    name: "TakerClosed",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "sr",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct SwapResult",
+        components: [
+          {
+            name: "delta",
+            type: "int256",
+            internalType: "BalanceDelta",
+          },
+          {
+            name: "ammPrice",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "totalFeeAmt",
+            type: "int256",
+            internalType: "int256",
+          },
+          {
+            name: "lpFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "protocolFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "creatorFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "insuranceFeeAmt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "utilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MakerClosed",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "longUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "shortUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "lpFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MakerConverted",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "funding",
+        type: "int256",
+        indexed: false,
+        internalType: "int256",
+      },
+      {
+        name: "longUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "shortUtilFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "lpFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TakerLiquidated",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
+      },
+      {
+        name: "perpAmount",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+      {
+        name: "liqFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "MakerLiquidated",
+    inputs: [
+      {
+        name: "posId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
+      },
+      {
+        name: "liquidityAmount",
+        type: "uint128",
+        indexed: false,
+        internalType: "uint128",
+      },
+      {
+        name: "liqFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SurplusRecovered",
+    inputs: [
+      {
+        name: "recipient",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
   {
     type: "error",
     name: "Abdicated",
@@ -2802,6 +3067,80 @@ export const PERP_ABI = [
   {
     type: "error",
     name: "ZeroLiquidity",
+    inputs: [],
+  },
+  // v0.2.2-upgradeable errors (Perp.sol: skim, UUPS proxy, guard hook).
+  {
+    type: "error",
+    name: "NoSurplus",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ZeroAddress",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "UnauthorizedPoolAction",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ERC1967InvalidImplementation",
+    inputs: [
+      {
+        name: "implementation",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "ERC1967NonPayable",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "UUPSUnauthorizedCallContext",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "UUPSUnsupportedProxiableUUID",
+    inputs: [
+      {
+        name: "slot",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "InvalidInitialization",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotInitializing",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "AddressEmptyCode",
+    inputs: [
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FailedInnerCall",
     inputs: [],
   },
 ] as const;

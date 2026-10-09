@@ -361,11 +361,10 @@ describe("Position Calculation Functions", () => {
 
       const liqPrice = calculateLiquidationPrice(rawData, true);
 
-      // For long: liqPrice = entryPrice - (margin - liqRatio * entryNotional) / size
-      // entryPrice = 50, margin = 100, liqRatio = 0.05, entryNotional = 1 * 50 = 50
-      // liqPrice = 50 - (100 - 0.05 * 50) / 1 = 50 - 97.5 = -47.5, but max(0, -47.5) = 0
+      // long: (entry - margin/size) / (1 - liqRatio)
+      // = (50 - 100/1) / (1 - 0.05) = -50/0.95 < 0 -> clamped to 0
       expect(liqPrice).not.toBeNull();
-      expect(liqPrice).toBeGreaterThanOrEqual(0);
+      expect(liqPrice).toBe(0);
     });
 
     it("should calculate liquidation price for short position", () => {
@@ -381,11 +380,10 @@ describe("Position Calculation Functions", () => {
 
       const liqPrice = calculateLiquidationPrice(rawData, false);
 
-      // For short: liqPrice = entryPrice + (margin - liqRatio * entryNotional) / size
-      // entryPrice = 50, margin = 100, liqRatio = 0.05, entryNotional = 1 * 50 = 50
-      // liqPrice = 50 + (100 - 0.05 * 50) / 1 = 50 + 97.5 = 147.5
+      // short: (entry + margin/size) / (1 + liqRatio)
+      // = (50 + 100/1) / (1 + 0.05) = 150/1.05 = 142.857
       expect(liqPrice).not.toBeNull();
-      expect(liqPrice).toBeGreaterThan(50);
+      expect(liqPrice).toBeCloseTo(142.857, 2);
     });
 
     it("should return null for zero position size", () => {
@@ -433,9 +431,9 @@ describe("Position Calculation Functions", () => {
 
       const liqPrice = calculateLiquidationPrice(rawData, true);
 
-      // For high leverage longs, liquidation price should be close to entry
+      // long: (50 - 10/1) / (1 - 0.05) = 40/0.95 = 42.105
       expect(liqPrice).not.toBeNull();
-      expect(liqPrice).toBeGreaterThanOrEqual(0);
+      expect(liqPrice).toBeCloseTo(42.105, 2);
       expect(liqPrice).toBeLessThan(50);
     });
 
@@ -491,6 +489,23 @@ describe("Position Calculation Functions", () => {
       // Higher liq ratio means closer liquidation price to entry
       expect(liqPrice).not.toBeNull();
       expect(liqPrice).toBeGreaterThanOrEqual(0);
+    });
+
+    it("should return null for long when liq margin ratio is >= 100%", () => {
+      const rawData: PositionRawData = {
+        perpId: "0x123" as any,
+        positionId: 1n,
+        margin: 100,
+        entryPerpDelta: 1000000n, // 1 perp token (1e6)
+        entryUsdDelta: 50000000n, // $50 entry (1e6)
+        marginRatios: { liq: 1000000, backstop: 500000 }, // liq ratio = 1.0 (100%)
+        makerDetails: null,
+      };
+
+      const liqPrice = calculateLiquidationPrice(rawData, true);
+
+      // long denom = 1 - liqRatio = 0 -> no positive liquidation price
+      expect(liqPrice).toBeNull();
     });
   });
 

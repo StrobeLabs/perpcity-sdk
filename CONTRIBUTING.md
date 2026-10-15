@@ -24,6 +24,9 @@ pnpm build
 # Run unit tests
 pnpm test:unit
 
+# Run coverage test
+pnpm test:coverage
+
 # Run integration tests (requires Arbitrum Sepolia RPC)
 pnpm test:integration
 

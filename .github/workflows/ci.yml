@@ -38,6 +38,15 @@ jobs:
       - name: Run unit tests
         run: pnpm test:unit
 
+      - name: Run Coverage
+        run: pnpm test:coverage
+
+      - name: Upload coverage as artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-html
+          path: coverage/
+
       - name: Check build artifacts
         run: |
           ls -la dist/

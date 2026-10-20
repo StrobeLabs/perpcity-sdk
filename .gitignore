@@ -6,6 +6,7 @@ dist/
 # Forge build artifacts (recompiled before integration tests)
 tests/contracts/out/
 tests/contracts/cache/
+coverage/
 
 # Debug scripts
 check-*.ts

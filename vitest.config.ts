@@ -12,5 +12,10 @@ export default defineConfig({
       '**/*.e2e.test.ts',
       '**/integration/**', // Exclude integration tests from unit tests
     ],
+    coverage: {
+        provider: 'v8',
+        include: ['src/**'],
+        exlude: ['src/__tests__/**', 'src/abis/**', 'index.ts'],
+    },
   },
 });

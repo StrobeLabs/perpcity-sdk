@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
+import { arbitrumSepolia } from 'viem/chains';
 import { getRpcUrl, type PerpAddress, PerpCityContext } from '../dist';
 
 function requireEnv(name: string): string {
@@ -26,7 +26,7 @@ export function setup(): { context: PerpCityContext; perpId: PerpAddress } {
   const perpAddress = requireEnv('PERP_ADDRESS') as PerpAddress;
 
   const walletClient = createWalletClient({
-    chain: baseSepolia,
+    chain: arbitrumSepolia,
     transport: http(rpcUrl),
     account: privateKeyToAccount(privateKey),
   });

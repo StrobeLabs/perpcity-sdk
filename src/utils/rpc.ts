@@ -37,9 +37,9 @@ export function getRpcUrl(config: RpcConfig = {}): string {
     throw new Error(
       "RPC_URL is required. Please set the RPC_URL environment variable with your full RPC endpoint URL.\n" +
         "Example URLs (use your own provider and API key):\n" +
-        "  https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY\n" +
-        "  https://base-sepolia.infura.io/v3/YOUR_API_KEY\n" +
-        "  https://sepolia.base.org"
+        "  https://arb-sepolia.g.alchemy.com/v2/YOUR_API_KEY\n" +
+        "  https://arbitrum-sepolia.infura.io/v3/YOUR_API_KEY\n" +
+        "  https://sepolia-rollup.arbitrum.io/rpc"
     );
   }
 

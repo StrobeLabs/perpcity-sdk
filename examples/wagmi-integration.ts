@@ -7,6 +7,7 @@
 
 import { useMemo, useState } from 'react';
 import type { Hex } from 'viem';
+import { arbitrum, arbitrumSepolia } from 'viem/chains';
 import { useChainId, useWalletClient } from 'wagmi';
 import {
   type PerpAddress,
@@ -31,22 +32,24 @@ function getDeployments(chainId: number) {
   // In the v0.1.0 model each market is its own Perp contract. Provide the USDC
   // address here; pass the specific market (perp) address per-trade as perpId.
   const deployments: Record<number, { usdc: Hex }> = {
-    84532: {
+    [arbitrumSepolia.id]: {
       usdc: '0x...' as Hex, // Replace with actual address
     },
-    8453: {
+    [arbitrum.id]: {
       usdc: '0x...' as Hex, // Replace with actual address
     },
   };
-  return deployments[chainId] || deployments[84532];
+  return deployments[chainId] || deployments[arbitrumSepolia.id];
 }
 
 function getRpcUrl(chainId: number): string {
   const rpcUrls: Record<number, string> = {
-    84532: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
-    8453: process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org',
+    [arbitrumSepolia.id]:
+      process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc',
+    [arbitrum.id]:
+      process.env.NEXT_PUBLIC_RPC_URL || 'https://arb1.arbitrum.io/rpc',
   };
-  return rpcUrls[chainId] || rpcUrls[84532];
+  return rpcUrls[chainId] || rpcUrls[arbitrumSepolia.id];
 }
 
 // ============================================================================
@@ -281,21 +284,21 @@ export function TradingInterface({ perpId }: { perpId: PerpAddress }) {
  *
  *    import { WagmiProvider, createConfig, http } from 'wagmi';
  *    import { PrivyProvider } from '@privy-io/react-auth';
- *    import { baseSepolia } from 'wagmi/chains';
+ *    import { arbitrumSepolia } from 'wagmi/chains';
  *
  *    // Option 1: Using Alchemy (recommended for production)
  *    const wagmiConfig = createConfig({
- *      chains: [baseSepolia],
+ *      chains: [arbitrumSepolia],
  *      transports: {
- *        [baseSepolia.id]: http(`https://base-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`),
+ *        [arbitrumSepolia.id]: http(`https://arb-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`),
  *      },
  *    });
  *
  *    // Option 2: Using public RPC (for development)
  *    const wagmiConfig = createConfig({
- *      chains: [baseSepolia],
+ *      chains: [arbitrumSepolia],
  *      transports: {
- *        [baseSepolia.id]: http('https://sepolia.base.org'),
+ *        [arbitrumSepolia.id]: http('https://sepolia-rollup.arbitrum.io/rpc'),
  *      },
  *    });
  *

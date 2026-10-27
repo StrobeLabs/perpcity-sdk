@@ -25,7 +25,7 @@ export interface PerpCityDeployments {
 export interface PerpCityContextConfig {
   /**
    * Wallet client for signing transactions.
-   * MUST have a chain property defined (e.g., created with `chain: baseSepolia`).
+   * MUST have a chain property defined (e.g., created with `chain: arbitrumSepolia`).
    */
   walletClient: WalletClient;
 

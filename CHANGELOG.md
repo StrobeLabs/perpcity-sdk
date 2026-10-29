@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-10-29
+
+Protocol math for the deployed contract builds (58b42b7 and v0.2.2-upgradeable). Every rule
+comes from those builds' source or a chain read of a live perp; contracts `main` is not
+supported, and `PerpBuild` has no value for it.
+
+### Added
+
+- Build detection: `PerpBuild` (`"58b42b7" | "v0.2.2"`), `PRICING_MODULE_BUILDS`,
+  `buildFromProbe`, `detectPerpBuild` (throws `UnsupportedBuildError`), and `PerpConfig.build`
+  (pricing module address first, then the `emas()` probe; same rule as the backend).
+- `BUILD_RULES`: one table of the rules that differ between the builds (minimum margin after
+  fees, liquidation check, EMA source, liquidate arguments, signed rounding, removed-capacity
+  rounding, maker position value).
+- Pricing (`math/pricing`): `advanceEmas` (Solady `expWad`, bit-exact), `fairPriceX96`,
+  `getFairPrice(ctx, perp, { blockNumber?, timestamp? })` (v0.2.2 EMAs from storage slot 11),
+  `readStoredEmas`, `unpackEmasWord`, `ammPriceX96FromSqrt`.
+- Fees and funding (`math/fees`, `math/funding`): `swapFees` (each leg rounded up, protocol
+  fee included), `feeRatesE6`, `liquidationFeeAmount`, `fundingRatePerDay`,
+  `fundingPaymentUsd` (per-build rounding), `takerUtilOwed`.
+- `getPriceCorridor` / `endsOutsideCorridor`: the price-impact module's own
+  `sqrtPriceBounds` at the accrued EMAs, so non-default corridor modules are right.
+- `getUtilization`, `takerHeadroom`, `makerRemovableFraction` (largest removable maker
+  share before Long/ShortUtilizationExceeded, per-build rounding).
+- `makerLimits` (`amt0Limit` / `amt1Limit` for maker adds and removes), `getAmountsForLiquidity`,
+  `rangeCapacity`.
+- Economics (`math/economics`): `takerEconomics` (value, PnL, equity, leverage = value / equity,
+  per-build liquidation price and check), `makerPoolValue`, `maxOpenLeverage`,
+  `meetsMinOpeningMargin`, `isHealthy`.
+- `PerpData.fairMark`, `PerpData.spotMark`, `PerpData.build`.
+- `estimateTakerPosition` / `estimateTakerAdjust` accept a `tickMap` for an exact multi-tick
+  quote and then return `endSqrtPriceX96`.
+- `fixtures/economics_vectors.json` (in the npm package) and `pnpm gen:vectors`: shared
+  input/expected vectors for the backend and bot-api parity tests.
+- `@strobelabs/perpcity-sdk/math` subpath export.
+- CI `chain-parity` job: fixture drift check and `fairPrice` vs the deployed pricing module
+  on one perp of each build at a pinned block.
+
+### Changed
+
+- `estimateTakerPosition` sizes the order at the fair mark (the contract values and checks
+  margin there), not the pool spot.
+- `getFundingRate` reads the EMA AMM price from storage on v0.2.2 perps, so
+  `ratePriceBasis` is `"ema"` on both builds (`"spot"` only while the EMA is zero).
+
+### Deprecated
+
+- `PerpData.mark` (use `spotMark`, same value, or `fairMark`) and `getPerpMark`; removed in 0.20.
+- `calculateLeverage`, `calculateEntryPrice`, `calculateLiquidationPrice`: use
+  `takerEconomics`.
+
 ## [0.18.0] - 2026-10-29
 
 ### Added

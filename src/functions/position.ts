@@ -69,6 +69,7 @@ export async function closePosition(
   }, `closePosition for position ${positionId}`);
 }
 
+/** @deprecated Use `takerEconomics` (math/economics); entry price is display-only. */
 export function calculateEntryPrice(rawData: PositionRawData): number {
   const perpDelta = rawData.entryPerpDelta;
   const usdDelta = rawData.entryUsdDelta;
@@ -86,11 +87,17 @@ export function calculatePositionValue(rawData: PositionRawData, markPrice: numb
   return Math.abs(calculatePositionSize(rawData)) * markPrice;
 }
 
+/** @deprecated Use `takerEconomics(...).leverage` (value / equity at the fair mark). */
 export function calculateLeverage(positionValue: number, effectiveMargin: number): number {
   if (effectiveMargin <= 0) return Infinity;
   return positionValue / effectiveMargin;
 }
 
+/**
+ * @deprecated Use `takerEconomics(...).liquidationPrice`: it follows the
+ * build's liquidation check (58b42b7 nets the close and liquidation fees) on
+ * the effective margin. This helper has no fee term.
+ */
 export function calculateLiquidationPrice(
   rawData: PositionRawData,
   isLong: boolean,

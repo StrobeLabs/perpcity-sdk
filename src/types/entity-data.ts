@@ -1,5 +1,6 @@
 import type { Address, Hex } from "viem";
 import type { PerpAddress } from "../types";
+import type { PerpBuild } from "../utils/build";
 
 export type Bounds = {
   minMargin: number;
@@ -71,7 +72,16 @@ export type CreatePerpParams = {
 export type PerpData = {
   id: PerpAddress;
   tickSpacing: number;
+  /**
+   * The contract mark: the pricing module's fair price with the EMAs accrued
+   * to now. Value, PnL and margin checks use this price.
+   */
+  fairMark: number;
+  /** Pool spot price, `poolState().ammPrice`. */
+  spotMark: number;
+  /** @deprecated Use `spotMark` (same value) or `fairMark`. Removed in 0.20. */
   mark: number;
+  build: PerpBuild;
   /** Current pool sqrt price (X96), from `poolState`. Drives swap simulation. */
   sqrtPriceX96: bigint;
   /** Current active liquidity, from `poolState`. Drives swap simulation. */
@@ -143,6 +153,8 @@ export type EstimateTakerPositionResult = {
    * underestimate. The UI should warn on this.
    */
   liquidityLimited: boolean;
+  /** Pool sqrt price after the swap; set when a tick map was given. */
+  endSqrtPriceX96?: bigint;
 };
 
 export type EstimateTakerAdjustResult = {
@@ -160,6 +172,8 @@ export type EstimateTakerAdjustResult = {
   exceedsLiquidity: boolean;
   /** See {@link EstimateTakerPositionResult.liquidityLimited}. */
   liquidityLimited: boolean;
+  /** Pool sqrt price after the swap; set when a tick map was given. */
+  endSqrtPriceX96?: bigint;
 };
 
 export type CacheConfig = {
@@ -186,4 +200,5 @@ export type PerpConfig = {
   protocolFee: number;
   emaWindow: number;
   poolId: Hex;
+  build: PerpBuild;
 };

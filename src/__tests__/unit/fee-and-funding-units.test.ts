@@ -1,6 +1,5 @@
-import { ContractFunctionRevertedError, HttpRequestError } from "viem";
+import { toHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { PERP_ABI } from "../../abis/perp";
 import type { PerpCityContext } from "../../context";
 import { fundingRateFromRaw, getFundingRate } from "../../functions/perp";
 import type { Fees } from "../../types/entity-data";
@@ -49,36 +48,37 @@ describe("fundingRateFromRaw", () => {
 });
 
 describe("getFundingRate", () => {
-  function contextWith(emas: readonly [bigint, bigint] | Error) {
+  function contextWith(build: "58b42b7" | "v0.2.2", emas: readonly [bigint, bigint]) {
     const readContract = vi.fn(async ({ functionName }: { functionName: string }) => {
-      if (functionName === "rates") return [5n * 10n ** 16n, 0n, 0n] as const;
+      if (functionName === "rates") return [5n * 10n ** 16n, 0n, 0n, 0] as const;
       if (functionName === "poolState") return [0, 0n, 20n * Q96, 0n] as const;
-      if (functionName === "emas") {
-        if (emas instanceof Error) throw emas;
-        return emas;
-      }
+      if (functionName === "emas" && build === "58b42b7") return emas;
       throw new Error(`unexpected ${functionName}`);
     });
-    return { publicClient: { readContract } } as unknown as PerpCityContext;
+    const getStorageAt = vi.fn(async () => toHex((emas[1] << 128n) | emas[0], { size: 32 }));
+    return {
+      publicClient: { readContract, getStorageAt },
+      getPerpConfig: async () => ({ build }),
+    } as unknown as PerpCityContext;
   }
 
-  it("uses the EMA AMM price on perps with an emas() view (58b42b7)", async () => {
-    const rate = await getFundingRate(contextWith([25n * Q96, 24n * Q96]), PERP);
+  it("uses the EMA AMM price from emas() on 58b42b7", async () => {
+    const rate = await getFundingRate(contextWith("58b42b7", [25n * Q96, 24n * Q96]), PERP);
     expect(rate.fundingPerDayUsd).toBeCloseTo(0.05, 12);
     expect(rate.ratePerDay).toBeCloseTo(0.002, 12);
     expect(rate.ratePriceBasis).toBe("ema");
     expect(rate.fundingPerDayRaw).toBe(5n * 10n ** 16n);
   });
 
-  it("falls back to the spot price when emas() reverts (v0.2.2)", async () => {
-    const reverted = new ContractFunctionRevertedError({ abi: PERP_ABI, functionName: "emas" });
-    const rate = await getFundingRate(contextWith(reverted), PERP);
-    expect(rate.ratePerDay).toBeCloseTo(0.0025, 12);
-    expect(rate.ratePriceBasis).toBe("spot");
+  it("reads the EMA AMM price from storage on v0.2.2", async () => {
+    const rate = await getFundingRate(contextWith("v0.2.2", [25n * Q96, 24n * Q96]), PERP);
+    expect(rate.ratePerDay).toBeCloseTo(0.002, 12);
+    expect(rate.ratePriceBasis).toBe("ema");
   });
 
-  it("does not hide an RPC failure of emas() behind the spot fallback", async () => {
-    const rpcDown = new HttpRequestError({ url: "https://rpc.example", status: 429 });
-    await expect(getFundingRate(contextWith(rpcDown), PERP)).rejects.toThrow();
+  it("falls back to the spot price while the EMA is zero", async () => {
+    const rate = await getFundingRate(contextWith("v0.2.2", [0n, 0n]), PERP);
+    expect(rate.ratePerDay).toBeCloseTo(0.0025, 12);
+    expect(rate.ratePriceBasis).toBe("spot");
   });
 });

@@ -2,7 +2,7 @@
   "name": "@strobelabs/perpcity-sdk",
   "author": "Strobe Labs",
   "description": "TypeScript SDK for interacting with Perp City contracts",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -37,6 +37,11 @@
       "import": "./dist/functions.js",
       "require": "./dist/functions.cjs"
     },
+    "./math": {
+      "types": "./dist/math.d.ts",
+      "import": "./dist/math.js",
+      "require": "./dist/math.cjs"
+    },
     "./utils": {
       "types": "./dist/utils.d.ts",
       "import": "./dist/utils.js",
@@ -45,19 +50,22 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "fixtures"
   ],
   "scripts": {
     "build": "tsup",
     "test": "vitest",
     "test:unit": "vitest run",
     "test:integration": "vitest run --config vitest.e2e.config.ts --no-file-parallelism --sequence.concurrent=false",
+    "test:chain": "vitest run --config vitest.e2e.config.ts src/__tests__/integration/fairPrice.test.ts",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:all": "pnpm run test:unit && pnpm run test:integration",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
+    "gen:vectors": "tsx scripts/gen-economics-vectors.ts",
     "ci": "pnpm run build && pnpm run test:unit && pnpm exec tsc --noEmit && pnpm run lint",
     "example-create-perp": "tsx -r dotenv/config examples/create-perp.ts",
     "example-maker": "tsx -r dotenv/config examples/maker.ts",

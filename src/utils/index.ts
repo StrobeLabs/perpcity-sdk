@@ -1,4 +1,5 @@
 export * from "./approve";
+export * from "./build";
 export * from "./constants";
 export * from "./conversions";
 export * from "./errors";

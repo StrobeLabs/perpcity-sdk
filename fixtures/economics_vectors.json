@@ -1,0 +1,1206 @@
+{
+  "schema": 1,
+  "sdkVersion": "0.19.0",
+  "builds": [
+    "58b42b7",
+    "v0.2.2"
+  ],
+  "fairPrice": [
+    {
+      "name": "hormuz-live-accrue",
+      "build": "58b42b7",
+      "input": {
+        "ammX96": "3333452930552967749837079299470",
+        "indexX96": "3248354663084837841335301963776",
+        "emaAmmX96": "3321528208423946384037633669774",
+        "emaIndexX96": "3097683169375594803637957648468"
+      },
+      "expected": {
+        "fairX96": "3402826316343078585786028642276"
+      }
+    },
+    {
+      "name": "clamp-index-leg-to-zero",
+      "build": "58b42b7",
+      "input": {
+        "ammX96": "1001",
+        "indexX96": "1",
+        "emaAmmX96": "1",
+        "emaIndexX96": "1000000"
+      },
+      "expected": {
+        "fairX96": "500"
+      }
+    },
+    {
+      "name": "floor-odd-sum",
+      "build": "58b42b7",
+      "input": {
+        "ammX96": "7",
+        "indexX96": "3",
+        "emaAmmX96": "4",
+        "emaIndexX96": "2"
+      },
+      "expected": {
+        "fairX96": "6"
+      }
+    },
+    {
+      "name": "hormuz-live-accrue",
+      "build": "v0.2.2",
+      "input": {
+        "ammX96": "3333452930552967749837079299470",
+        "indexX96": "3248354663084837841335301963776",
+        "emaAmmX96": "3321528208423946384037633669774",
+        "emaIndexX96": "3097683169375594803637957648468"
+      },
+      "expected": {
+        "fairX96": "3402826316343078585786028642276"
+      }
+    },
+    {
+      "name": "clamp-index-leg-to-zero",
+      "build": "v0.2.2",
+      "input": {
+        "ammX96": "1001",
+        "indexX96": "1",
+        "emaAmmX96": "1",
+        "emaIndexX96": "1000000"
+      },
+      "expected": {
+        "fairX96": "500"
+      }
+    },
+    {
+      "name": "floor-odd-sum",
+      "build": "v0.2.2",
+      "input": {
+        "ammX96": "7",
+        "indexX96": "3",
+        "emaAmmX96": "4",
+        "emaIndexX96": "2"
+      },
+      "expected": {
+        "fairX96": "6"
+      }
+    }
+  ],
+  "emaAdvance": [
+    {
+      "name": "hormuz-300s",
+      "build": "58b42b7",
+      "input": {
+        "emaAmmX96": "3320491901781519017281026778664",
+        "emaIndexX96": "3084589206424849219740478559607",
+        "ammX96": "3333452930552967749837079299470",
+        "indexX96": "3248354663084837841335301963776",
+        "dtSeconds": "300",
+        "emaWindow": "3600"
+      },
+      "expected": {
+        "emaAmmX96": "3321528208423946384037633669774",
+        "emaIndexX96": "3097683169375594803637957648468"
+      }
+    },
+    {
+      "name": "one-day-gap",
+      "build": "58b42b7",
+      "input": {
+        "emaAmmX96": "792281625142643375935439503360",
+        "emaIndexX96": "950737950171172051122527404032",
+        "ammX96": "871509787656907713528983453696",
+        "indexX96": "713053462628379038341895553024",
+        "dtSeconds": "86400",
+        "emaWindow": "3600"
+      },
+      "expected": {
+        "emaAmmX96": "871509787653916743832191393266",
+        "emaIndexX96": "713053462637351947432271734313"
+      }
+    },
+    {
+      "name": "no-time-passed",
+      "build": "58b42b7",
+      "input": {
+        "emaAmmX96": "792281625142643375935439503360",
+        "emaIndexX96": "950737950171172051122527404032",
+        "ammX96": "871509787656907713528983453696",
+        "indexX96": "713053462628379038341895553024",
+        "dtSeconds": "0",
+        "emaWindow": "3600"
+      },
+      "expected": {
+        "emaAmmX96": "792281625142643375935439503360",
+        "emaIndexX96": "950737950171172051122527404032"
+      }
+    },
+    {
+      "name": "hormuz-300s",
+      "build": "v0.2.2",
+      "input": {
+        "emaAmmX96": "3320491901781519017281026778664",
+        "emaIndexX96": "3084589206424849219740478559607",
+        "ammX96": "3333452930552967749837079299470",
+        "indexX96": "3248354663084837841335301963776",
+        "dtSeconds": "300",
+        "emaWindow": "3600"
+      },
+      "expected": {
+        "emaAmmX96": "3321528208423946384037633669774",
+        "emaIndexX96": "3097683169375594803637957648468"
+      }
+    },
+    {
+      "name": "one-day-gap",
+      "build": "v0.2.2",
+      "input": {
+        "emaAmmX96": "792281625142643375935439503360",
+        "emaIndexX96": "950737950171172051122527404032",
+        "ammX96": "871509787656907713528983453696",
+        "indexX96": "713053462628379038341895553024",
+        "dtSeconds": "86400",
+        "emaWindow": "3600"
+      },
+      "expected": {
+        "emaAmmX96": "871509787653916743832191393266",
+        "emaIndexX96": "713053462637351947432271734313"
+      }
+    },
+    {
+      "name": "no-time-passed",
+      "build": "v0.2.2",
+      "input": {
+        "emaAmmX96": "792281625142643375935439503360",
+        "emaIndexX96": "950737950171172051122527404032",
+        "ammX96": "871509787656907713528983453696",
+        "indexX96": "713053462628379038341895553024",
+        "dtSeconds": "0",
+        "emaWindow": "3600"
+      },
+      "expected": {
+        "emaAmmX96": "792281625142643375935439503360",
+        "emaIndexX96": "950737950171172051122527404032"
+      }
+    }
+  ],
+  "swapFees": [
+    {
+      "name": "live-rates-round-up",
+      "build": "58b42b7",
+      "input": {
+        "volume": "1000001",
+        "rates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        }
+      },
+      "expected": {
+        "lp": "10001",
+        "protocol": "0",
+        "creator": "101",
+        "insurance": "1001",
+        "total": "11103"
+      }
+    },
+    {
+      "name": "with-protocol-fee",
+      "build": "58b42b7",
+      "input": {
+        "volume": "123456789",
+        "rates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "500"
+        }
+      },
+      "expected": {
+        "lp": "1234568",
+        "protocol": "61729",
+        "creator": "12346",
+        "insurance": "123457",
+        "total": "1432100"
+      }
+    },
+    {
+      "name": "live-rates-round-up",
+      "build": "v0.2.2",
+      "input": {
+        "volume": "1000001",
+        "rates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        }
+      },
+      "expected": {
+        "lp": "10001",
+        "protocol": "0",
+        "creator": "101",
+        "insurance": "1001",
+        "total": "11103"
+      }
+    },
+    {
+      "name": "with-protocol-fee",
+      "build": "v0.2.2",
+      "input": {
+        "volume": "123456789",
+        "rates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "500"
+        }
+      },
+      "expected": {
+        "lp": "1234568",
+        "protocol": "61729",
+        "creator": "12346",
+        "insurance": "123457",
+        "total": "1432100"
+      }
+    }
+  ],
+  "fundingRate": [
+    {
+      "name": "positive",
+      "build": "58b42b7",
+      "input": {
+        "fundingPerDayWad": "50000000000000000",
+        "emaAmmX96": "1980704062856608439838598758400"
+      },
+      "expected": {
+        "ratePerDay": 0.002
+      }
+    },
+    {
+      "name": "negative",
+      "build": "58b42b7",
+      "input": {
+        "fundingPerDayWad": "-10000000000000000",
+        "emaAmmX96": "792281625142643375935439503360"
+      },
+      "expected": {
+        "ratePerDay": -0.001
+      }
+    },
+    {
+      "name": "positive",
+      "build": "v0.2.2",
+      "input": {
+        "fundingPerDayWad": "50000000000000000",
+        "emaAmmX96": "1980704062856608439838598758400"
+      },
+      "expected": {
+        "ratePerDay": 0.002
+      }
+    },
+    {
+      "name": "negative",
+      "build": "v0.2.2",
+      "input": {
+        "fundingPerDayWad": "-10000000000000000",
+        "emaAmmX96": "792281625142643375935439503360"
+      },
+      "expected": {
+        "ratePerDay": -0.001
+      }
+    }
+  ],
+  "fundingPayment": [
+    {
+      "name": "long-owes",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "3000000",
+        "cumlNowX96": "396140812571321687967719751687",
+        "cumlLastX96": "79228162514264337593543950336"
+      },
+      "expected": {
+        "owed": "12000001"
+      }
+    },
+    {
+      "name": "short-negative-remainder",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "-3",
+        "cumlNowX96": "79228162514264337593543950337",
+        "cumlLastX96": "0"
+      },
+      "expected": {
+        "owed": "-2"
+      }
+    },
+    {
+      "name": "long-owes",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "3000000",
+        "cumlNowX96": "396140812571321687967719751687",
+        "cumlLastX96": "79228162514264337593543950336"
+      },
+      "expected": {
+        "owed": "12000001"
+      }
+    },
+    {
+      "name": "short-negative-remainder",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "-3",
+        "cumlNowX96": "79228162514264337593543950337",
+        "cumlLastX96": "0"
+      },
+      "expected": {
+        "owed": "-3"
+      }
+    }
+  ],
+  "takerEconomics": [
+    {
+      "name": "long-at-entry",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "792281625142643375935439503360",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "100000000",
+        "pnl": "0",
+        "equity": "10000000",
+        "leverage": 10,
+        "liquidationPrice": 9.688879319625364,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "long-in-profit",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "891316828285473797927369441280",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "112500000",
+        "pnl": "12500000",
+        "equity": "22500000",
+        "leverage": 5,
+        "liquidationPrice": 9.688879319625364,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "short-near-liquidation",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "-10000000",
+        "usdDelta": "100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "827934298274062327852534281011",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "104499999",
+        "pnl": "-4499999",
+        "equity": "5500001",
+        "leverage": 18.999996363637024,
+        "liquidationPrice": 10.269816076930258,
+        "isLiquidatable": true
+      }
+    },
+    {
+      "name": "after-partial-reduce",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "4000000",
+        "usdDelta": "-38000000",
+        "margin": "9500000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "800204441394069809694793898393",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "2000000"
+      },
+      "expected": {
+        "value": "40399999",
+        "pnl": "399999",
+        "equity": "11899999",
+        "leverage": 3.3949581844502674,
+        "liquidationPrice": 7.670362794703412,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "with-funding-and-util-owed",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "1234567",
+        "utilOwed": "89012",
+        "fairX96": "792281625142643375935439503360",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "100000000",
+        "pnl": "0",
+        "equity": "8676421",
+        "leverage": 11.525489599916831,
+        "liquidationPrice": 9.831368177414145,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "underwater",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "705130646376952604582541157990",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "88999999",
+        "pnl": "-11000001",
+        "equity": "-1000001",
+        "leverage": null,
+        "liquidationPrice": 9.688879319625364,
+        "isLiquidatable": true
+      }
+    },
+    {
+      "name": "liq-fee-boundary-9_6",
+      "build": "58b42b7",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "760590360136937640898021923225",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "95999999",
+        "pnl": "-4000001",
+        "equity": "5999999",
+        "leverage": 16.000002500000416,
+        "liquidationPrice": 9.688879319625364,
+        "isLiquidatable": true
+      }
+    },
+    {
+      "name": "long-at-entry",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "792281625142643375935439503360",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "100000000",
+        "pnl": "0",
+        "equity": "10000000",
+        "leverage": 10,
+        "liquidationPrice": 9.473684210526315,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "long-in-profit",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "891316828285473797927369441280",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "112500000",
+        "pnl": "12500000",
+        "equity": "22500000",
+        "leverage": 5,
+        "liquidationPrice": 9.473684210526315,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "short-near-liquidation",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "-10000000",
+        "usdDelta": "100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "827934298274062327852534281011",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "104499999",
+        "pnl": "-4499999",
+        "equity": "5500001",
+        "leverage": 18.999996363637024,
+        "liquidationPrice": 10.476190476190476,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "after-partial-reduce",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "4000000",
+        "usdDelta": "-38000000",
+        "margin": "9500000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "800204441394069809694793898393",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "2000000"
+      },
+      "expected": {
+        "value": "40399999",
+        "pnl": "399999",
+        "equity": "11899999",
+        "leverage": 3.3949581844502674,
+        "liquidationPrice": 7.5,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "with-funding-and-util-owed",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "1234567",
+        "utilOwed": "89012",
+        "fairX96": "792281625142643375935439503360",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "100000000",
+        "pnl": "0",
+        "equity": "8676421",
+        "leverage": 11.525489599916831,
+        "liquidationPrice": 9.613008315789473,
+        "isLiquidatable": false
+      }
+    },
+    {
+      "name": "underwater",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "705130646376952604582541157990",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "88999999",
+        "pnl": "-11000001",
+        "equity": "-1000001",
+        "leverage": null,
+        "liquidationPrice": 9.473684210526315,
+        "isLiquidatable": true
+      }
+    },
+    {
+      "name": "liq-fee-boundary-9_6",
+      "build": "v0.2.2",
+      "input": {
+        "perpDelta": "10000000",
+        "usdDelta": "-100000000",
+        "margin": "10000000",
+        "fundingOwed": "0",
+        "utilOwed": "0",
+        "fairX96": "760590360136937640898021923225",
+        "liqMarginRatioE6": 50000,
+        "liqFeeE6": 10000,
+        "closeFeeRates": {
+          "lpFee": "10000",
+          "creatorFee": "100",
+          "insuranceFee": "1000",
+          "protocolFee": "0"
+        },
+        "realizedPnl": "0"
+      },
+      "expected": {
+        "value": "95999999",
+        "pnl": "-4000001",
+        "equity": "5999999",
+        "leverage": 16.000002500000416,
+        "liquidationPrice": 9.473684210526315,
+        "isLiquidatable": false
+      }
+    }
+  ],
+  "makerPoolValue": [
+    {
+      "name": "symmetric-at-center",
+      "build": "58b42b7",
+      "input": {
+        "tickLower": -6960,
+        "tickUpper": 6960,
+        "liquidity": "1000000000000000",
+        "sqrtPriceX96": "79228162514264337593543950336",
+        "fairX96": "79228162514264337593543950336"
+      },
+      "expected": {
+        "value": "587777676754614"
+      }
+    },
+    {
+      "name": "price-below-range",
+      "build": "58b42b7",
+      "input": {
+        "tickLower": 23000,
+        "tickUpper": 24000,
+        "liquidity": "500000000000000",
+        "sqrtPriceX96": "238001464397188256360813079634",
+        "fairX96": "714956591919037462983662840639"
+      },
+      "expected": {
+        "value": "69677589246432"
+      }
+    },
+    {
+      "name": "price-above-range",
+      "build": "58b42b7",
+      "input": {
+        "tickLower": 23000,
+        "tickUpper": 24000,
+        "liquidity": "500000000000000",
+        "sqrtPriceX96": "276516177415270759983386722852",
+        "fairX96": "965075977353221155028623082920"
+      },
+      "expected": {
+        "value": "80953202026449"
+      }
+    },
+    {
+      "name": "price-in-range-fair-above-spot",
+      "build": "58b42b7",
+      "input": {
+        "tickLower": 23000,
+        "tickUpper": 24000,
+        "liquidity": "500000000000000",
+        "sqrtPriceX96": "256537044409471505074137317799",
+        "fairX96": "843114643352177839801155670430"
+      },
+      "expected": {
+        "value": "80540950713347"
+      }
+    },
+    {
+      "name": "symmetric-at-center",
+      "build": "v0.2.2",
+      "input": {
+        "tickLower": -6960,
+        "tickUpper": 6960,
+        "liquidity": "1000000000000000",
+        "sqrtPriceX96": "79228162514264337593543950336",
+        "fairX96": "79228162514264337593543950336"
+      },
+      "expected": {
+        "value": "587777676754614"
+      }
+    },
+    {
+      "name": "price-below-range",
+      "build": "v0.2.2",
+      "input": {
+        "tickLower": 23000,
+        "tickUpper": 24000,
+        "liquidity": "500000000000000",
+        "sqrtPriceX96": "238001464397188256360813079634",
+        "fairX96": "714956591919037462983662840639"
+      },
+      "expected": {
+        "value": "69677589246432"
+      }
+    },
+    {
+      "name": "price-above-range",
+      "build": "v0.2.2",
+      "input": {
+        "tickLower": 23000,
+        "tickUpper": 24000,
+        "liquidity": "500000000000000",
+        "sqrtPriceX96": "276516177415270759983386722852",
+        "fairX96": "965075977353221155028623082920"
+      },
+      "expected": {
+        "value": "80953202026449"
+      }
+    },
+    {
+      "name": "price-in-range-fair-above-spot",
+      "build": "v0.2.2",
+      "input": {
+        "tickLower": 23000,
+        "tickUpper": 24000,
+        "liquidity": "500000000000000",
+        "sqrtPriceX96": "256537044409471505074137317799",
+        "fairX96": "843114643352177839801155670430"
+      },
+      "expected": {
+        "value": "80540950713347"
+      }
+    }
+  ],
+  "makerLimits": [
+    {
+      "name": "add-in-range-1pct",
+      "build": "58b42b7",
+      "input": {
+        "liquidityDelta": "500000000000000",
+        "slippage": 0.01,
+        "sqrtPriceX96": "256537044409471505074137317799",
+        "tickLower": 23000,
+        "tickUpper": 24000
+      },
+      "expected": {
+        "amt0Limit": "3850543808223",
+        "amt1Limit": "40370402094536"
+      }
+    },
+    {
+      "name": "remove-in-range-1pct",
+      "build": "58b42b7",
+      "input": {
+        "liquidityDelta": "-500000000000000",
+        "slippage": 0.01,
+        "sqrtPriceX96": "256537044409471505074137317799",
+        "tickLower": 23000,
+        "tickUpper": 24000
+      },
+      "expected": {
+        "amt0Limit": "3774295415979",
+        "amt1Limit": "39570988191671"
+      }
+    },
+    {
+      "name": "remove-no-slippage",
+      "build": "58b42b7",
+      "input": {
+        "liquidityDelta": "-500000000000000",
+        "slippage": 0,
+        "sqrtPriceX96": "256537044409471505074137317799",
+        "tickLower": 23000,
+        "tickUpper": 24000
+      },
+      "expected": {
+        "amt0Limit": "3812419612100",
+        "amt1Limit": "39970695143103"
+      }
+    },
+    {
+      "name": "add-in-range-1pct",
+      "build": "v0.2.2",
+      "input": {
+        "liquidityDelta": "500000000000000",
+        "slippage": 0.01,
+        "sqrtPriceX96": "256537044409471505074137317799",
+        "tickLower": 23000,
+        "tickUpper": 24000
+      },
+      "expected": {
+        "amt0Limit": "3850543808223",
+        "amt1Limit": "40370402094536"
+      }
+    },
+    {
+      "name": "remove-in-range-1pct",
+      "build": "v0.2.2",
+      "input": {
+        "liquidityDelta": "-500000000000000",
+        "slippage": 0.01,
+        "sqrtPriceX96": "256537044409471505074137317799",
+        "tickLower": 23000,
+        "tickUpper": 24000
+      },
+      "expected": {
+        "amt0Limit": "3774295415979",
+        "amt1Limit": "39570988191671"
+      }
+    },
+    {
+      "name": "remove-no-slippage",
+      "build": "v0.2.2",
+      "input": {
+        "liquidityDelta": "-500000000000000",
+        "slippage": 0,
+        "sqrtPriceX96": "256537044409471505074137317799",
+        "tickLower": 23000,
+        "tickUpper": 24000
+      },
+      "expected": {
+        "amt0Limit": "3812419612100",
+        "amt1Limit": "39970695143103"
+      }
+    }
+  ],
+  "maxOpenLeverage": [
+    {
+      "name": "live-fees-no-impact",
+      "build": "58b42b7",
+      "input": {
+        "initRatio": 0.1,
+        "feeRate": 0.0111,
+        "priceImpact": 0
+      },
+      "expected": {
+        "maxLeverage": 9
+      }
+    },
+    {
+      "name": "live-fees-1pct-impact",
+      "build": "58b42b7",
+      "input": {
+        "initRatio": 0.1,
+        "feeRate": 0.0111,
+        "priceImpact": 0.01
+      },
+      "expected": {
+        "maxLeverage": 8.2
+      }
+    },
+    {
+      "name": "favourable-impact-ignored",
+      "build": "58b42b7",
+      "input": {
+        "initRatio": 0.1,
+        "feeRate": 0,
+        "priceImpact": -0.05
+      },
+      "expected": {
+        "maxLeverage": 10
+      }
+    },
+    {
+      "name": "live-fees-no-impact",
+      "build": "v0.2.2",
+      "input": {
+        "initRatio": 0.1,
+        "feeRate": 0.0111,
+        "priceImpact": 0
+      },
+      "expected": {
+        "maxLeverage": 9
+      }
+    },
+    {
+      "name": "live-fees-1pct-impact",
+      "build": "v0.2.2",
+      "input": {
+        "initRatio": 0.1,
+        "feeRate": 0.0111,
+        "priceImpact": 0.01
+      },
+      "expected": {
+        "maxLeverage": 8.2
+      }
+    },
+    {
+      "name": "favourable-impact-ignored",
+      "build": "v0.2.2",
+      "input": {
+        "initRatio": 0.1,
+        "feeRate": 0,
+        "priceImpact": -0.05
+      },
+      "expected": {
+        "maxLeverage": 10
+      }
+    }
+  ],
+  "makerRemovableFraction": [
+    {
+      "name": "fully-removable",
+      "build": "58b42b7",
+      "input": {
+        "utilization": {
+          "oiLong": "6000000",
+          "oiShort": "1000000",
+          "capLong": "10000000",
+          "capShort": "4000000"
+        },
+        "positionCapLong": "1",
+        "positionCapShort": "1"
+      },
+      "expected": {
+        "fraction": 1,
+        "maxRemovablePct": 100,
+        "limitedBy": null
+      }
+    },
+    {
+      "name": "half-removable-long",
+      "build": "58b42b7",
+      "input": {
+        "utilization": {
+          "oiLong": "6000000",
+          "oiShort": "1000000",
+          "capLong": "10000000",
+          "capShort": "4000000"
+        },
+        "positionCapLong": "8000000",
+        "positionCapShort": "0"
+      },
+      "expected": {
+        "fraction": 0.5,
+        "maxRemovablePct": 50,
+        "limitedBy": "long"
+      }
+    },
+    {
+      "name": "locked-by-open-trades",
+      "build": "58b42b7",
+      "input": {
+        "utilization": {
+          "oiLong": "4976000",
+          "oiShort": "0",
+          "capLong": "4978000",
+          "capShort": "1000000"
+        },
+        "positionCapLong": "4500000",
+        "positionCapShort": "0"
+      },
+      "expected": {
+        "fraction": 0.00044444444444444447,
+        "maxRemovablePct": 0,
+        "limitedBy": "long"
+      }
+    },
+    {
+      "name": "rounding-differs-by-build",
+      "build": "58b42b7",
+      "input": {
+        "utilization": {
+          "oiLong": "0",
+          "oiShort": "8",
+          "capLong": "10",
+          "capShort": "10"
+        },
+        "positionCapLong": "0",
+        "positionCapShort": "3"
+      },
+      "expected": {
+        "fraction": 0.6666666666666666,
+        "maxRemovablePct": 99,
+        "limitedBy": "short"
+      }
+    },
+    {
+      "name": "fully-removable",
+      "build": "v0.2.2",
+      "input": {
+        "utilization": {
+          "oiLong": "6000000",
+          "oiShort": "1000000",
+          "capLong": "10000000",
+          "capShort": "4000000"
+        },
+        "positionCapLong": "1",
+        "positionCapShort": "1"
+      },
+      "expected": {
+        "fraction": 1,
+        "maxRemovablePct": 100,
+        "limitedBy": null
+      }
+    },
+    {
+      "name": "half-removable-long",
+      "build": "v0.2.2",
+      "input": {
+        "utilization": {
+          "oiLong": "6000000",
+          "oiShort": "1000000",
+          "capLong": "10000000",
+          "capShort": "4000000"
+        },
+        "positionCapLong": "8000000",
+        "positionCapShort": "0"
+      },
+      "expected": {
+        "fraction": 0.5,
+        "maxRemovablePct": 50,
+        "limitedBy": "long"
+      }
+    },
+    {
+      "name": "locked-by-open-trades",
+      "build": "v0.2.2",
+      "input": {
+        "utilization": {
+          "oiLong": "4976000",
+          "oiShort": "0",
+          "capLong": "4978000",
+          "capShort": "1000000"
+        },
+        "positionCapLong": "4500000",
+        "positionCapShort": "0"
+      },
+      "expected": {
+        "fraction": 0.00044444444444444447,
+        "maxRemovablePct": 0,
+        "limitedBy": "long"
+      }
+    },
+    {
+      "name": "rounding-differs-by-build",
+      "build": "v0.2.2",
+      "input": {
+        "utilization": {
+          "oiLong": "0",
+          "oiShort": "8",
+          "capLong": "10",
+          "capShort": "10"
+        },
+        "positionCapLong": "0",
+        "positionCapShort": "3"
+      },
+      "expected": {
+        "fraction": 0.6666666666666666,
+        "maxRemovablePct": 66,
+        "limitedBy": "short"
+      }
+    }
+  ]
+}

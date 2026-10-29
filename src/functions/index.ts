@@ -2,6 +2,7 @@
 
 // Calldata builders (raw calls for userOp / batching callers)
 export * from "./calldata";
+export * from "./corridor";
 // OpenPosition class and functions
 export * from "./open-position";
 export * from "./perp";
@@ -14,3 +15,4 @@ export * from "./position";
 export * from "./simulate";
 // User functions
 export * from "./user";
+export * from "./utilization";

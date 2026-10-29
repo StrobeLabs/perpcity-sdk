@@ -13,6 +13,8 @@ export type Fees = {
   insuranceFee: number;
   lpFee: number;
   liquidationFee: number;
+  /** Protocol fee charged on every swap, as a fraction (from the PerpFactory). */
+  protocolFee: number;
 };
 
 export type ClosePositionParams = {

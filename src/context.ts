@@ -216,6 +216,7 @@ export class PerpCityContext {
           insuranceFee: Number(insuranceFee) / 1e6,
           lpFee: Number(lpFee) / 1e6,
           liquidationFee: Number(liquidationFee) / 1e6,
+          protocolFee: cfg.protocolFee,
         },
       };
     }, `fetchPerpContractData for perp ${perpAddress}`);

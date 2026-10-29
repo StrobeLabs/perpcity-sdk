@@ -40,6 +40,7 @@ describe("Perp Functions", () => {
       insuranceFee: 0.002,
       lpFee: 0.003,
       liquidationFee: 0.004,
+      protocolFee: 0,
     },
   };
 
@@ -66,6 +67,7 @@ describe("Perp Functions", () => {
       insuranceFee: 0.002,
       lpFee: 0.003,
       liquidationFee: 0.004,
+      protocolFee: 0,
     });
   });
 

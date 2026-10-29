@@ -16,7 +16,13 @@ const perpData = {
   sqrtPriceX96: 10n * Q96,
   liquidity: 10n ** 18n,
   mark: 100,
-  fees: { creatorFee: 0.001, insuranceFee: 0.0005, lpFee: 0.0015, liquidationFee: 0.01 },
+  fees: {
+    creatorFee: 0.001,
+    insuranceFee: 0.0005,
+    lpFee: 0.0015,
+    liquidationFee: 0.01,
+    protocolFee: 0,
+  },
 };
 
 function makeContext(opts: { allowance?: bigint } = {}): PerpCityContext {

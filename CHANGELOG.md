@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-10-29
+
+### Added
+
+- `simulateCalls(ctx, account, calls, opts?)` - preflight the exact `Call[]` that the
+  `build*Calls` builders return, in order, from the smart account (or EOA) that will send
+  them (`eth_simulateV1`, state carried between calls, validation off so a counterfactual or
+  EIP-7702 sender works). Returns `{ ok: true, gasUsed }`, `{ ok: false, failedIndex, error,
+  rawData }` (decoded `ContractError` with `code` and `errorName`; Uniswap v4 `WrappedError`
+  layers are unwrapped), or `{ ok: null, reason }` on RPC error, HTTP 429, timeout (default
+  4 s) or an RPC without `eth_simulateV1`. Callers should fail open on `ok: null`.
+- Stable machine-readable error codes (#67): `PerpCityError.code` (`PerpCityErrorCode`,
+  `PERPCITY_ERROR_CODES`), `codeForErrorName`, `operation` / `shortMessage` on errors from
+  `withErrorHandling`, raw revert decoding through `EXTENDED_ERROR_DECODE_ABI`, and
+  `contractErrorFromRevertData(data, abi?)`. Every v0.2.2-upgradeable error has a spec and code.
+- `fundingRateFromRaw(fundingPerDayRaw, markPrice)` and the `FundingRate` type.
+- `Fees.protocolFee` (fraction, from the PerpFactory), filled by `getPerpData`.
+
+### Changed
+
+- **Breaking:** `getFundingRate` returns `{ fundingPerDayUsd, ratePerDay, ratePriceBasis,
+  fundingPerDayRaw }`. `fundingPerDayUsd` is USD per 1 perp per day; `ratePerDay` is now a
+  fraction of the EMA mark (spot on perps without an `emas()` view). The old `ratePerDay` was
+  USD per perp per day times 100, labelled as a percent; `ratePerMinute` is removed.
+- **Breaking:** `Fees` requires `protocolFee`. `totalTakerFeeRate` includes it (0 on every
+  live market today).
+
+### Fixed
+
+- `calculateLiquidationPrice` uses the current-notional margin ratio, which fixes the price
+  after a partial reduce (#64).
+- Nested `withErrorHandling` calls no longer prefix the message twice; the innermost
+  operation is kept.
+
 ## [0.17.2] - 2026-10-03
 
 ### Added

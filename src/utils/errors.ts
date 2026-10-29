@@ -1,6 +1,8 @@
 import {
+  type Abi,
   BaseError,
   ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
   decodeErrorResult,
   FeeCapTooLowError,
   type Hex,
@@ -165,6 +167,22 @@ export class TransactionRevertedError extends PerpCityError {
 }
 
 /**
+ * True when a read failed because the contract has no such view (it reverted
+ * or returned no data), not because the RPC failed. Use it to tell a missing
+ * view apart from a transport error before falling back.
+ */
+export function isMissingViewError(error: unknown): boolean {
+  if (!(error instanceof BaseError)) return false;
+  return Boolean(
+    error.walk(
+      (cause) =>
+        cause instanceof ContractFunctionRevertedError ||
+        cause instanceof ContractFunctionZeroDataError
+    )
+  );
+}
+
+/**
  * Parse and format a contract error into a user-friendly message
  */
 export function parseContractError(error: unknown): PerpCityError {
@@ -231,6 +249,35 @@ export function parseContractError(error: unknown): PerpCityError {
   }
 
   return new PerpCityError(String(error));
+}
+
+/**
+ * Build a ContractError from raw revert data (for example an `eth_simulateV1`
+ * call result). Tries `abi` first, then the extended decode-only ABI. Data
+ * that no ABI knows becomes errorName "Unknown" (code UNKNOWN).
+ */
+export function contractErrorFromRevertData(
+  data: Hex,
+  abi: Abi = [],
+  cause?: Error
+): ContractError {
+  let errorName = "Unknown";
+  let args: readonly unknown[] = [];
+  for (const candidate of [abi, EXTENDED_ERROR_DECODE_ABI]) {
+    if (!data || data === "0x") break;
+    try {
+      const decoded = decodeErrorResult({ abi: candidate as Abi, data });
+      errorName = decoded.errorName;
+      args = decoded.args ?? [];
+      break;
+    } catch (_decodeError) {
+      // Try the next ABI.
+    }
+  }
+  const { message, debug } = formatContractError(errorName, args);
+  debug.errorSelector = data && data.length >= 10 ? data.slice(0, 10) : undefined;
+  debug.rawData = data;
+  return new ContractError(message, errorName, args, debug, cause);
 }
 
 /**

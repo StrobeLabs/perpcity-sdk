@@ -44,12 +44,14 @@ export function unpackBalanceDelta(delta: bigint): { amount0: bigint; amount1: b
 export class PerpCityContext {
   public readonly walletClient;
   public readonly publicClient: PublicClient;
+  public readonly rpcUrl: string;
   private readonly _deployments: PerpCityDeployments;
   private readonly configCache: TTLCache<Address, PerpConfig>;
 
   constructor(config: PerpCityContextConfig) {
     this.configCache = new TTLCache({ ttl: 5 * 60 * 1000 });
     this.walletClient = config.walletClient;
+    this.rpcUrl = config.rpcUrl;
 
     if (!config.walletClient.chain?.id) {
       throw new Error(
@@ -216,6 +218,7 @@ export class PerpCityContext {
           insuranceFee: Number(insuranceFee) / 1e6,
           lpFee: Number(lpFee) / 1e6,
           liquidationFee: Number(liquidationFee) / 1e6,
+          protocolFee: cfg.protocolFee,
         },
       };
     }, `fetchPerpContractData for perp ${perpAddress}`);

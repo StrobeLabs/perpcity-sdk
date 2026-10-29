@@ -50,7 +50,8 @@ export async function optimizedView(): Promise<void> {
 
   // On-chain reads that are not part of PerpData.
   const funding = await getFundingRate(context, perpId);
-  console.log('  fundingRate %/day:', funding.ratePerDay);
+  console.log('  funding USD/perp/day:', funding.fundingPerDayUsd);
+  console.log('  funding rate/day (fraction):', funding.ratePerDay);
   console.log('  fundingPerDayRaw:', funding.fundingPerDayRaw.toString());
   console.log('  index:', (await getIndexValue(context, perpId)).toString());
   console.log();

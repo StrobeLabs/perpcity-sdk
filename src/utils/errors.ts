@@ -1,4 +1,5 @@
 import {
+  type Abi,
   BaseError,
   ContractFunctionRevertedError,
   decodeErrorResult,
@@ -231,6 +232,35 @@ export function parseContractError(error: unknown): PerpCityError {
   }
 
   return new PerpCityError(String(error));
+}
+
+/**
+ * Build a ContractError from raw revert data (for example an `eth_simulateV1`
+ * call result). Tries `abi` first, then the extended decode-only ABI. Data
+ * that no ABI knows becomes errorName "Unknown" (code UNKNOWN).
+ */
+export function contractErrorFromRevertData(
+  data: Hex,
+  abi: Abi = [],
+  cause?: Error
+): ContractError {
+  let errorName = "Unknown";
+  let args: readonly unknown[] = [];
+  for (const candidate of [abi, EXTENDED_ERROR_DECODE_ABI]) {
+    if (!data || data === "0x") break;
+    try {
+      const decoded = decodeErrorResult({ abi: candidate as Abi, data });
+      errorName = decoded.errorName;
+      args = decoded.args ?? [];
+      break;
+    } catch (_decodeError) {
+      // Try the next ABI.
+    }
+  }
+  const { message, debug } = formatContractError(errorName, args);
+  debug.errorSelector = data && data.length >= 10 ? data.slice(0, 10) : undefined;
+  debug.rawData = data;
+  return new ContractError(message, errorName, args, debug, cause);
 }
 
 /**

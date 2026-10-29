@@ -10,5 +10,7 @@ export * from "./perp-actions";
 
 // Position functions
 export * from "./position";
+// Preflight simulation of exact call batches
+export * from "./simulate";
 // User functions
 export * from "./user";

@@ -1,4 +1,13 @@
-import { type Abi, type Address, type BlockTag, decodeErrorResult, type Hex } from "viem";
+import {
+  type Abi,
+  type Address,
+  type BlockTag,
+  createPublicClient,
+  decodeErrorResult,
+  type Hex,
+  http,
+  type PublicClient,
+} from "viem";
 import { simulateCalls as viemSimulateCalls } from "viem/actions";
 import { BEACON_ABI } from "../abis/beacon";
 import { PERP_ABI } from "../abis/perp";
@@ -21,6 +30,19 @@ export type SimulateCallsOptions = {
 };
 
 const DEFAULT_SIMULATION_TIMEOUT_MS = 4_000;
+
+/**
+ * A one-shot client for the simulation: no retries and the same timeout as the
+ * caller, so a slow or rate-limited RPC is not hit again after we give up.
+ * Falls back to the context client when it has no RPC URL (test doubles).
+ */
+function simulationClient(ctx: PerpCityContext, timeoutMs: number): PublicClient {
+  if (!ctx.rpcUrl) return ctx.publicClient;
+  return createPublicClient({
+    chain: ctx.publicClient.chain,
+    transport: http(ctx.rpcUrl, { retryCount: 0, timeout: timeoutMs }),
+  });
+}
 
 /** Uniswap v4 CustomRevert wrapper: hook and callback reverts arrive inside it. */
 const WRAPPED_ERROR_ABI = [
@@ -105,7 +127,7 @@ export async function simulateCalls(
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new SimulationTimeoutError(timeoutMs)), timeoutMs);
     });
-    const simulation = viemSimulateCalls(ctx.publicClient, {
+    const simulation = viemSimulateCalls(simulationClient(ctx, timeoutMs), {
       account,
       calls: calls.map((call) => ({ to: call.to, data: call.data, value: call.value })),
       ...(opts.blockTag ? { blockTag: opts.blockTag } : {}),

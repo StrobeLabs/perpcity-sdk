@@ -2,6 +2,7 @@ import {
   type Abi,
   BaseError,
   ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
   decodeErrorResult,
   FeeCapTooLowError,
   type Hex,
@@ -163,6 +164,22 @@ export class TransactionRevertedError extends PerpCityError {
     super(`Transaction reverted. Hash: ${txHash}`, cause, "TX_REVERTED_ONCHAIN");
     this.name = "TransactionRevertedError";
   }
+}
+
+/**
+ * True when a read failed because the contract has no such view (it reverted
+ * or returned no data), not because the RPC failed. Use it to tell a missing
+ * view apart from a transport error before falling back.
+ */
+export function isMissingViewError(error: unknown): boolean {
+  if (!(error instanceof BaseError)) return false;
+  return Boolean(
+    error.walk(
+      (cause) =>
+        cause instanceof ContractFunctionRevertedError ||
+        cause instanceof ContractFunctionZeroDataError
+    )
+  );
 }
 
 /**

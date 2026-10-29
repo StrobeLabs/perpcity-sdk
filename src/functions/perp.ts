@@ -4,7 +4,7 @@ import type { PerpCityContext } from "../context";
 import type { PerpAddress } from "../types";
 import type { PerpData } from "../types/entity-data";
 import { scaleFromX96 } from "../utils/conversions";
-import { withErrorHandling } from "../utils/errors";
+import { isMissingViewError, withErrorHandling } from "../utils/errors";
 
 // Pure functions that operate on PerpData
 export function getPerpMark(perpData: PerpData): number {
@@ -75,7 +75,10 @@ export async function getFundingRate(
       // 58b42b7 exposes emas(); v0.2.2-upgradeable has no view and reverts.
       context.publicClient
         .readContract({ address: perpAddress, abi: PERP_ABI, functionName: "emas" })
-        .catch(() => null),
+        .catch((error: unknown) => {
+          if (isMissingViewError(error)) return null;
+          throw error;
+        }),
       context.publicClient.readContract({
         address: perpAddress,
         abi: PERP_ABI,

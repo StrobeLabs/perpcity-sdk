@@ -172,4 +172,24 @@ describe("simulateCalls", () => {
     );
     expect(result.ok === null && result.reason).toBe("unsupported");
   });
+
+  it("sends one request with no retry when the RPC answers 429", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("rate limited", { status: 429 }));
+    try {
+      const ctx = {
+        rpcUrl: "https://rpc.example",
+        publicClient: createPublicClient({
+          chain: arbitrum,
+          transport: custom({ request: vi.fn() }),
+        }),
+      } as unknown as PerpCityContext;
+      const result = await simulateCalls(ctx, ACCOUNT, CALLS);
+      expect(result.ok).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

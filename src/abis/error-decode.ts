@@ -1,5 +1,31 @@
 import { keccak256, toBytes } from "viem";
 
+/** Uniswap V4 PoolManager errors (lib/v4-core IPoolManager.sol). */
+export const POOL_MANAGER_ERROR_ABI = [
+  { type: "error", name: "CurrencyNotSettled", inputs: [] },
+  { type: "error", name: "PoolNotInitialized", inputs: [] },
+  { type: "error", name: "AlreadyUnlocked", inputs: [] },
+  { type: "error", name: "ManagerLocked", inputs: [] },
+  { type: "error", name: "TickSpacingTooLarge", inputs: [{ type: "int24", name: "tickSpacing" }] },
+  { type: "error", name: "TickSpacingTooSmall", inputs: [{ type: "int24", name: "tickSpacing" }] },
+  {
+    type: "error",
+    name: "CurrenciesOutOfOrderOrEqual",
+    inputs: [
+      { type: "address", name: "currency0" },
+      { type: "address", name: "currency1" },
+    ],
+  },
+  { type: "error", name: "UnauthorizedDynamicLPFeeUpdate", inputs: [] },
+  { type: "error", name: "SwapAmountCannotBeZero", inputs: [] },
+  { type: "error", name: "NonzeroNativeValue", inputs: [] },
+  { type: "error", name: "MustClearExactPositiveDelta", inputs: [] },
+] as const;
+
+export const POOL_MANAGER_ERROR_NAMES: ReadonlySet<string> = new Set(
+  POOL_MANAGER_ERROR_ABI.map((entry) => entry.name)
+);
+
 /**
  * Decode-only error ABI for reverts the call-site ABIs cannot decode.
  *
@@ -19,25 +45,7 @@ export const EXTENDED_ERROR_DECODE_ABI = [
   { type: "error", name: "TransferFromFailed", inputs: [] },
   { type: "error", name: "TransferFailed", inputs: [] },
   { type: "error", name: "ApproveFailed", inputs: [] },
-  // Uniswap V4 PoolManager (lib/v4-core IPoolManager.sol)
-  { type: "error", name: "CurrencyNotSettled", inputs: [] },
-  { type: "error", name: "PoolNotInitialized", inputs: [] },
-  { type: "error", name: "AlreadyUnlocked", inputs: [] },
-  { type: "error", name: "ManagerLocked", inputs: [] },
-  { type: "error", name: "TickSpacingTooLarge", inputs: [{ type: "int24", name: "tickSpacing" }] },
-  { type: "error", name: "TickSpacingTooSmall", inputs: [{ type: "int24", name: "tickSpacing" }] },
-  {
-    type: "error",
-    name: "CurrenciesOutOfOrderOrEqual",
-    inputs: [
-      { type: "address", name: "currency0" },
-      { type: "address", name: "currency1" },
-    ],
-  },
-  { type: "error", name: "UnauthorizedDynamicLPFeeUpdate", inputs: [] },
-  { type: "error", name: "SwapAmountCannotBeZero", inputs: [] },
-  { type: "error", name: "NonzeroNativeValue", inputs: [] },
-  { type: "error", name: "MustClearExactPositiveDelta", inputs: [] },
+  ...POOL_MANAGER_ERROR_ABI,
   // perpcity-contracts v0.0.1 error set (names absent from the v0.1.0 ABI)
   { type: "error", name: "CouldNotFullyFill", inputs: [] },
   { type: "error", name: "PerpDoesNotExist", inputs: [] },

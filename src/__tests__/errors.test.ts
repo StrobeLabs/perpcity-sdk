@@ -723,6 +723,14 @@ describe("PERP_ABI covers the contracts' Errors.sol", () => {
     "LongUtilizationExceeded",
     "ShortUtilizationExceeded",
     "InsufficientLiquidityToFill",
+    // v0.2.2-upgradeable (Perp.sol: skim, UUPS proxy, guard hook, solady ERC-721)
+    "NoSurplus",
+    "ZeroAddress",
+    "UnauthorizedPoolAction",
+    "ERC1967NonPayable",
+    "UUPSUnauthorizedCallContext",
+    "InvalidInitialization",
+    "TokenDoesNotExist",
   ];
 
   it.each(ERRORS_SOL)("decodes %s from its selector", async (name) => {
@@ -731,6 +739,39 @@ describe("PERP_ABI covers the contracts' Errors.sol", () => {
     const selector = keccak256(toBytes(`${name}()`)).slice(0, 10) as `0x${string}`;
     const decoded = decodeErrorResult({ abi: PERP_ABI, data: selector });
     expect(decoded.errorName).toBe(name);
+  });
+
+  it.each([
+    "InvalidPerpImplementation",
+    "NotProtocolOwner",
+  ])("decodes factory error %s from PERP_FACTORY_ABI", async (name) => {
+    const { decodeErrorResult, keccak256, toBytes } = await import("viem");
+    const { PERP_FACTORY_ABI } = await import("../abis/perp-factory");
+    const selector = keccak256(toBytes(`${name}()`)).slice(0, 10) as `0x${string}`;
+    const decoded = decodeErrorResult({ abi: PERP_FACTORY_ABI, data: selector });
+    expect(decoded.errorName).toBe(name);
+  });
+
+  it("decodes the v0.2.2 liquidate overloads and close events by full signature", async () => {
+    const { toFunctionSelector, toEventSelector, getAbiItem } = await import("viem");
+    const { PERP_ABI } = await import("../abis/perp");
+    const selectors = PERP_ABI.filter(
+      (item) => item.type === "function" && item.name === "liquidateTaker"
+    ).map((item) => toFunctionSelector(item as never));
+    expect(selectors).toEqual(["0xeac41906", "0xbfb4b1c7"]);
+    const closes = PERP_ABI.filter(
+      (item) => item.type === "event" && item.name === "TakerClosed"
+    ).map((item) => toEventSelector(item as never));
+    expect(closes).toHaveLength(2);
+    expect(new Set(closes).size).toBe(2);
+    // Name lookups keep resolving to the build 58b42b7 shape (first entry).
+    const byName = getAbiItem({ abi: PERP_ABI, name: "liquidateTaker" }) as {
+      inputs: readonly unknown[];
+    };
+    expect(byName.inputs).toHaveLength(2);
+    expect(toEventSelector("TakerLiquidated(uint256,uint128,uint256)")).toBe(
+      "0x2347417853c438a233b6d4d0630048d196587db0d521d33f5a4705721e1a91cf"
+    );
   });
 
   it("maps InsufficientLiquidityToFill to a liquidity message", () => {
@@ -944,6 +985,20 @@ describe("withErrorHandling structured fields", () => {
       expect(parsed.message).toContain(parsed.shortMessage as string);
       expect(parsed.code).toBe("MARGIN_BELOW_MINIMUM");
     }
+  });
+
+  it("does not double-prefix when calls are nested", async () => {
+    const failing = async () => {
+      throw createMockContractError("MarginTooLow", []);
+    };
+
+    const error = await withErrorHandling(() => withErrorHandling(failing, "inner"), "outer").catch(
+      (e: PerpCityError) => e
+    );
+
+    expect(error.operation).toBe("inner");
+    expect(error.message.startsWith("inner: ")).toBe(true);
+    expect(error.message).not.toContain("outer");
   });
 });
 

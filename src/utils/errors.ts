@@ -3,8 +3,9 @@ import {
   ContractFunctionRevertedError,
   decodeErrorResult,
   FeeCapTooLowError,
+  type Hex,
 } from "viem";
-import { EXTENDED_ERROR_DECODE_ABI } from "../abis/error-decode";
+import { EXTENDED_ERROR_DECODE_ABI, POOL_MANAGER_ERROR_NAMES } from "../abis/error-decode";
 import { MIN_OPENING_MARGIN_USD } from "./constants";
 
 /**
@@ -155,7 +156,7 @@ export class ValidationError extends PerpCityError {
  */
 export class TransactionRevertedError extends PerpCityError {
   constructor(
-    public readonly txHash: string,
+    public readonly txHash: Hex,
     cause?: Error
   ) {
     super(`Transaction reverted. Hash: ${txHash}`, cause, "TX_REVERTED_ONCHAIN");
@@ -236,22 +237,7 @@ export function parseContractError(error: unknown): PerpCityError {
  * Detect the source of an error based on its name
  */
 function detectErrorSource(errorName: string): ErrorSource {
-  // Uniswap V4 PoolManager errors
-  const poolManagerErrors = [
-    "CurrencyNotSettled",
-    "PoolNotInitialized",
-    "AlreadyUnlocked",
-    "ManagerLocked",
-    "TickSpacingTooLarge",
-    "TickSpacingTooSmall",
-    "CurrenciesOutOfOrderOrEqual",
-    "UnauthorizedDynamicLPFeeUpdate",
-    "SwapAmountCannotBeZero",
-    "NonzeroNativeValue",
-    "MustClearExactPositiveDelta",
-  ];
-
-  if (poolManagerErrors.includes(errorName)) {
+  if (POOL_MANAGER_ERROR_NAMES.has(errorName)) {
     return ErrorSource.POOL_MANAGER;
   }
 
@@ -768,6 +754,53 @@ const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
       "No liquidity available to receive fees. Ensure there is sufficient liquidity in the pool.",
   },
 
+  // v0.2.2-upgradeable (perpcity-contracts 198559a): skim, UUPS proxy, guard
+  // hook, factory implementation gate
+  NoSurplus: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "The market holds no surplus above its liabilities; nothing to skim.",
+  },
+  ZeroAddress: {
+    category: ErrorCategory.USER_ERROR,
+    message: "The zero address is not a valid recipient.",
+  },
+  UnauthorizedPoolAction: {
+    code: "UNAUTHORIZED",
+    category: ErrorCategory.USER_ERROR,
+    message:
+      "This pool only accepts swaps and liquidity changes from its own market contract. Trade through the market, not the Pool Manager.",
+  },
+  InvalidPerpImplementation: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The market implementation address is not valid.",
+  },
+  NotProtocolOwner: {
+    code: "UNAUTHORIZED",
+    category: ErrorCategory.USER_ERROR,
+    message: "Only the protocol owner can perform this action.",
+  },
+  ERC1967InvalidImplementation: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: (args) =>
+      `The new market implementation is not a contract${args.length > 0 ? ` (${args[0]})` : ""}.`,
+  },
+  ERC1967NonPayable: {
+    category: ErrorCategory.USER_ERROR,
+    message: "The market upgrade call must not carry ETH.",
+  },
+  UUPSUnauthorizedCallContext: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "Upgrade calls must go through the market proxy, not the implementation.",
+  },
+  UUPSUnsupportedProxiableUUID: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The new market implementation does not declare the expected proxy storage slot.",
+  },
+  InvalidInitialization: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "The market is already initialized.",
+  },
+
   // perpcity-contracts v0.0.1 error set (older deployed markets)
   CouldNotFullyFill: {
     code: "INSUFFICIENT_LIQUIDITY",
@@ -861,9 +894,13 @@ export async function withErrorHandling<T>(fn: () => Promise<T>, context: string
     return await fn();
   } catch (error) {
     const parsedError = parseContractError(error);
-    parsedError.operation = context;
-    parsedError.shortMessage ??= parsedError.message;
-    parsedError.message = `${context}: ${parsedError.message}`;
+    // A nested withErrorHandling already prefixed this error; keep the
+    // innermost operation so the message is not double-prefixed.
+    if (parsedError.operation === undefined) {
+      parsedError.operation = context;
+      parsedError.shortMessage ??= parsedError.message;
+      parsedError.message = `${context}: ${parsedError.message}`;
+    }
     throw parsedError;
   }
 }

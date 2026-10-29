@@ -25,7 +25,10 @@ describe("Perp Functions", () => {
   const mockPerpData: PerpData = {
     id: "0x123" as any,
     tickSpacing: 60,
+    fairMark: 50.0,
+    spotMark: 50.0,
     mark: 50.0,
+    build: "58b42b7",
     sqrtPriceX96: 0n,
     liquidity: 0n,
     beacon: "0xbeacon",

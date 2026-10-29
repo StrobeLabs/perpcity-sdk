@@ -11,6 +11,7 @@ import {
 import { FEES_ABI } from "./abis/fees";
 import { MARGIN_RATIOS_ABI } from "./abis/margin-ratios";
 import { PERP_ABI } from "./abis/perp";
+import { getFairPrice } from "./math/pricing";
 import type { PerpAddress, PerpCityContextConfig, PerpCityDeployments } from "./types";
 import type {
   Bounds,
@@ -22,8 +23,9 @@ import type {
   UserData,
 } from "./types/entity-data";
 import { marginRatioToLeverage, scaleFromX96 } from "./utils";
+import { buildFromProbe } from "./utils/build";
 import { MIN_OPENING_MARGIN_USD } from "./utils/constants";
-import { withErrorHandling } from "./utils/errors";
+import { isMissingViewError, withErrorHandling } from "./utils/errors";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
@@ -94,10 +96,11 @@ export class PerpCityContext {
     const cached = this.configCache.get(perpAddress);
     if (cached) return cached;
 
-    // These 7 reads are coalesced into a single Multicall3 eth_call because the
+    // These 8 reads are coalesced into a single Multicall3 eth_call because the
     // public client is configured with batch.multicall (see constructor). Keep the
-    // batching: removing it turns one config fetch into 7 separate billed requests.
-    const [key, modules, protocolFeeManager, protocolFee, emaWindow, poolId, owner] =
+    // batching: removing it turns one config fetch into 8 separate billed requests.
+    // `emas()` is the build probe: only 58b42b7 has the view.
+    const [key, modules, protocolFeeManager, protocolFee, emaWindow, poolId, owner, emas] =
       await Promise.all([
         this.publicClient.readContract({
           address: perpAddress,
@@ -134,6 +137,12 @@ export class PerpCityContext {
           abi: PERP_ABI,
           functionName: "owner",
         }),
+        this.publicClient
+          .readContract({ address: perpAddress, abi: PERP_ABI, functionName: "emas" })
+          .catch((error: unknown) => {
+            if (isMissingViewError(error)) return null;
+            throw error;
+          }),
       ]);
 
     if (!key || key.currency0 === ZERO_ADDRESS) {
@@ -159,6 +168,7 @@ export class PerpCityContext {
       protocolFee: Number(protocolFee) / 1e6,
       emaWindow: Number(emaWindow),
       poolId: poolId as Hex,
+      build: buildFromProbe(modules[5] as Address, emas !== null),
     };
 
     this.configCache.set(perpAddress, cfg);
@@ -226,15 +236,19 @@ export class PerpCityContext {
 
   async getPerpData(perpAddress: PerpAddress): Promise<PerpData> {
     return withErrorHandling(async () => {
-      const [contractData, config] = await Promise.all([
+      const [contractData, config, fair] = await Promise.all([
         this.fetchPerpContractData(perpAddress),
         this.getPerpConfig(perpAddress),
+        getFairPrice(this, perpAddress),
       ]);
 
       return {
         id: perpAddress,
         tickSpacing: contractData.tickSpacing,
+        fairMark: scaleFromX96(fair.fairX96),
+        spotMark: contractData.mark,
         mark: contractData.mark,
+        build: config.build,
         sqrtPriceX96: contractData.sqrtPriceX96,
         liquidity: contractData.liquidity,
         beacon: config.beacon,

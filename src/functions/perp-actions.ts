@@ -10,6 +10,7 @@ import type {
   EstimateTakerPositionResult,
   OpenMakerPositionParams,
   OpenTakerPositionParams,
+  PerpData,
 } from "../types/entity-data";
 import {
   MAX_TICK,
@@ -22,6 +23,7 @@ import {
 import { approveUsdc } from "../utils/approve";
 import { TransactionRevertedError, withErrorHandling } from "../utils/errors";
 import { totalTakerFeeRate, withFeeHeadroom } from "../utils/fees";
+import { type PoolTickMap, simulateTakerSwapExact } from "../utils/swapExact";
 import { OpenPosition } from "./open-position";
 
 const MAKER_OPENED_TOPIC = keccak256(toBytes("MakerOpened(uint256)"));
@@ -316,39 +318,55 @@ export async function estimateTakerPosition(
     isLong: boolean;
     margin: number;
     leverage: number;
+    /** Walk the real tick map (exact fill, crosses ticks) instead of one region. */
+    tickMap?: PoolTickMap;
   }
 ): Promise<EstimateTakerPositionResult> {
   return withErrorHandling(async () => {
     const perpData = await context.getPerpData(perpAddress);
+    // Size at the fair mark: the contract values the position (and checks
+    // margin) there, not at the pool spot.
     const perpDelta = derivePerpDelta({
       margin: params.margin,
       leverage: params.leverage,
-      price: perpData.mark,
+      price: perpData.fairMark,
       isLong: params.isLong,
     });
-    // Simulate the swap against the pool curve so fillPrice/usdDelta reflect
-    // real price impact. This is a single active-liquidity-region approximation
-    // (see simulateTakerSwap). `feeRate` folds the total taker fee into the
-    // `effective*` fields so the displayed cost is fee-inclusive, while the raw
-    // `fillPrice`/`usdDelta` keep price impact separable from fees.
-    const swap = simulateTakerSwap({
-      sqrtPriceX96: perpData.sqrtPriceX96,
-      liquidity: perpData.liquidity,
-      perpDelta,
-      markPrice: perpData.mark,
-      feeRate: totalTakerFeeRate(perpData.fees),
-    });
-    return {
-      perpDelta,
-      usdDelta: swap.usdDelta,
-      fillPrice: swap.fillPrice,
-      feeRate: swap.feeRate,
-      effectiveUsdDelta: swap.effectiveUsdDelta,
-      effectiveFillPrice: swap.effectiveFillPrice,
-      exceedsLiquidity: swap.exceedsLiquidity,
-      liquidityLimited: swap.liquidityLimited,
-    };
+    return { perpDelta, ...quoteTakerSwap(perpData, perpDelta, params.tickMap) };
   }, "estimateTakerPosition");
+}
+
+/**
+ * The swap leg of a taker quote. With a tick map the fill is exact (see
+ * `simulateTakerSwapExact`); without one it is a single active-liquidity
+ * region approximation (`simulateTakerSwap`). `feeRate` folds the total taker
+ * fee into the `effective*` fields, while the raw `fillPrice`/`usdDelta` keep
+ * price impact separable from fees.
+ */
+function quoteTakerSwap(
+  perpData: PerpData,
+  perpDelta: bigint,
+  tickMap: PoolTickMap | undefined
+): EstimateTakerAdjustResult {
+  const opts = {
+    sqrtPriceX96: perpData.sqrtPriceX96,
+    liquidity: perpData.liquidity,
+    perpDelta,
+    markPrice: perpData.spotMark,
+    feeRate: totalTakerFeeRate(perpData.fees),
+  };
+  const exact = tickMap ? simulateTakerSwapExact({ ...opts, tickMap }) : null;
+  const swap = exact ?? simulateTakerSwap(opts);
+  return {
+    usdDelta: swap.usdDelta,
+    fillPrice: swap.fillPrice,
+    feeRate: swap.feeRate,
+    effectiveUsdDelta: swap.effectiveUsdDelta,
+    effectiveFillPrice: swap.effectiveFillPrice,
+    exceedsLiquidity: swap.exceedsLiquidity,
+    liquidityLimited: swap.liquidityLimited,
+    ...(exact ? { endSqrtPriceX96: exact.endSqrtPriceX96 } : {}),
+  };
 }
 
 /**
@@ -358,35 +376,21 @@ export async function estimateTakerPosition(
  * signed `perpDelta` the adjust call will submit (positive buys perp, negative
  * sells — an add for a long is positive, a reduce negative, a flip the full
  * signed total) and get the simulated USD leg, average fill price, and depth
- * flag. Pure client-side math against the constant-liquidity model
- * (`simulateTakerSwap`) — no eth_call, so it is safe on reactive quote paths.
+ * flag. Pure client-side math — no eth_call, so it is safe on reactive quote
+ * paths. Pass `tickMap` (from `fetchPoolTickMap`) for an exact multi-tick fill;
+ * without it the quote uses the single-region model (`simulateTakerSwap`).
  * The total taker fee is folded into the `effective*` fields; the raw
  * `fillPrice`/`usdDelta` remain fee-exclusive price impact.
  */
 export async function estimateTakerAdjust(
   context: PerpCityContext,
   perpAddress: PerpAddress,
-  params: { perpDelta: bigint }
+  params: { perpDelta: bigint; tickMap?: PoolTickMap }
 ): Promise<EstimateTakerAdjustResult> {
   return withErrorHandling(async () => {
     if (params.perpDelta === 0n) throw new Error("perpDelta must be non-zero");
     const perpData = await context.getPerpData(perpAddress);
-    const swap = simulateTakerSwap({
-      sqrtPriceX96: perpData.sqrtPriceX96,
-      liquidity: perpData.liquidity,
-      perpDelta: params.perpDelta,
-      markPrice: perpData.mark,
-      feeRate: totalTakerFeeRate(perpData.fees),
-    });
-    return {
-      usdDelta: swap.usdDelta,
-      fillPrice: swap.fillPrice,
-      feeRate: swap.feeRate,
-      effectiveUsdDelta: swap.effectiveUsdDelta,
-      effectiveFillPrice: swap.effectiveFillPrice,
-      exceedsLiquidity: swap.exceedsLiquidity,
-      liquidityLimited: swap.liquidityLimited,
-    };
+    return quoteTakerSwap(perpData, params.perpDelta, params.tickMap);
   }, "estimateTakerAdjust");
 }
 

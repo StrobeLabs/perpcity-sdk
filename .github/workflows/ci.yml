@@ -110,3 +110,37 @@ jobs:
 
       - name: Run integration tests
         run: pnpm test:integration
+
+  chain-parity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Economics vectors are current
+        run: pnpm gen:vectors && git diff --exit-code fixtures/
+
+      # Read-only eth_calls at a pinned Arbitrum One block. Falls back to the
+      # keyless Tenderly gateway (archive) when the secret is not set, so the
+      # job never skips.
+      - name: Fair price vs the deployed pricing modules
+        env:
+          ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL || 'https://arbitrum.gateway.tenderly.co' }}
+        run: pnpm test:chain

@@ -1,12 +1,14 @@
 import { BEACON_ABI } from "../abis/beacon";
 import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
+import { readStoredEmas } from "../math/pricing";
 import type { PerpAddress } from "../types";
 import type { PerpData } from "../types/entity-data";
 import { scaleFromX96 } from "../utils/conversions";
-import { isMissingViewError, withErrorHandling } from "../utils/errors";
+import { withErrorHandling } from "../utils/errors";
 
 // Pure functions that operate on PerpData
+/** @deprecated The pool spot. Use `perpData.fairMark` (contract mark) or `perpData.spotMark`. */
 export function getPerpMark(perpData: PerpData): number {
   return perpData.mark;
 }
@@ -32,8 +34,8 @@ export type FundingRate = {
   fundingPerDayUsd: number;
   /** Funding per day as a fraction of the EMA mark (0.001 = 0.1%/day). */
   ratePerDay: number;
-  /** Mark used to turn USD into a fraction: the EMA AMM price, or spot when
-   * the perp has no `emas()` view (v0.2.2-upgradeable). */
+  /** Price used to turn USD into a fraction: the stored EMA AMM price, or the
+   * pool spot when the EMA is still zero (a perp never touched). */
   ratePriceBasis: "ema" | "spot";
   /** Raw Rates.fundingPerDay: int88, USD per perp per day scaled by 1e18. */
   fundingPerDayRaw: bigint;
@@ -57,28 +59,22 @@ export function fundingRateFromRaw(
 /**
  * Read the perp's current funding rate.
  *
- * Breaking in 0.18.0: the old `ratePerDay` was USD per perp per day times 100
- * (labelled as a percent). It is now `fundingPerDayUsd` (USD per 1 perp per
- * day) and `ratePerDay` (fraction of the EMA mark).
+ * `fundingPerDayUsd` is USD per 1 perp per day and `ratePerDay` a fraction of
+ * the stored EMA AMM price (`emas()` on 58b42b7, a storage read on v0.2.2).
  */
 export async function getFundingRate(
   context: PerpCityContext,
   perpAddress: PerpAddress
 ): Promise<FundingRate> {
   return withErrorHandling(async () => {
+    const cfg = await context.getPerpConfig(perpAddress);
     const [rates, emas, poolState] = await Promise.all([
       context.publicClient.readContract({
         address: perpAddress,
         abi: PERP_ABI,
         functionName: "rates",
       }),
-      // 58b42b7 exposes emas(); v0.2.2-upgradeable has no view and reverts.
-      context.publicClient
-        .readContract({ address: perpAddress, abi: PERP_ABI, functionName: "emas" })
-        .catch((error: unknown) => {
-          if (isMissingViewError(error)) return null;
-          throw error;
-        }),
+      readStoredEmas(context, perpAddress, cfg.build),
       context.publicClient.readContract({
         address: perpAddress,
         abi: PERP_ABI,
@@ -86,9 +82,8 @@ export async function getFundingRate(
       }),
     ]);
 
-    const emaAmmX96 = emas?.[0] ?? 0n;
-    const ratePriceBasis = emaAmmX96 > 0n ? "ema" : "spot";
-    const markPrice = scaleFromX96(ratePriceBasis === "ema" ? emaAmmX96 : poolState[2]);
+    const ratePriceBasis = emas.emaAmmX96 > 0n ? "ema" : "spot";
+    const markPrice = scaleFromX96(ratePriceBasis === "ema" ? emas.emaAmmX96 : poolState[2]);
 
     return {
       ...fundingRateFromRaw(rates[0], markPrice),

@@ -10,6 +10,7 @@ export default defineConfig({
     abis: 'src/abis/index.ts',
     context: 'src/context.ts',
     functions: 'src/functions/index.ts',
+    math: 'src/math/index.ts',
     utils: 'src/utils/index.ts',
   },
   format: ['cjs', 'esm'],

@@ -199,6 +199,18 @@ function detectErrorSource(errorName: string): ErrorSource {
     "LongUtilizationExceeded",
     "ShortUtilizationExceeded",
     "InsufficientLiquidityToFill",
+    // v0.2.2-upgradeable (perpcity-contracts 198559a): skim, UUPS proxy, guard
+    // hook, factory implementation gate
+    "NoSurplus",
+    "ZeroAddress",
+    "UnauthorizedPoolAction",
+    "InvalidPerpImplementation",
+    "NotProtocolOwner",
+    "ERC1967InvalidImplementation",
+    "ERC1967NonPayable",
+    "UUPSUnauthorizedCallContext",
+    "UUPSUnsupportedProxiableUUID",
+    "InvalidInitialization",
     // Legacy names kept for older deployments
     "InvalidBeaconAddress",
     "InvalidTradingFeeSplits",
@@ -474,6 +486,68 @@ function formatContractError(
       return {
         message: "The protocol has no system funds available for this operation.",
         debug: { source, category: ErrorCategory.SYSTEM_ERROR },
+      };
+
+    // v0.2.2-upgradeable
+    case "NoSurplus":
+      return {
+        message: "The market holds no surplus above its liabilities; nothing to skim.",
+        debug: { source, category: ErrorCategory.STATE_ERROR },
+      };
+
+    case "ZeroAddress":
+      return {
+        message: "The zero address is not a valid recipient.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "UnauthorizedPoolAction":
+      return {
+        message:
+          "This pool only accepts swaps and liquidity changes from its own market contract. Trade through the market, not the Pool Manager.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "InvalidPerpImplementation":
+      return {
+        message: "The market implementation address is not valid.",
+        debug: { source, category: ErrorCategory.CONFIG_ERROR },
+      };
+
+    case "NotProtocolOwner":
+      return {
+        message: "Only the protocol owner can perform this action.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "ERC1967InvalidImplementation":
+      return {
+        message: `The new market implementation is not a contract${args.length > 0 ? ` (${args[0]})` : ""}.`,
+        debug: { source, category: ErrorCategory.CONFIG_ERROR },
+      };
+
+    case "ERC1967NonPayable":
+      return {
+        message: "The market upgrade call must not carry ETH.",
+        debug: { source, category: ErrorCategory.USER_ERROR },
+      };
+
+    case "UUPSUnauthorizedCallContext":
+      return {
+        message: "Upgrade calls must go through the market proxy, not the implementation.",
+        debug: { source, category: ErrorCategory.CONFIG_ERROR },
+      };
+
+    case "UUPSUnsupportedProxiableUUID":
+      return {
+        message: "The new market implementation does not declare the expected proxy storage slot.",
+        debug: { source, category: ErrorCategory.CONFIG_ERROR },
+      };
+
+    case "InvalidInitialization":
+      return {
+        message: "The market is already initialized.",
+        debug: { source, category: ErrorCategory.STATE_ERROR },
       };
 
     case "SwapReverted":

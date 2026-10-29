@@ -6,6 +6,7 @@ import {
   type PoolTickMap,
   StaleTickMapError,
   simulateTakerSwapExact,
+  walkPoolDepth,
 } from "../../utils/swapExact";
 import { getSqrtPriceAtTick } from "../../utils/tickMath";
 
@@ -160,6 +161,65 @@ describe("maxFillablePerpDelta", () => {
   it("returns the exact largest settleable leg on each side", () => {
     expect(maxFillablePerpDelta({ ...base, isLong: true })).toBe(MAX_LONG);
     expect(maxFillablePerpDelta({ ...base, isLong: false })).toBe(MAX_SHORT);
+  });
+});
+
+describe("walkPoolDepth", () => {
+  const longWalk = walkPoolDepth({ ...base, isLong: true });
+  const shortWalk = walkPoolDepth({ ...base, isLong: false });
+
+  it("sums to exactly maxFillablePerpDelta on each side", () => {
+    const sum = (regions: typeof longWalk) => regions.reduce((acc, r) => acc + r.perpDelta, 0n);
+    expect(sum(longWalk)).toBe(MAX_LONG);
+    expect(sum(shortWalk)).toBe(MAX_SHORT);
+  });
+
+  it.each([
+    ["long", true],
+    ["short", false],
+  ])("reproduces simulateTakerSwapExact's USD leg at every %s region boundary", (_side, isLong) => {
+    const regions = isLong ? longWalk : shortWalk;
+    let perpSum = 0n;
+    let usdSum = 0n;
+    for (const region of regions) {
+      perpSum += region.perpDelta;
+      usdSum += region.usdDelta;
+      const sim = simulateTakerSwapExact({ ...base, perpDelta: isLong ? perpSum : -perpSum });
+      expect(sim.exceedsLiquidity).toBe(false);
+      expect(sim.usdDelta).toBe(isLong ? -usdSum : usdSum);
+    }
+  });
+
+  it("walks outward from spot with contiguous region bounds", () => {
+    for (const [regions, ascending] of [
+      [longWalk, true],
+      [shortWalk, false],
+    ] as const) {
+      expect(regions[0]?.sqrtPriceStartX96).toBe(SQRT_PRICE_X96);
+      for (let i = 0; i < regions.length; i++) {
+        const region = regions[i];
+        if (!region) throw new Error("unreachable");
+        if (i > 0) expect(region.sqrtPriceStartX96).toBe(regions[i - 1]?.sqrtPriceEndX96);
+        expect(region.sqrtPriceEndX96).toBe(getSqrtPriceAtTick(region.tick));
+        if (ascending) {
+          expect(region.sqrtPriceEndX96).toBeGreaterThan(region.sqrtPriceStartX96);
+        } else {
+          expect(region.sqrtPriceEndX96).toBeLessThan(region.sqrtPriceStartX96);
+        }
+      }
+    }
+  });
+
+  it("starts each side at the pool's active liquidity", () => {
+    expect(longWalk[0]?.liquidity).toBe(LIQUIDITY);
+    expect(shortWalk[0]?.liquidity).toBe(LIQUIDITY);
+  });
+
+  it("emits only regions that fill something", () => {
+    for (const region of [...longWalk, ...shortWalk]) {
+      expect(region.liquidity).toBeGreaterThan(0n);
+      expect(region.perpDelta).toBeGreaterThan(0n);
+    }
   });
 });
 

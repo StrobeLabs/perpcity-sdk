@@ -1,4 +1,5 @@
 export * from "./beacon";
+export * from "./error-decode";
 export * from "./fees";
 export * from "./funding";
 export * from "./margin-ratios";

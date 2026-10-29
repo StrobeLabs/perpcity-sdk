@@ -20,7 +20,7 @@ import {
   simulateTakerSwap,
 } from "../utils";
 import { approveUsdc } from "../utils/approve";
-import { withErrorHandling } from "../utils/errors";
+import { TransactionRevertedError, withErrorHandling } from "../utils/errors";
 import { totalTakerFeeRate, withFeeHeadroom } from "../utils/fees";
 import { OpenPosition } from "./open-position";
 
@@ -84,7 +84,7 @@ export async function createPerp(
       await withFeeHeadroom(context.publicClient, request)
     );
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
 
     for (const log of receipt.logs) {
       // Only decode logs emitted by the factory we called, so a same-signature
@@ -174,7 +174,7 @@ export async function openTakerPosition(
       await withFeeHeadroom(context.publicClient, request)
     );
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
 
     for (const log of receipt.logs) {
       try {
@@ -290,7 +290,7 @@ export async function openMakerPosition(
       await withFeeHeadroom(context.publicClient, request)
     );
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
 
     for (const log of receipt.logs) {
       try {
@@ -410,7 +410,7 @@ export async function adjustTaker(
       await withFeeHeadroom(context.publicClient, request)
     );
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
     return { txHash };
   }, `adjustTaker for position ${params.posId}`);
 }
@@ -441,7 +441,7 @@ export async function adjustMaker(
       await withFeeHeadroom(context.publicClient, request)
     );
     const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new Error(`Transaction reverted. Hash: ${txHash}`);
+    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
     return { txHash };
   }, `adjustMaker for position ${params.posId}`);
 }

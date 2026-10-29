@@ -1,5 +1,6 @@
 import { encodeFunctionData } from "viem";
 import { BEACON_ABI } from "../abis/beacon";
+import { ERROR_SELECTORS } from "../abis/error-decode";
 import { MARGIN_RATIOS_ABI } from "../abis/margin-ratios";
 import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
@@ -22,14 +23,16 @@ const EQUITY_ROUNDING_SLACK = 2n;
 // transaction lands.
 const PRICE_DEPENDENT_BUFFER_BPS = 10n;
 
-const MARGIN_RATIO_TOO_LOW_SELECTOR = "b2c649db";
+// Selectors sourced from the shared error-decode registry; the probe matches
+// them as unprefixed substrings against message/data chains, hence slice(2).
+const MARGIN_RATIO_TOO_LOW_SELECTOR = ERROR_SELECTORS.MarginRatioTooLow.slice(2);
 
 // The health check is the last revert before transferMargin pulls USDC from
 // the sender. The probe sender has no allowance, so a healthy position
 // reverts there: solady's TransferFromFailed() selector, plus the reason
 // strings ERC20 implementations raise for the same failure.
 const POST_MARGIN_CHECK_REVERT_MARKERS = [
-  "7939f424", // solady SafeTransferLib.TransferFromFailed()
+  ERROR_SELECTORS.TransferFromFailed.slice(2),
   "transfer amount exceeds",
   "allowance",
 ];

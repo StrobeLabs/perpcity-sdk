@@ -4,6 +4,7 @@ import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
 import type { PerpAddress } from "../types";
 import type { PerpBuild } from "../utils/build";
+import { BUILD_RULES } from "./buildRules";
 import { avg, expWad, Q96, WAD } from "./fixedPoint";
 
 /**
@@ -100,7 +101,7 @@ export async function readStoredEmas(
   build: PerpBuild,
   blockNumber?: bigint
 ): Promise<PricePairX96> {
-  if (build === "58b42b7") {
+  if (BUILD_RULES[build].emaRead === "view") {
     const [ammPrice, index] = await context.publicClient.readContract({
       address: perpAddress,
       abi: PERP_ABI,

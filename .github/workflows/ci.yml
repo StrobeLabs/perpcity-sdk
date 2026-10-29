@@ -143,4 +143,11 @@ jobs:
       - name: Fair price vs the deployed pricing modules
         env:
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL || 'https://arbitrum.gateway.tenderly.co' }}
-        run: pnpm test:chain
+        # Bounded retry: a gateway rate limit or outage should not fail a correct PR.
+        run: |
+          for attempt in 1 2 3; do
+            pnpm test:chain && exit 0
+            echo "chain parity attempt $attempt failed; retrying"
+            sleep $((attempt * 15))
+          done
+          exit 1

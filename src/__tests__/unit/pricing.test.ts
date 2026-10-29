@@ -163,12 +163,18 @@ describe("build detection", () => {
     expect(isMissingViewError(new Error("socket hang up"))).toBe(false);
   });
 
-  it("throws UnsupportedBuildError when the perp config cannot be read", async () => {
+  it("passes a config read failure through unchanged", async () => {
+    const rpcDown = new HttpRequestError({ url: "https://rpc.example", status: 429 });
     const ctx = {
       getPerpConfig: async () => {
-        throw new Error("not a perp");
+        throw rpcDown;
       },
     } as unknown as PerpCityContext;
+    await expect(detectPerpBuild(ctx, "0x01")).rejects.toBe(rpcDown);
+  });
+
+  it("throws UnsupportedBuildError for a build without rules", async () => {
+    const ctx = { getPerpConfig: async () => ({ build: "main" }) } as unknown as PerpCityContext;
     await expect(detectPerpBuild(ctx, "0x01")).rejects.toBeInstanceOf(UnsupportedBuildError);
   });
 });

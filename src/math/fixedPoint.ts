@@ -1,5 +1,6 @@
 import type { PerpBuild } from "../utils/build";
 import { Q96 } from "../utils/constants";
+import { BUILD_RULES } from "./buildRules";
 
 export { Q96 };
 
@@ -43,7 +44,9 @@ export function sMulDiv(
   const magnitude = product / d;
   const negative = (a < 0n && b > 0n) || (a > 0n && b < 0n);
   let result = negative ? -magnitude : magnitude;
-  if (roundUp && product % d !== 0n && (build === "58b42b7" || !negative)) result += 1n;
+  if (roundUp && product % d !== 0n && (BUILD_RULES[build].signedRoundUpAnySign || !negative)) {
+    result += 1n;
+  }
   return result;
 }
 

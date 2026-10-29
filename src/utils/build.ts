@@ -1,5 +1,6 @@
 import type { Address } from "viem";
 import type { PerpCityContext } from "../context";
+import { BUILD_RULES } from "../math/buildRules";
 import type { PerpAddress } from "../types";
 import { PerpCityError } from "./errors";
 
@@ -52,9 +53,7 @@ export async function detectPerpBuild(
   context: PerpCityContext,
   perpAddress: PerpAddress
 ): Promise<PerpBuild> {
-  try {
-    return (await context.getPerpConfig(perpAddress)).build;
-  } catch (error) {
-    throw new UnsupportedBuildError(perpAddress, error instanceof Error ? error : undefined);
-  }
+  const { build } = await context.getPerpConfig(perpAddress);
+  if (!(build in BUILD_RULES)) throw new UnsupportedBuildError(perpAddress);
+  return build;
 }

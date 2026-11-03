@@ -8,3 +8,5 @@ export * from "./perp-factory";
 export * from "./price-impact";
 export * from "./pricing";
 export * from "./protocol-fee-manager";
+
+export * from "./withdrawal-controller";

@@ -16,3 +16,5 @@ export * from "./simulate";
 // User functions
 export * from "./user";
 export * from "./utilization";
+
+export * from "./withdrawals";

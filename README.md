@@ -131,5 +131,5 @@ Keep every result: a transaction can contain multiple claims and immediate payou
 An emitted queued claim means the position action succeeded; never retry the close
 because USDC has not arrived yet. Track claims by chain, controller and claim ID.
 Keep old-controller bindings after rotations. Release reverts expose typed
-`WITHDRAWAL_NOT_READY`, `WITHDRAWAL_PAUSED`, `WITHDRAWAL_COMPLETED`, and
+`WITHDRAWAL_NOT_READY`, `WITHDRAWAL_PAUSED`, `WITHDRAWAL_NOT_PENDING`, and
 `TVL_CAP_EXCEEDED` codes through the existing error decoder.

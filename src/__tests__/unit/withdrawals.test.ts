@@ -1,4 +1,5 @@
 import {
+  ContractFunctionRevertedError,
   decodeFunctionData,
   encodeAbiParameters,
   encodeErrorResult,
@@ -120,10 +121,23 @@ describe("withdrawal receipt outcomes", () => {
     const writeContract = vi.fn();
     const ctx = {
       validateChainId: vi.fn(),
-      publicClient: { simulateContract: vi.fn().mockRejectedValue(new Error("ClaimNotReady")) },
+      publicClient: {
+        simulateContract: vi.fn().mockRejectedValue(
+          new ContractFunctionRevertedError({
+            abi: WITHDRAWAL_CONTROLLER_ABI,
+            functionName: "release",
+            data: encodeErrorResult({
+              abi: WITHDRAWAL_CONTROLLER_ABI,
+              errorName: "ClaimNotReady",
+            }),
+          })
+        ),
+      },
       walletClient: { writeContract },
     } as unknown as PerpCityContext;
-    await expect(releaseWithdrawalClaim(ctx, controller, 1n)).rejects.toThrow("ClaimNotReady");
+    await expect(releaseWithdrawalClaim(ctx, controller, 1n)).rejects.toMatchObject({
+      code: "WITHDRAWAL_NOT_READY",
+    });
     expect(writeContract).not.toHaveBeenCalled();
   });
 });
@@ -149,7 +163,7 @@ describe("new-generation calls and reverts", () => {
   it("decodes withdrawal and admission failures without automatic retries", () => {
     for (const [errorName, code] of [
       ["ClaimNotReady", "WITHDRAWAL_NOT_READY"],
-      ["ClaimNotPending", "WITHDRAWAL_COMPLETED"],
+      ["ClaimNotPending", "WITHDRAWAL_NOT_PENDING"],
       ["ClaimIsPaused", "WITHDRAWAL_PAUSED"],
       ["ReleasesArePaused", "WITHDRAWAL_PAUSED"],
       ["TvlCapExceeded", "TVL_CAP_EXCEEDED"],

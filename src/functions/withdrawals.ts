@@ -15,7 +15,7 @@ import {
   WITHDRAWAL_CONTROLLER_ABI,
 } from "../abis/withdrawal-controller";
 import type { PerpCityContext } from "../context";
-import { TransactionRevertedError } from "../utils/errors";
+import { TransactionRevertedError, withErrorHandling } from "../utils/errors";
 import { withFeeHeadroom } from "../utils/fees";
 
 export type WithdrawalClaim = {
@@ -153,21 +153,23 @@ export async function releaseWithdrawalClaim(
   controller: Address,
   claimId: bigint
 ) {
-  buildReleaseWithdrawalClaimCall(controller, claimId);
-  await context.validateChainId();
-  const { request } = await context.publicClient.simulateContract({
-    address: controller,
-    abi: WITHDRAWAL_CONTROLLER_ABI,
-    functionName: "release",
-    args: [claimId],
-    account: context.walletClient.account,
-  });
-  const txHash = await context.walletClient.writeContract(
-    await withFeeHeadroom(context.publicClient, request)
-  );
-  const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-  if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-  return { txHash, receipt };
+  return withErrorHandling(async () => {
+    buildReleaseWithdrawalClaimCall(controller, claimId);
+    await context.validateChainId();
+    const { request } = await context.publicClient.simulateContract({
+      address: controller,
+      abi: WITHDRAWAL_CONTROLLER_ABI,
+      functionName: "release",
+      args: [claimId],
+      account: context.walletClient.account,
+    });
+    const txHash = await context.walletClient.writeContract(
+      await withFeeHeadroom(context.publicClient, request)
+    );
+    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
+    return { txHash, receipt };
+  }, `releaseWithdrawalClaim for claim ${claimId}`);
 }
 
 export type WithdrawalPayout = {

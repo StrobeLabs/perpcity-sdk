@@ -61,7 +61,7 @@ export const PERPCITY_ERROR_CODES = [
   "UNKNOWN",
   "WITHDRAWAL_NOT_READY",
   "WITHDRAWAL_PAUSED",
-  "WITHDRAWAL_COMPLETED",
+  "WITHDRAWAL_NOT_PENDING",
   "TVL_CAP_EXCEEDED",
 ] as const;
 
@@ -323,7 +323,7 @@ const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
     message: "This claim is still in its challenge window. Refresh its current release time.",
   },
   ClaimNotPending: {
-    code: "WITHDRAWAL_COMPLETED",
+    code: "WITHDRAWAL_NOT_PENDING",
     category: ErrorCategory.STATE_ERROR,
     canRetry: false,
     message: "This claim is no longer pending or does not exist. Refresh its status.",

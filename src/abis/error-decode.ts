@@ -1,4 +1,5 @@
 import { keccak256, toBytes } from "viem";
+import { WITHDRAWAL_CONTROLLER_ABI } from "./withdrawal-controller";
 
 /** Uniswap V4 PoolManager errors (lib/v4-core IPoolManager.sol). */
 export const POOL_MANAGER_ERROR_ABI = [
@@ -40,6 +41,7 @@ export const POOL_MANAGER_ERROR_NAMES: ReadonlySet<string> = new Set(
  * artifact. Errors already decodable from PERP_ABI are deliberately absent.
  */
 export const EXTENDED_ERROR_DECODE_ABI = [
+  ...WITHDRAWAL_CONTROLLER_ABI.filter((entry) => entry.type === "error"),
   // solady SafeTransferLib (inlined into the deployed Perp; a USDC balance or
   // allowance shortfall reverts with TransferFromFailed)
   { type: "error", name: "TransferFromFailed", inputs: [] },

@@ -59,6 +59,10 @@ export const PERPCITY_ERROR_CODES = [
   "RPC_ERROR",
   "VALIDATION_ERROR",
   "UNKNOWN",
+  "WITHDRAWAL_NOT_READY",
+  "WITHDRAWAL_PAUSED",
+  "WITHDRAWAL_COMPLETED",
+  "TVL_CAP_EXCEEDED",
 ] as const;
 
 export type PerpCityErrorCode = (typeof PERPCITY_ERROR_CODES)[number];
@@ -312,6 +316,36 @@ type ContractErrorSpec = {
  * record surface via the generic fallback in `formatContractError`.
  */
 const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
+  ClaimNotReady: {
+    code: "WITHDRAWAL_NOT_READY",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: false,
+    message: "This claim is still in its challenge window. Refresh its current release time.",
+  },
+  ClaimNotPending: {
+    code: "WITHDRAWAL_COMPLETED",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: false,
+    message: "This claim is no longer pending or does not exist. Refresh its status.",
+  },
+  ReleasesArePaused: {
+    code: "WITHDRAWAL_PAUSED",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: false,
+    message: "Withdrawals are paused. Closing positions can still queue payouts.",
+  },
+  ClaimIsPaused: {
+    code: "WITHDRAWAL_PAUSED",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: false,
+    message: "This claim is paused. Refresh its status before trying again.",
+  },
+  TvlCapExceeded: {
+    code: "TVL_CAP_EXCEEDED",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: false,
+    message: "This deposit exceeds the market TVL cap. Reduce the amount or wait for capacity.",
+  },
   // Legacy config errors (v0.0.1-generation factory/market setup)
   InvalidBeaconAddress: {
     category: ErrorCategory.CONFIG_ERROR,

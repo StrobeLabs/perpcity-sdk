@@ -108,3 +108,28 @@ MIT
 
 - [Perp City Documentation](https://docs.perp.city)
 - [Perp City App](https://app.perp.city)
+
+### Queued withdrawal protection (explicit new generation)
+
+`WITHDRAWAL_CONTROLLER_ABI`, `PROTECTED_PERP_ACTION_ABI` and the withdrawal helpers
+track contracts source `e996edf638834e2559926947a457b529ddd41821`. Activation requires
+pinning the release tag and verified per-chain deployment manifest. The existing
+`PERP_ABI`, position builders and pricing math continue to describe supported live
+legacy builds; do not use them for a new-generation Perp. `buildProtectedPerpCall`
+encodes explicit, caller-reviewed parameters without pretending legacy sizing math
+applies. New positions use the contract's ownership ledger, not ERC721 approvals.
+
+Read the controller and its claim at the same block with `readWithdrawalController`
+and `readWithdrawalClaim`, then evaluate `withdrawalEligibility`. The current
+challenge window applies retroactively, and both claim and global pauses override
+maturity. `buildReleaseWithdrawalClaimCall` supports owner-signed smart-account
+batches; `releaseWithdrawalClaim` simulates and waits for an EOA transaction. Release
+is permissionless but always pays the claim's immutable recipient.
+
+Pass receipt logs and verified controller/Perp bindings to `decodeWithdrawalPayouts`.
+Keep every result: a transaction can contain multiple claims and immediate payouts.
+An emitted queued claim means the position action succeeded; never retry the close
+because USDC has not arrived yet. Track claims by chain, controller and claim ID.
+Keep old-controller bindings after rotations. Release reverts expose typed
+`WITHDRAWAL_NOT_READY`, `WITHDRAWAL_PAUSED`, `WITHDRAWAL_COMPLETED`, and
+`TVL_CAP_EXCEEDED` codes through the existing error decoder.

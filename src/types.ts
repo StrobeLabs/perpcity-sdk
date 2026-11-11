@@ -5,13 +5,14 @@ export type PerpAddress = Address;
 export interface PerpCityDeployments {
   usdc: Address;
 
-  /** PerpFactory address for creating new markets. */
   perpFactory?: Address;
 
-  /** ProtocolFeeManager address. Can also be read from a Perp contract. */
+  perpGuardHook?: Address;
+
   protocolFeeManager?: Address;
 
-  /** Optional default Perp address for apps that operate on one market. */
+  moduleRegistry?: Address;
+
   perpAddress?: PerpAddress;
 
   // Module addresses used as defaults when creating new perps.
@@ -23,17 +24,8 @@ export interface PerpCityDeployments {
 }
 
 export interface PerpCityContextConfig {
-  /**
-   * Wallet client for signing transactions.
-   * MUST have a chain property defined (e.g., created with `chain: baseSepolia`).
-   */
   walletClient: WalletClient;
 
-  /**
-   * RPC endpoint URL for read operations (e.g., Alchemy, Infura).
-   * MUST correspond to the same network as walletClient.chain.
-   * Use validateChainId() after construction to verify.
-   */
   rpcUrl: string;
 
   deployments: PerpCityDeployments;

@@ -23,7 +23,7 @@ const CALLS = [
   { to: PERP, data: "0x12345678" as Hex },
 ] as const;
 
-const LONG_UTIL_EXCEEDED = keccak256(toBytes("LongUtilizationExceeded()")).slice(0, 10) as Hex;
+const LONG_CLOSE_EXCEEDED = keccak256(toBytes("LongCloseCapacityExceeded()")).slice(0, 10) as Hex;
 
 type FakeCall = { status: "0x1" | "0x0"; returnData: Hex; gasUsed: Hex; error?: { data: Hex } };
 
@@ -79,7 +79,7 @@ describe("simulateCalls", () => {
     expect(params[0].validation).toBeFalsy();
   });
 
-  it("decodes a revert at index 1 to LongUtilizationExceeded / UTILIZATION_EXCEEDED", async () => {
+  it("decodes a revert at index 1 to LongCloseCapacityExceeded / CLOSE_CAPACITY_EXCEEDED", async () => {
     const result = await simulateCalls(
       contextWith(async () => [
         block([
@@ -88,7 +88,7 @@ describe("simulateCalls", () => {
             status: "0x0",
             returnData: "0x",
             gasUsed: "0x100",
-            error: { data: LONG_UTIL_EXCEEDED },
+            error: { data: LONG_CLOSE_EXCEEDED },
           },
         ]),
       ]),
@@ -99,9 +99,9 @@ describe("simulateCalls", () => {
     expect(result.ok).toBe(false);
     if (result.ok !== false) return;
     expect(result.failedIndex).toBe(1);
-    expect(result.error.errorName).toBe("LongUtilizationExceeded");
-    expect(result.error.code).toBe("UTILIZATION_EXCEEDED");
-    expect(result.rawData).toBe(LONG_UTIL_EXCEEDED);
+    expect(result.error.errorName).toBe("LongCloseCapacityExceeded");
+    expect(result.error.code).toBe("CLOSE_CAPACITY_EXCEEDED");
+    expect(result.rawData).toBe(LONG_CLOSE_EXCEEDED);
   });
 
   it("unwraps a Uniswap v4 WrappedError before decoding", async () => {

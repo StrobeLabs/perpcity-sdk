@@ -1,8 +1,8 @@
 {
   "name": "@strobelabs/perpcity-sdk",
   "author": "Strobe Labs",
-  "description": "TypeScript SDK for interacting with Perp City contracts",
-  "version": "0.19.0",
+  "description": "TypeScript SDK for Perp City v1.0.0 contracts",
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -50,29 +50,26 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "fixtures"
+    "dist"
   ],
   "scripts": {
     "build": "tsup",
     "test": "vitest",
     "test:unit": "vitest run",
     "test:integration": "vitest run --config vitest.e2e.config.ts --no-file-parallelism --sequence.concurrent=false",
-    "test:chain": "vitest run --config vitest.e2e.config.ts src/__tests__/integration/fairPrice.test.ts",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:all": "pnpm run test:unit && pnpm run test:integration",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "gen:vectors": "tsx scripts/gen-economics-vectors.ts",
     "ci": "pnpm run build && pnpm run test:unit && pnpm exec tsc --noEmit && pnpm run lint",
     "example-create-perp": "tsx -r dotenv/config examples/create-perp.ts",
     "example-maker": "tsx -r dotenv/config examples/maker.ts",
     "example-taker": "tsx -r dotenv/config examples/taker.ts",
     "example-close": "tsx -r dotenv/config examples/close.ts",
     "example-view": "tsx -r dotenv/config examples/view.ts",
-    "example-optimized": "tsx -r dotenv/config examples/optimized-view.ts"
+    "sync:abis": "node --experimental-strip-types scripts/sync-abis.ts"
   },
   "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0",
   "devDependencies": {

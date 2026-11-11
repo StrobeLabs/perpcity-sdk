@@ -3,8 +3,8 @@ import { createPerp, type PerpAddress, type PerpCityContext } from '../dist';
 import { setup } from './setup';
 
 /**
- * Creates a new Perp market via PerpFactory. Requires PERP_FACTORY_ADDRESS plus
- * the module addresses (or pass them explicitly here) in the environment.
+ * Creates a new v1 market via PerpFactory. The beacon (BEACON_ADDRESS) must be a
+ * v1 beacon with an index newer than `latency` seconds: the factory reads it.
  */
 export async function createMarket(context: PerpCityContext): Promise<PerpAddress> {
   const owner = context.walletClient.account?.address;
@@ -12,12 +12,16 @@ export async function createMarket(context: PerpCityContext): Promise<PerpAddres
 
   const perpAddress = await createPerp(context, {
     owner: owner as Address,
-    name: 'Example Perp',
-    symbol: 'EXMPL',
-    tokenUri: '',
-    beacon: '0x7eb9ab957d417cd2c1923bd6a8d07ff94656d056' as Address,
+    governor: owner as Address,
+    beacon: process.env.BEACON_ADDRESS as Address,
     emaWindow: 900,
+    latency: 3600,
     salt: `0x${'0'.repeat(64)}` as Hex,
+    withdrawalConfig: {
+      capacity: 100_000_000_000n, // $100k instant-withdrawal burst
+      refillPerSecond: 1_000_000n, // $1 per second
+      challengeWindow: 86_400, // 1 day claim delay
+    },
     // Module addresses fall back to the deployment config when omitted.
   });
 

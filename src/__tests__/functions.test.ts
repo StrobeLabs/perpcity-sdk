@@ -1,81 +1,42 @@
 import { describe, expect, it } from "vitest";
-import {
-  getPerpBeacon,
-  getPerpBounds,
-  getPerpFees,
-  getPerpMark,
-  getPerpTickSpacing,
-} from "../functions/perp";
+import { getPerpBeacon, getPerpFees, getPerpTickSpacing } from "../functions/perp";
 import { openMakerPosition, openTakerPosition } from "../functions/perp-actions";
 import {
-  calculateEntryPrice,
-  calculateLeverage,
-  calculateLiquidationPrice,
+  calculatePnlPercentage,
   calculatePositionSize,
-  calculatePositionValue,
   getPositionId,
   getPositionIsLong,
   getPositionIsMaker,
   getPositionPerpId,
+  summarizePreview,
 } from "../functions/position";
 import { getUserOpenPositions, getUserUsdcBalance, getUserWalletAddress } from "../functions/user";
-import type { OpenPositionData, PerpData, PositionRawData, UserData } from "../types/entity-data";
+import type { OpenPositionData, PerpData, PositionPreview, UserData } from "../types/entity-data";
+
+const Q96 = 2n ** 96n;
 
 describe("Perp Functions", () => {
-  const mockPerpData: PerpData = {
-    id: "0x123" as any,
-    tickSpacing: 60,
-    fairMark: 50.0,
-    spotMark: 50.0,
-    mark: 50.0,
-    build: "58b42b7",
-    sqrtPriceX96: 0n,
-    liquidity: 0n,
+  const mockPerpData = {
+    id: "0x123",
+    tickSpacing: 30,
     beacon: "0xbeacon",
-    bounds: {
-      minMargin: 100,
-      minTakerLeverage: 1,
-      maxTakerLeverage: 10,
-      liquidationTakerRatio: 0.05,
-    },
-    fees: {
-      creatorFee: 0.001,
-      insuranceFee: 0.002,
-      lpFee: 0.003,
-      liquidationFee: 0.004,
-      protocolFee: 0,
-    },
-  };
-
-  it("should extract mark price", () => {
-    expect(getPerpMark(mockPerpData)).toBe(50.0);
-  });
+    fees: { liquidationFee: 0.004, protocolFee: 0.0005, maxSwapFee: 0.01 },
+  } as unknown as PerpData;
 
   it("should extract beacon address", () => {
     expect(getPerpBeacon(mockPerpData)).toBe("0xbeacon");
   });
 
-  it("should extract bounds", () => {
-    expect(getPerpBounds(mockPerpData)).toEqual({
-      minMargin: 100,
-      minTakerLeverage: 1,
-      maxTakerLeverage: 10,
-      liquidationTakerRatio: 0.05,
-    });
-  });
-
   it("should extract fees", () => {
     expect(getPerpFees(mockPerpData)).toEqual({
-      creatorFee: 0.001,
-      insuranceFee: 0.002,
-      lpFee: 0.003,
       liquidationFee: 0.004,
-      protocolFee: 0,
+      protocolFee: 0.0005,
+      maxSwapFee: 0.01,
     });
   });
 
   it("should extract tick spacing", () => {
-    expect(getPerpTickSpacing(mockPerpData)).toBe(60);
+    expect(getPerpTickSpacing(mockPerpData)).toBe(30);
   });
 });
 
@@ -150,75 +111,46 @@ describe("Position Opening Functions", () => {
 });
 
 describe("Position Calculation Functions", () => {
-  const mockRawData: PositionRawData = {
-    perpId: "0x123" as any,
-    positionId: 1n,
-    margin: 100,
-    entryPerpDelta: 2000000n, // 2 perp tokens (1e6)
-    entryUsdDelta: 100000000n, // $100 (1e6)
-    marginRatios: { liq: 50000, backstop: 25000 },
-    makerDetails: null,
-  };
-
-  describe("calculateEntryPrice", () => {
-    it("should calculate entry price from raw data", () => {
-      const entryPrice = calculateEntryPrice(mockRawData);
-      // 100000000 / 2000000 = 50
-      expect(entryPrice).toBe(50);
-    });
-
-    it("should be a function", () => {
-      expect(typeof calculateEntryPrice).toBe("function");
-    });
+  it("calculatePositionSize reads signed perp atoms as whole perps", () => {
+    expect(calculatePositionSize({ perpDelta: -2_500_000n })).toBe(-2.5);
   });
 
-  describe("calculatePositionSize", () => {
-    it("should calculate position size from raw data", () => {
-      const size = calculatePositionSize(mockRawData);
-      // 2000000 / 1e6 = 2
-      expect(size).toBe(2);
+  it("summarizePreview converts the previewPosition struct to display units", () => {
+    const preview: PositionPreview = {
+      isMaker: false,
+      markPrice: 2n * Q96,
+      settledMargin: 10_000_000n,
+      pendingLpFees: 0n,
+      pendingFunding: 250_000n,
+      pendingUtil: 50_000n,
+      pendingReserveUtil: 10_000n,
+      value: 40_000_000n,
+      unrealizedPnl: -2_000_000n,
+      equity: 8_000_000n,
+      meetsInitialMargin: true,
+      liquidatable: false,
+      backstoppable: false,
+      nominalLiqFee: 0n,
+      payableLiqFee: 0n,
+    };
+    expect(summarizePreview(preview)).toEqual({
+      markPrice: 2,
+      value: 40,
+      unrealizedPnl: -2,
+      equity: 8,
+      settledMargin: 10,
+      pendingFunding: 0.25,
+      pendingUtil: 0.05,
+      pendingLpFees: 0,
+      leverage: 5,
+      liquidatable: false,
+      meetsInitialMargin: true,
     });
-
-    it("should be a function", () => {
-      expect(typeof calculatePositionSize).toBe("function");
-    });
+    expect(summarizePreview({ ...preview, equity: 0n }).leverage).toBe(Infinity);
   });
 
-  describe("calculatePositionValue", () => {
-    it("should calculate position value with mark price", () => {
-      const markPrice = 60;
-      const value = calculatePositionValue(mockRawData, markPrice);
-      // abs(2) * 60 = 120
-      expect(value).toBe(120);
-    });
-
-    it("should be a function", () => {
-      expect(typeof calculatePositionValue).toBe("function");
-    });
-  });
-
-  describe("calculateLeverage", () => {
-    it("should calculate leverage from value and margin", () => {
-      const positionValue = 500;
-      const effectiveMargin = 100;
-      const leverage = calculateLeverage(positionValue, effectiveMargin);
-      expect(leverage).toBe(5);
-    });
-
-    it("should be a function", () => {
-      expect(typeof calculateLeverage).toBe("function");
-    });
-  });
-
-  describe("calculateLiquidationPrice", () => {
-    it("should calculate liquidation price for position", () => {
-      const liqPrice = calculateLiquidationPrice(mockRawData, true);
-      expect(liqPrice).not.toBeNull();
-      expect(typeof liqPrice).toBe("number");
-    });
-
-    it("should be a function", () => {
-      expect(typeof calculateLiquidationPrice).toBe("function");
-    });
+  it("calculatePnlPercentage returns PnL over the initial margin", () => {
+    expect(calculatePnlPercentage(10, -2, 108)).toBeCloseTo(8, 10);
+    expect(calculatePnlPercentage(10, 0, 5)).toBe(0);
   });
 });

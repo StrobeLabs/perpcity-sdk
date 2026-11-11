@@ -109,7 +109,7 @@ async function extsload(
 /**
  * Fetch every initialized tick of a perp pool, ascending.
  *
- * @param poolId - The perp's `POOL_ID`.
+ * @param poolId - The perp's `poolId()`.
  * @param tickSpacing - The pool key's tick spacing (30 for perps).
  * @param poolManager - Override the per-chain `PoolManager` address.
  */

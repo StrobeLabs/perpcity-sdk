@@ -2,8 +2,10 @@ import { OpenPosition } from '../dist';
 import { setup } from './setup';
 
 export async function closePosition(position: OpenPosition): Promise<void> {
+  // A taker close sells the whole position with reduceOnly and needs a fee cap.
   const result = await position.closePosition({
-    amt1Limit: 1000000n,
+    amt1Limit: 0n, // minimum USD received on a long close; set it from a quote
+    maxTotalFee: 1_000_000n, // $1
   });
 
   console.log('Transaction Hash:', result.txHash);

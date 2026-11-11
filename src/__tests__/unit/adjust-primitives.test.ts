@@ -15,13 +15,12 @@ const PERP = getAddress("0x3333333333333333333333333333333333333333") as PerpAdd
 const perpData = {
   sqrtPriceX96: 10n * Q96,
   liquidity: 10n ** 18n,
-  mark: 100,
+  ammPrice: 100,
   fees: {
-    creatorFee: 0.001,
-    insuranceFee: 0.0005,
-    lpFee: 0.0015,
+    // maxSwapFee + protocolFee = 30 bps: the conservative default fee rate.
+    maxSwapFee: 0.0025,
     liquidationFee: 0.01,
-    protocolFee: 0,
+    protocolFee: 0.0005,
   },
 };
 
@@ -45,7 +44,7 @@ describe("estimateTakerAdjust", () => {
     expect(quote.fillPrice).toBeGreaterThan(99.9);
     expect(quote.fillPrice).toBeLessThan(100.1);
     expect(quote.exceedsLiquidity).toBe(false);
-    // Total taker fee = 0.001 + 0.0005 + 0.0015 = 0.003 (30 bps). A buy pays
+    // Default fee rate = maxSwapFee + protocolFee = 0.003 (30 bps). A buy pays
     // more, so the effective fill is higher and the effective USD out is larger.
     expect(quote.feeRate).toBeCloseTo(0.003, 12);
     expect(quote.effectiveFillPrice).toBeCloseTo(quote.fillPrice * 1.003, 9);
@@ -66,6 +65,14 @@ describe("estimateTakerAdjust", () => {
     expect(quote.effectiveUsdDelta).toBeLessThan(quote.usdDelta);
   });
 
+  it("uses an explicit fee rate when given", async () => {
+    const quote = await estimateTakerAdjust(makeContext(), PERP, {
+      perpDelta: 1_000_000n,
+      feeRate: 0.001,
+    });
+    expect(quote.feeRate).toBeCloseTo(0.001, 12);
+  });
+
   it("rejects a zero delta", async () => {
     await expect(estimateTakerAdjust(makeContext(), PERP, { perpDelta: 0n })).rejects.toThrow(
       /non-zero/
@@ -74,7 +81,14 @@ describe("estimateTakerAdjust", () => {
 });
 
 describe("buildAdjustTakerCalls", () => {
-  const params = { posId: 7n, marginDelta: 5_000_000n, perpDelta: 1_000_000n, amt1Limit: 123n };
+  const params = {
+    posId: 7n,
+    marginDelta: 5_000_000n,
+    perpDelta: 1_000_000n,
+    amt1Limit: 123n,
+    maxTotalFee: 1n,
+    reduceOnly: false,
+  };
 
   it("prepends a USDC approve when margin is added and allowance is short", async () => {
     const calls = await buildAdjustTakerCalls(makeContext({ allowance: 0n }), PERP, params);
@@ -109,6 +123,8 @@ describe("buildAdjustTakerCalls", () => {
       marginDelta: 0n,
       perpDelta: -1_000_000n,
       amt1Limit: 90n,
+      maxTotalFee: 1n,
+      reduceOnly: true,
     });
     expect(calls).toHaveLength(1);
     const adjust = decodeFunctionData({ abi: PERP_ABI, data: calls[0].data });

@@ -9,10 +9,7 @@ import {
   type PublicClient,
 } from "viem";
 import { simulateCalls as viemSimulateCalls } from "viem/actions";
-import { BEACON_ABI } from "../abis/beacon";
-import { PERP_ABI } from "../abis/perp";
-import { PERP_FACTORY_ABI } from "../abis/perp-factory";
-import { PROTOCOL_FEE_MANAGER_ABI } from "../abis/protocol-fee-manager";
+import { EXTENDED_ERROR_DECODE_ABI } from "../abis/error-decode";
 import type { PerpCityContext } from "../context";
 import { type ContractError, contractErrorFromRevertData } from "../utils/errors";
 
@@ -59,12 +56,7 @@ const WRAPPED_ERROR_ABI = [
 ] as const;
 
 /** Every error the deployed perps, their modules, and the factory can throw. */
-export const SIMULATION_ERROR_ABI = [
-  ...PERP_ABI,
-  ...PERP_FACTORY_ABI,
-  ...PROTOCOL_FEE_MANAGER_ABI,
-  ...BEACON_ABI,
-].filter((item) => item.type === "error") as Abi;
+export const SIMULATION_ERROR_ABI = EXTENDED_ERROR_DECODE_ABI as Abi;
 
 const MAX_UNWRAP_DEPTH = 4;
 

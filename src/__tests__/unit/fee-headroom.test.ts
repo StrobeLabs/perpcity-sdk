@@ -1,5 +1,6 @@
-import { encodeAbiParameters, keccak256, toBytes } from "viem";
+import { type AbiEvent, encodeEventTopics, getAbiItem } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { PERP_ABI } from "../../abis/perp";
 import type { PerpCityContext } from "../../context";
 import { openTakerPosition } from "../../functions/perp-actions";
 import { approveUsdc } from "../../utils/approve";
@@ -9,9 +10,14 @@ const USDC = "0xbef280befee2cb28c20d1e4cc1da999b4da0f1fd";
 const PERP = "0x6d4051ffb71f391a5b4d8643a29ec6f66f67df50";
 const HOLDER = "0xcfd9841343cc86779d4162d38757bc2899ac7385";
 
-const TAKER_OPENED_TOPIC = keccak256(
-  toBytes("TakerOpened(uint256,(int256,uint256,int256,uint256,uint256,uint256,uint256))")
-);
+// A real v1 TakerOpened log for posId 1: indexed posId and owner, zeroed data.
+const TAKER_OPENED = getAbiItem({ abi: PERP_ABI, name: "TakerOpened" }) as AbiEvent;
+const TAKER_OPENED_TOPICS = encodeEventTopics({
+  abi: [TAKER_OPENED],
+  args: { posId: 1n, owner: HOLDER },
+});
+// margin (1 word) + SwapResult (8 words) + lastCumlFundingX96 (1 word).
+const TAKER_OPENED_DATA = `0x${"00".repeat(32 * 10)}` as const;
 
 function makeFakeContext(opts: { allowance: bigint }) {
   const simulateContract = vi.fn(async (args: Record<string, unknown>) => ({
@@ -31,8 +37,8 @@ function makeFakeContext(opts: { allowance: bigint }) {
       logs: [
         {
           address: PERP,
-          topics: [TAKER_OPENED_TOPIC],
-          data: encodeAbiParameters([{ type: "uint256" }], [1n]),
+          topics: TAKER_OPENED_TOPICS,
+          data: TAKER_OPENED_DATA,
         },
       ],
     })),
@@ -105,6 +111,7 @@ describe("fee fields stay out of simulation and on the write", () => {
       margin: 10,
       perpDelta: 400000n,
       amt1Limit: 0n,
+      maxTotalFee: 0n,
     });
 
     expect(simulateContract).toHaveBeenCalledTimes(1);

@@ -11,13 +11,12 @@ import { useChainId, useWalletClient } from 'wagmi';
 import {
   type PerpAddress,
   PerpCityContext,
-  calculateAlignedTicks,
   calculateTakerSlippageLimit,
-  estimateLiquidity,
   estimateTakerPosition,
+  maxTotalFeeFor,
   openMakerPosition,
   openTakerPosition,
-  scale6Decimals,
+  V1_DEPLOYMENTS,
 } from '../src';
 
 // Slippage tolerance applied to off-chain taker estimates, in percent.
@@ -28,25 +27,25 @@ const SLIPPAGE_PERCENT = 1;
 // ============================================================================
 
 function getDeployments(chainId: number) {
-  // In the v0.1.0 model each market is its own Perp contract. Provide the USDC
-  // address here; pass the specific market (perp) address per-trade as perpId.
-  const deployments: Record<number, { usdc: Hex }> = {
-    84532: {
-      usdc: '0x...' as Hex, // Replace with actual address
-    },
-    8453: {
-      usdc: '0x...' as Hex, // Replace with actual address
-    },
-  };
-  return deployments[chainId] || deployments[84532];
+  // v1.0.0 deployments. Pass the specific market (perp) address per trade.
+  return chainId === 42161 ? V1_DEPLOYMENTS.arbitrum : V1_DEPLOYMENTS.arbitrumSepolia;
 }
 
 function getRpcUrl(chainId: number): string {
   const rpcUrls: Record<number, string> = {
-    84532: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
-    8453: process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org',
+    421614: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc',
+    42161: process.env.NEXT_PUBLIC_RPC_URL || 'https://arb1.arbitrum.io/rpc',
   };
-  return rpcUrls[chainId] || rpcUrls[84532];
+  return rpcUrls[chainId] || rpcUrls[421614];
+}
+
+/** The fee cap for a quote: maxSwapFee + protocol fee on the quoted USD leg. */
+async function feeCap(context: PerpCityContext, perpId: PerpAddress, usdDelta: bigint) {
+  const { fees } = await context.getPerpData(perpId);
+  return maxTotalFeeFor(usdDelta, {
+    maxSwapFeeE6: BigInt(Math.round(fees.maxSwapFee * 1e6)),
+    protocolFeeE6: BigInt(Math.round(fees.protocolFee * 1e6)),
+  });
 }
 
 // ============================================================================
@@ -106,6 +105,7 @@ export function OpenLongButton({ perpId }: { perpId: PerpAddress }) {
         margin: 100,
         perpDelta: estimate.perpDelta,
         amt1Limit,
+        maxTotalFee: await feeCap(context, perpId, estimate.usdDelta),
       });
 
       console.log('Position opened:', position.positionId);
@@ -153,6 +153,7 @@ export function OpenShortButton({ perpId }: { perpId: PerpAddress }) {
         margin: 100,
         perpDelta: estimate.perpDelta,
         amt1Limit,
+        maxTotalFee: await feeCap(context, perpId, estimate.usdDelta),
       });
 
       console.log('Position opened:', position.positionId);
@@ -188,34 +189,16 @@ export function OpenMakerButton({ perpId }: { perpId: PerpAddress }) {
 
     setLoading(true);
     try {
-      // Get current mark price
       const perpData = await context.getPerpData(perpId);
-      const markPrice = perpData.mark;
-
       const margin = 100;
-      const priceLower = markPrice * 0.9; // 10% below mark
-      const priceUpper = markPrice * 1.1; // 10% above mark
-
-      // Size liquidity off-chain from the USDC committed and the chosen range.
-      const { alignedTickLower, alignedTickUpper } = calculateAlignedTicks(
-        priceLower,
-        priceUpper,
-        perpData.tickSpacing
-      );
-      const liquidity = await estimateLiquidity(
-        context,
-        alignedTickLower,
-        alignedTickUpper,
-        scale6Decimals(margin)
-      );
 
       const position = await openMakerPosition(context, perpId, {
         margin,
-        priceLower,
-        priceUpper,
-        liquidity,
-        maxAmt0In: margin, // Max underlying perp to pull in
-        maxAmt1In: margin, // Max USDC to pull in
+        priceLower: perpData.ammPrice * 0.9, // 10% below the pool price
+        priceUpper: perpData.ammPrice * 1.1, // 10% above the pool price
+        liquidity: 1_000_000_000n, // size with getAmountsForLiquidity for your budget
+        maxAmt0In: 1_000_000, // Max perp the range takes in
+        maxAmt1In: 1_000_000, // Max USD the range takes in
       });
 
       console.log('Maker position opened:', position.positionId);
@@ -281,21 +264,21 @@ export function TradingInterface({ perpId }: { perpId: PerpAddress }) {
  *
  *    import { WagmiProvider, createConfig, http } from 'wagmi';
  *    import { PrivyProvider } from '@privy-io/react-auth';
- *    import { baseSepolia } from 'wagmi/chains';
+ *    import { arbitrumSepolia } from 'wagmi/chains';
  *
  *    // Option 1: Using Alchemy (recommended for production)
  *    const wagmiConfig = createConfig({
- *      chains: [baseSepolia],
+ *      chains: [arbitrumSepolia],
  *      transports: {
- *        [baseSepolia.id]: http(`https://base-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`),
+ *        [arbitrumSepolia.id]: http(`https://arb-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`),
  *      },
  *    });
  *
  *    // Option 2: Using public RPC (for development)
  *    const wagmiConfig = createConfig({
- *      chains: [baseSepolia],
+ *      chains: [arbitrumSepolia],
  *      transports: {
- *        [baseSepolia.id]: http('https://sepolia.base.org'),
+ *        [arbitrumSepolia.id]: http('https://sepolia-rollup.arbitrum.io/rpc'),
  *      },
  *    });
  *

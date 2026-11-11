@@ -1,4 +1,4 @@
-import { calculateAlignedTicks, estimateLiquidity, openMakerPosition, scale6Decimals } from '../dist';
+import { openMakerPosition } from '../dist';
 import { setup } from './setup';
 
 async function main() {
@@ -6,35 +6,22 @@ async function main() {
 
   console.log('Fetching perp data...');
   const perpData = await context.getPerpData(perpId);
-  console.log('Current mark price:', perpData.mark);
+  console.log('Pool price:', perpData.ammPrice);
 
-  // Provide liquidity in a band around the current mark.
+  // Provide liquidity in a band around the pool price. LIQUIDITY is the Uniswap
+  // v4 liquidity amount; size it with getAmountsForLiquidity for your budget.
   const margin = 100;
-  const priceLower = perpData.mark * 0.9;
-  const priceUpper = perpData.mark * 1.1;
-
-  // Size liquidity off-chain from the USDC we are willing to commit.
-  const { alignedTickLower, alignedTickUpper } = calculateAlignedTicks(
-    priceLower,
-    priceUpper,
-    perpData.tickSpacing
-  );
-  const liquidity = await estimateLiquidity(
-    context,
-    alignedTickLower,
-    alignedTickUpper,
-    scale6Decimals(margin)
-  );
+  const liquidity = BigInt(process.env.LIQUIDITY ?? '1000000000');
 
   console.log('Opening maker position...');
   const makerPosition = await openMakerPosition(context, perpId, {
     margin,
-    priceLower,
-    priceUpper,
+    priceLower: perpData.ammPrice * 0.9,
+    priceUpper: perpData.ammPrice * 1.1,
     liquidity,
-    // Max underlying the position may pull in (human units; bigint = raw).
-    maxAmt0In: margin,
-    maxAmt1In: margin,
+    // Max perp and USD the range may take in (human units; bigint = raw).
+    maxAmt0In: 1_000_000,
+    maxAmt1In: 1_000_000,
   });
 
   console.log('Maker Position Opened');

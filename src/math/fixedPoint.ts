@@ -1,6 +1,4 @@
-import type { PerpBuild } from "../utils/build";
 import { Q96 } from "../utils/constants";
-import { BUILD_RULES } from "./buildRules";
 
 export { Q96 };
 
@@ -26,28 +24,6 @@ export function mulDiv(a: bigint, b: bigint, d: bigint): bigint {
 export function mulDivUp(a: bigint, b: bigint, d: bigint): bigint {
   const product = a * b;
   return product % d === 0n ? product / d : product / d + 1n;
-}
-
-/**
- * `SignedFixedPointMathLib.sFullMulDiv`: |a|·|b|/d truncated, sign restored.
- * With `roundUp`, a remainder adds 1: for any sign on 58b42b7, only for a
- * non-negative result on v0.2.2 (the library changed between the builds).
- */
-export function sMulDiv(
-  a: bigint,
-  b: bigint,
-  d: bigint,
-  roundUp: boolean,
-  build: PerpBuild
-): bigint {
-  const product = abs(a) * abs(b);
-  const magnitude = product / d;
-  const negative = (a < 0n && b > 0n) || (a > 0n && b < 0n);
-  let result = negative ? -magnitude : magnitude;
-  if (roundUp && product % d !== 0n && (BUILD_RULES[build].signedRoundUpAnySign || !negative)) {
-    result += 1n;
-  }
-  return result;
 }
 
 /** Solady `FixedPointMathLib.avg`: floor((a + b) / 2). */

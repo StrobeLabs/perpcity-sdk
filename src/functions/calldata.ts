@@ -3,22 +3,48 @@ import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
 import type { PerpAddress } from "../types";
 import type {
+  AdjustMakerParams,
+  AdjustTakerParams,
   CallData,
   ClosePositionParams,
+  MoveMakerParams,
   OpenMakerPositionParams,
   OpenTakerPositionParams,
 } from "../types/entity-data";
-import { scale6Decimals } from "../utils";
+import { scale6Decimals } from "../utils/conversions";
 import { withErrorHandling } from "../utils/errors";
-import { calculateAlignedTicks } from "./perp-actions";
+import { calculateAlignedTicks } from "../utils/ticks";
 
-// Calldata builders mirror the on-chain calls made by the execute-and-wait
-// functions in `perp-actions.ts` / `position.ts`, but return raw calldata
-// instead of submitting it. They deliberately omit fee headroom and gas tuning
-// (`withFeeHeadroom`): those are EOA `writeContract` concerns, whereas a
-// userOperation's gas is estimated and paid by the bundler/paymaster. The
-// argument encoding is identical, so a built call hits the same contract path
-// as the executed equivalent.
+// Calldata builders return the exact v1 call that the execute-and-wait
+// functions in `perp-actions.ts` submit. Every trade carries a `deadline`;
+// taker trades also carry `maxTotalFee`, and taker adjustments `reduceOnly`.
+
+/** Default lifetime of a built call: 10 minutes. */
+export const DEFAULT_DEADLINE_SECONDS = 600n;
+
+/** `now + seconds`, as the uint64 unix timestamp the contract compares to `block.timestamp`. */
+export function deadlineIn(seconds: bigint = DEFAULT_DEADLINE_SECONDS): bigint {
+  return BigInt(Math.floor(Date.now() / 1000)) + seconds;
+}
+
+const resolveDeadline = (deadline: bigint | undefined) => deadline ?? deadlineIn();
+
+/**
+ * An upper bound for `maxTotalFee` on a taker swap of `usdVolume` (USDC, 6
+ * decimals, either sign): the volume at the fees module's `maxSwapFee()` plus
+ * the perp's cached protocol fee, rounded up, plus `roundingSlack` for the
+ * per-segment round-ups. The contract compares the sum of the LP, protocol,
+ * creator and insurance fees to this value.
+ */
+export function maxTotalFeeFor(
+  usdVolume: bigint,
+  rates: { maxSwapFeeE6: bigint; protocolFeeE6: bigint },
+  roundingSlack = 100n
+): bigint {
+  const volume = usdVolume < 0n ? -usdVolume : usdVolume;
+  const rate = rates.maxSwapFeeE6 + rates.protocolFeeE6;
+  return (volume * rate + 999_999n) / 1_000_000n + roundingSlack;
+}
 
 function requireAccount(context: PerpCityContext): Address {
   const account = context.walletClient.account?.address;
@@ -31,6 +57,8 @@ function toContractAmount(value: number | bigint | undefined): bigint {
   return typeof value === "bigint" ? value : scale6Decimals(value);
 }
 
+const perpCall = (to: PerpAddress, data: `0x${string}`): CallData => ({ to, data, value: 0n });
+
 /** ERC-20 `approve(spender, amount)` against the configured USDC token. */
 export function buildApproveUsdcCall(
   context: PerpCityContext,
@@ -40,16 +68,12 @@ export function buildApproveUsdcCall(
   if (!spender) throw new Error("buildApproveUsdcCall requires a spender/perp address");
   return {
     to: context.deployments().usdc,
-    data: encodeFunctionData({
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [spender, amount],
-    }),
+    data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender, amount] }),
     value: 0n,
   };
 }
 
-/** `Perp.openTaker` calldata. Mirrors {@link openTakerPosition}. */
+/** `Perp.openTaker(OpenTakerParams)` calldata. */
 export function buildOpenTakerPositionCall(
   context: PerpCityContext,
   perpAddress: PerpAddress,
@@ -57,26 +81,51 @@ export function buildOpenTakerPositionCall(
 ): CallData {
   if (params.margin <= 0) throw new Error("Margin must be greater than 0");
   if (params.perpDelta === 0n) throw new Error("perpDelta must be non-zero");
-
-  return {
-    to: perpAddress,
-    data: encodeFunctionData({
+  return perpCall(
+    perpAddress,
+    encodeFunctionData({
       abi: PERP_ABI,
       functionName: "openTaker",
       args: [
         {
-          holder: requireAccount(context),
+          holder: params.holder ?? requireAccount(context),
           margin: scale6Decimals(params.margin),
           perpDelta: params.perpDelta,
           amt1Limit: params.amt1Limit,
+          maxTotalFee: params.maxTotalFee,
+          deadline: resolveDeadline(params.deadline),
         },
       ],
-    }),
-    value: 0n,
-  };
+    })
+  );
 }
 
-/** `Perp.openMaker` calldata. Mirrors {@link openMakerPosition}. */
+/** `Perp.adjustTaker(AdjustTakerParams)` calldata. */
+export function buildAdjustTakerCall(
+  perpAddress: PerpAddress,
+  params: AdjustTakerParams
+): CallData {
+  return perpCall(
+    perpAddress,
+    encodeFunctionData({
+      abi: PERP_ABI,
+      functionName: "adjustTaker",
+      args: [
+        {
+          posId: params.posId,
+          marginDelta: params.marginDelta,
+          perpDelta: params.perpDelta,
+          amt1Limit: params.amt1Limit,
+          maxTotalFee: params.maxTotalFee,
+          reduceOnly: params.reduceOnly,
+          deadline: resolveDeadline(params.deadline),
+        },
+      ],
+    })
+  );
+}
+
+/** `Perp.openMaker(OpenMakerParams)` calldata. Ticks are aligned to the market tick spacing. */
 export async function buildOpenMakerPositionCall(
   context: PerpCityContext,
   perpAddress: PerpAddress,
@@ -87,74 +136,87 @@ export async function buildOpenMakerPositionCall(
     if (params.priceLower >= params.priceUpper)
       throw new Error("priceLower must be less than priceUpper");
 
-    const perpData = await context.getPerpData(perpAddress);
+    const { key } = await context.getPerpConfig(perpAddress);
     const { alignedTickLower, alignedTickUpper } = calculateAlignedTicks(
       params.priceLower,
       params.priceUpper,
-      perpData.tickSpacing
+      key.tickSpacing
     );
-
-    const maxAmt0In =
-      typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
-    const maxAmt1In =
-      typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
-
-    return {
-      to: perpAddress,
-      data: encodeFunctionData({
+    return perpCall(
+      perpAddress,
+      encodeFunctionData({
         abi: PERP_ABI,
         functionName: "openMaker",
         args: [
           {
-            holder: requireAccount(context),
+            holder: params.holder ?? requireAccount(context),
             margin: scale6Decimals(params.margin),
             tickLower: alignedTickLower,
             tickUpper: alignedTickUpper,
             liquidity: params.liquidity,
-            maxAmt0In,
-            maxAmt1In,
+            maxAmt0In: toContractAmount(params.maxAmt0In),
+            maxAmt1In: toContractAmount(params.maxAmt1In),
+            deadline: resolveDeadline(params.deadline),
           },
         ],
-      }),
-      value: 0n,
-    };
+      })
+    );
   }, "buildOpenMakerPositionCall");
 }
 
-/** `Perp.adjustTaker` calldata. Mirrors {@link adjustTaker}. */
-export function buildAdjustTakerCall(
-  perpAddress: PerpAddress,
-  params: { posId: bigint; marginDelta: bigint; perpDelta: bigint; amt1Limit: bigint }
-): CallData {
-  return {
-    to: perpAddress,
-    data: encodeFunctionData({ abi: PERP_ABI, functionName: "adjustTaker", args: [params] }),
-    value: 0n,
-  };
-}
-
-/** `Perp.adjustMaker` calldata. Mirrors {@link adjustMaker}. */
+/** `Perp.adjustMaker(AdjustMakerParams)` calldata. */
 export function buildAdjustMakerCall(
   perpAddress: PerpAddress,
-  params: {
-    posId: bigint;
-    marginDelta: bigint;
-    liquidityDelta: bigint;
-    amt0Limit: bigint;
-    amt1Limit: bigint;
-  }
+  params: AdjustMakerParams
 ): CallData {
-  return {
-    to: perpAddress,
-    data: encodeFunctionData({ abi: PERP_ABI, functionName: "adjustMaker", args: [params] }),
-    value: 0n,
-  };
+  return perpCall(
+    perpAddress,
+    encodeFunctionData({
+      abi: PERP_ABI,
+      functionName: "adjustMaker",
+      args: [
+        {
+          posId: params.posId,
+          marginDelta: params.marginDelta,
+          liquidityDelta: params.liquidityDelta,
+          amt0Limit: params.amt0Limit,
+          amt1Limit: params.amt1Limit,
+          deadline: resolveDeadline(params.deadline),
+        },
+      ],
+    })
+  );
+}
+
+/** `Perp.moveMaker(MoveMakerParams)` calldata: replace a maker range on the same position id. */
+export function buildMoveMakerCall(perpAddress: PerpAddress, params: MoveMakerParams): CallData {
+  return perpCall(
+    perpAddress,
+    encodeFunctionData({
+      abi: PERP_ABI,
+      functionName: "moveMaker",
+      args: [
+        {
+          posId: params.posId,
+          tickLower: params.tickLower,
+          tickUpper: params.tickUpper,
+          liquidity: params.liquidity,
+          removeAmt0Min: params.removeAmt0Min,
+          removeAmt1Min: params.removeAmt1Min,
+          addAmt0Max: params.addAmt0Max,
+          addAmt1Max: params.addAmt1Max,
+          marginDelta: params.marginDelta,
+          deadline: resolveDeadline(params.deadline),
+        },
+      ],
+    })
+  );
 }
 
 /**
- * Calldata that closes `positionId`. Reads the position to decide maker vs.
- * taker and the unwind deltas, exactly as {@link closePosition} does, then
- * returns the matching `adjustMaker` / `adjustTaker` call.
+ * Calldata that fully closes `positionId`. A maker removes all its liquidity;
+ * a taker sells its whole perp inventory with `reduceOnly: true`, so a stale
+ * size can never flip the position.
  */
 export async function buildClosePositionCall(
   context: PerpCityContext,
@@ -164,7 +226,6 @@ export async function buildClosePositionCall(
 ): Promise<CallData> {
   return withErrorHandling(async () => {
     const rawData = await context.getPositionRawData(perpAddress, positionId);
-
     if (rawData.makerDetails) {
       return buildAdjustMakerCall(perpAddress, {
         posId: positionId,
@@ -172,13 +233,20 @@ export async function buildClosePositionCall(
         liquidityDelta: -rawData.makerDetails.liquidity,
         amt0Limit: toContractAmount(params.amt0Limit),
         amt1Limit: toContractAmount(params.amt1Limit),
+        deadline: params.deadline,
       });
+    }
+    if (params.maxTotalFee === undefined) {
+      throw new Error("maxTotalFee is required to close a taker position");
     }
     return buildAdjustTakerCall(perpAddress, {
       posId: positionId,
       marginDelta: 0n,
-      perpDelta: -rawData.entryPerpDelta,
+      perpDelta: -rawData.perpDelta,
       amt1Limit: toContractAmount(params.amt1Limit),
+      maxTotalFee: params.maxTotalFee,
+      reduceOnly: true,
+      deadline: params.deadline,
     });
   }, `buildClosePositionCall for position ${positionId}`);
 }
@@ -188,100 +256,95 @@ async function maybeApprovalCall(
   spender: Address,
   requiredAmount: bigint
 ): Promise<CallData | null> {
-  const currentAllowance = (await context.publicClient.readContract({
+  const currentAllowance = await context.publicClient.readContract({
     address: context.deployments().usdc,
     abi: erc20Abi,
     functionName: "allowance",
     args: [requireAccount(context), spender],
     blockTag: "latest",
-  })) as bigint;
+  });
   if (currentAllowance >= requiredAmount) return null;
   return buildApproveUsdcCall(context, requiredAmount, spender);
 }
 
+async function withApproval(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  requiredAmount: bigint,
+  call: CallData
+): Promise<CallData[]> {
+  const approval =
+    requiredAmount > 0n ? await maybeApprovalCall(context, perpAddress, requiredAmount) : null;
+  return approval ? [approval, call] : [call];
+}
+
 /**
- * Full ordered call batch for opening a taker position: a USDC `approve` (only
- * when the current allowance is short) followed by `openTaker`. Submit the
- * whole array as one atomic userOperation so approval and trade settle
- * together — the equivalent of the SDK's internal `ensureUsdcAllowance`, but as
- * a single sponsored transaction instead of two sequential ones.
+ * Ordered batch for opening a taker: a USDC `approve` (only when the allowance
+ * is short) then `openTaker`. Submit it as one atomic userOperation.
  */
 export async function buildOpenTakerPositionCalls(
   context: PerpCityContext,
   perpAddress: PerpAddress,
   params: OpenTakerPositionParams
 ): Promise<CallData[]> {
-  const calls: CallData[] = [];
-  const approval = await maybeApprovalCall(context, perpAddress, scale6Decimals(params.margin));
-  if (approval) calls.push(approval);
-  calls.push(buildOpenTakerPositionCall(context, perpAddress, params));
-  return calls;
+  const call = buildOpenTakerPositionCall(context, perpAddress, params);
+  return withApproval(context, perpAddress, scale6Decimals(params.margin), call);
 }
 
-/**
- * Full ordered call batch for a taker adjustment: a USDC `approve` (only when
- * margin is being added and the current allowance is short) followed by
- * `adjustTaker`. Margin is the only USDC the contract pulls on a taker adjust
- * (the swap's USD leg settles inside position inventory), so the approval
- * covers exactly `marginDelta`.
- */
+/** Ordered batch for a taker adjustment; the approval covers a positive `marginDelta`. */
 export async function buildAdjustTakerCalls(
   context: PerpCityContext,
   perpAddress: PerpAddress,
-  params: { posId: bigint; marginDelta: bigint; perpDelta: bigint; amt1Limit: bigint }
+  params: AdjustTakerParams
 ): Promise<CallData[]> {
-  const calls: CallData[] = [];
-  if (params.marginDelta > 0n) {
-    const approval = await maybeApprovalCall(context, perpAddress, params.marginDelta);
-    if (approval) calls.push(approval);
-  }
-  calls.push(buildAdjustTakerCall(perpAddress, params));
-  return calls;
+  const marginIn = params.marginDelta > 0n ? params.marginDelta : 0n;
+  return withApproval(context, perpAddress, marginIn, buildAdjustTakerCall(perpAddress, params));
 }
 
 /**
- * Full ordered call batch for a maker adjustment; see
- * {@link buildAdjustTakerCalls}. Like `openMaker`, an `adjustMaker` that adds
- * liquidity can pull the USDC leg of the LP deposit (up to `amt1Limit`) on top
- * of the margin, so the approval covers both.
+ * Ordered batch for a maker adjustment. Adding liquidity can pull the USD leg
+ * (up to `amt1Limit`) on top of the margin, so the approval covers both.
  */
 export async function buildAdjustMakerCalls(
   context: PerpCityContext,
   perpAddress: PerpAddress,
-  params: {
-    posId: bigint;
-    marginDelta: bigint;
-    liquidityDelta: bigint;
-    amt0Limit: bigint;
-    amt1Limit: bigint;
-  }
+  params: AdjustMakerParams
 ): Promise<CallData[]> {
-  const calls: CallData[] = [];
   const marginIn = params.marginDelta > 0n ? params.marginDelta : 0n;
   const usdLegIn = params.liquidityDelta > 0n ? params.amt1Limit : 0n;
-  const requiredApproval = marginIn + usdLegIn;
-  if (requiredApproval > 0n) {
-    const approval = await maybeApprovalCall(context, perpAddress, requiredApproval);
-    if (approval) calls.push(approval);
-  }
-  calls.push(buildAdjustMakerCall(perpAddress, params));
-  return calls;
+  return withApproval(
+    context,
+    perpAddress,
+    marginIn + usdLegIn,
+    buildAdjustMakerCall(perpAddress, params)
+  );
 }
 
-/** Full ordered call batch for opening a maker position; see {@link buildOpenTakerPositionCalls}. */
+/** Ordered batch for a maker move; the approval covers margin in plus the new range's USD leg. */
+export async function buildMoveMakerCalls(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  params: MoveMakerParams
+): Promise<CallData[]> {
+  const marginIn = params.marginDelta > 0n ? params.marginDelta : 0n;
+  return withApproval(
+    context,
+    perpAddress,
+    marginIn + params.addAmt1Max,
+    buildMoveMakerCall(perpAddress, params)
+  );
+}
+
+/**
+ * Ordered batch for opening a maker. `openMaker` can pull the margin and the
+ * USD leg of the deposit (up to `maxAmt1In`), so the approval covers both.
+ */
 export async function buildOpenMakerPositionCalls(
   context: PerpCityContext,
   perpAddress: PerpAddress,
   params: OpenMakerPositionParams
 ): Promise<CallData[]> {
-  const calls: CallData[] = [];
-  // `openMaker` can pull both the margin (collateral) and the USDC leg of the LP
-  // deposit (currency1, up to `maxAmt1In`), so the approval must cover the maximum
-  // possible transfer. A margin-only approval reverts whenever amt1 > 0 — and the
-  // batched single-userOp path has no standing allowance to fall back on.
-  const requiredApproval = scale6Decimals(params.margin) + toContractAmount(params.maxAmt1In);
-  const approval = await maybeApprovalCall(context, perpAddress, requiredApproval);
-  if (approval) calls.push(approval);
-  calls.push(await buildOpenMakerPositionCall(context, perpAddress, params));
-  return calls;
+  const call = await buildOpenMakerPositionCall(context, perpAddress, params);
+  const required = scale6Decimals(params.margin) + toContractAmount(params.maxAmt1In);
+  return withApproval(context, perpAddress, required, call);
 }

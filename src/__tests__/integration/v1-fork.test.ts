@@ -379,4 +379,48 @@ describe.runIf(FORK_URL)("v1.0.0 Perp on an Arbitrum Sepolia fork", () => {
       );
     }, 60_000);
   });
+
+  it("a maker close with inventory converts to a taker; a reduce-only close ends it", async () => {
+    if (LISTED_PERP) return;
+    const maker = await openMakerPosition(fork.context, perp, {
+      margin: 5_000,
+      priceLower: 0.25,
+      priceUpper: 1,
+      liquidity: 10_000_000_000n,
+      maxAmt0In: 2n ** 127n,
+      maxAmt1In: 2n ** 127n,
+    });
+
+    // A long trade through both ranges leaves the new maker short perp inventory.
+    const perpData = await fork.context.getPerpData(perp);
+    await openTakerPosition(fork.context, perp, {
+      margin: 20,
+      perpDelta: derivePerpDelta({ margin: 20, leverage: 1, price: 0.5, isLong: true }),
+      amt1Limit: 1_000_000_000n,
+      maxTotalFee: maxTotalFeeFor(20_000_000n, {
+        maxSwapFeeE6: BigInt(Math.round(perpData.fees.maxSwapFee * 1e6)),
+        protocolFeeE6: BigInt(Math.round(perpData.fees.protocolFee * 1e6)),
+      }),
+    });
+
+    const makerClose = await closePosition(fork.context, perp, maker.positionId, {
+      amt0Limit: 0n,
+      amt1Limit: 0n,
+    });
+    expect(makerClose.converted).toBe(true);
+    const converted = await fork.context.getPositionRawData(perp, maker.positionId);
+    expect(converted.owner.toLowerCase()).toBe(fork.account.toLowerCase());
+    expect(converted.makerDetails).toBeNull();
+    expect(converted.perpDelta).toBeLessThan(0n);
+
+    // Short close: amt1Limit is the max USD paid, so it cannot be 0.
+    const takerClose = await closePosition(fork.context, perp, maker.positionId, {
+      amt1Limit: 1_000_000_000n,
+      maxTotalFee: 10_000_000n,
+    });
+    expect(takerClose.converted).toBe(false);
+    expect(await readPerpView(fork.publicClient, perp, "positionOwner", [maker.positionId])).toBe(
+      "0x0000000000000000000000000000000000000000"
+    );
+  }, 120_000);
 });

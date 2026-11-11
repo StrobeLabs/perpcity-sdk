@@ -1,5 +1,5 @@
 import type { Address, Hex, TransactionReceipt } from "viem";
-import { decodeEventLog, decodeFunctionData, erc20Abi } from "viem";
+import { decodeEventLog, erc20Abi } from "viem";
 import { PERP_ABI } from "../abis/perp";
 import { PERP_FACTORY_ABI } from "../abis/perp-factory";
 import type { PerpCityContext } from "../context";
@@ -30,37 +30,9 @@ import {
   buildOpenTakerPositionCall,
 } from "./calldata";
 import { OpenPosition } from "./open-position";
+import { sendCall } from "./send-call";
 
 export { calculateAlignedTicks } from "../utils/ticks";
-
-/**
- * Simulate, send and wait. The call is built by the matching `build*Call`
- * function, so an executed write and a batched userOperation encode the same
- * bytes.
- */
-async function sendCall(
-  context: PerpCityContext,
-  call: { to: Address; data: Hex }
-): Promise<{ txHash: Hex; receipt: TransactionReceipt }> {
-  // Decode the built bytes back into a typed call so the simulation decodes
-  // reverts with PERP_ABI, then send exactly the simulated request.
-  const { functionName, args } = decodeFunctionData({ abi: PERP_ABI, data: call.data });
-  const { request } = await context.publicClient.simulateContract({
-    address: call.to,
-    abi: PERP_ABI,
-    functionName,
-    args,
-    account: context.walletClient.account,
-  } as Parameters<typeof context.publicClient.simulateContract>[0]);
-  const txHash = await context.walletClient.writeContract(
-    (await withFeeHeadroom(context.publicClient, request)) as Parameters<
-      typeof context.walletClient.writeContract
-    >[0]
-  );
-  const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-  if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-  return { txHash, receipt };
-}
 
 /** The `posId` of the first `eventName` log the perp emitted in `receipt`. */
 export function positionIdFromReceipt(
@@ -76,6 +48,26 @@ export function positionIdFromReceipt(
     } catch (_notAPerpEvent) {}
   }
   return null;
+}
+
+/**
+ * True when `receipt` has the perp's `MakerConverted` log for `posId`: the
+ * maker removed all its liquidity with perp inventory left, so the position
+ * is now a taker. Close that taker with a reduce-only `adjustTaker`.
+ */
+export function makerConvertedFromReceipt(
+  receipt: Pick<TransactionReceipt, "logs">,
+  perpAddress: PerpAddress,
+  posId: bigint
+): boolean {
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== perpAddress.toLowerCase()) continue;
+    try {
+      const decoded = decodeEventLog({ abi: PERP_ABI, data: log.data, topics: log.topics });
+      if (decoded.eventName === "MakerConverted" && decoded.args.posId === posId) return true;
+    } catch (_notAPerpEvent) {}
+  }
+  return false;
 }
 
 /**
@@ -204,9 +196,7 @@ export async function openMakerPosition(
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
     const call = await buildOpenMakerPositionCall(context, perpAddress, params);
-    const maxAmt1In =
-      typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
-    await ensureUsdcAllowance(context, perpAddress, scale6Decimals(params.margin) + maxAmt1In);
+    await ensureUsdcAllowance(context, perpAddress, scale6Decimals(params.margin));
     const { txHash, receipt } = await sendCall(context, call);
     const posId = positionIdFromReceipt(receipt, perpAddress, "MakerOpened");
     if (posId === null) throw new Error(`MakerOpened event not found. Hash: ${txHash}`);
@@ -234,9 +224,7 @@ export async function adjustMaker(
 ): Promise<{ txHash: Hex }> {
   return withErrorHandling(async () => {
     const call = buildAdjustMakerCall(perpAddress, params);
-    const marginIn = params.marginDelta > 0n ? params.marginDelta : 0n;
-    const usdLegIn = params.liquidityDelta > 0n ? params.amt1Limit : 0n;
-    await ensureUsdcAllowance(context, perpAddress, marginIn + usdLegIn);
+    await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
     const { txHash } = await sendCall(context, call);
     return { txHash };
   }, `adjustMaker for position ${params.posId}`);
@@ -249,8 +237,7 @@ export async function moveMaker(
 ): Promise<{ txHash: Hex }> {
   return withErrorHandling(async () => {
     const call = buildMoveMakerCall(perpAddress, params);
-    const marginIn = params.marginDelta > 0n ? params.marginDelta : 0n;
-    await ensureUsdcAllowance(context, perpAddress, marginIn + params.addAmt1Max);
+    await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
     const { txHash } = await sendCall(context, call);
     return { txHash };
   }, `moveMaker for position ${params.posId}`);

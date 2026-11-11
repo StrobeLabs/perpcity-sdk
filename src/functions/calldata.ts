@@ -214,9 +214,12 @@ export function buildMoveMakerCall(perpAddress: PerpAddress, params: MoveMakerPa
 }
 
 /**
- * Calldata that fully closes `positionId`. A maker removes all its liquidity;
- * a taker sells its whole perp inventory with `reduceOnly: true`, so a stale
- * size can never flip the position.
+ * Calldata that closes `positionId`. A taker trades out its whole perp
+ * inventory with `reduceOnly: true`, so a stale size can never flip it.
+ * A maker removes all its liquidity. If perp inventory is left, the contract
+ * converts the maker to a taker (`MakerConverted`) instead of closing it; the
+ * conversion reverts `MarginTooLow` or `MarginRatioTooLow` when the margin is
+ * too small for a taker. See `closePosition` for the second step.
  */
 export async function buildClosePositionCall(
   context: PerpCityContext,
@@ -302,8 +305,9 @@ export async function buildAdjustTakerCalls(
 }
 
 /**
- * Ordered batch for a maker adjustment. Adding liquidity can pull the USD leg
- * (up to `amt1Limit`) on top of the margin, so the approval covers both.
+ * Ordered batch for a maker adjustment. v1 pulls only margin: the USD leg of a
+ * liquidity change is position accounting, not a transfer. So the approval
+ * covers a positive `marginDelta` only.
  */
 export async function buildAdjustMakerCalls(
   context: PerpCityContext,
@@ -311,33 +315,23 @@ export async function buildAdjustMakerCalls(
   params: AdjustMakerParams
 ): Promise<CallData[]> {
   const marginIn = params.marginDelta > 0n ? params.marginDelta : 0n;
-  const usdLegIn = params.liquidityDelta > 0n ? params.amt1Limit : 0n;
-  return withApproval(
-    context,
-    perpAddress,
-    marginIn + usdLegIn,
-    buildAdjustMakerCall(perpAddress, params)
-  );
+  return withApproval(context, perpAddress, marginIn, buildAdjustMakerCall(perpAddress, params));
 }
 
-/** Ordered batch for a maker move; the approval covers margin in plus the new range's USD leg. */
+/** Ordered batch for a maker move; the approval covers a positive `marginDelta` only. */
 export async function buildMoveMakerCalls(
   context: PerpCityContext,
   perpAddress: PerpAddress,
   params: MoveMakerParams
 ): Promise<CallData[]> {
   const marginIn = params.marginDelta > 0n ? params.marginDelta : 0n;
-  return withApproval(
-    context,
-    perpAddress,
-    marginIn + params.addAmt1Max,
-    buildMoveMakerCall(perpAddress, params)
-  );
+  return withApproval(context, perpAddress, marginIn, buildMoveMakerCall(perpAddress, params));
 }
 
 /**
- * Ordered batch for opening a maker. `openMaker` can pull the margin and the
- * USD leg of the deposit (up to `maxAmt1In`), so the approval covers both.
+ * Ordered batch for opening a maker. `openMaker` pulls only the margin (the
+ * USD leg of the deposit is position accounting), so the approval covers the
+ * margin only.
  */
 export async function buildOpenMakerPositionCalls(
   context: PerpCityContext,
@@ -345,6 +339,5 @@ export async function buildOpenMakerPositionCalls(
   params: OpenMakerPositionParams
 ): Promise<CallData[]> {
   const call = await buildOpenMakerPositionCall(context, perpAddress, params);
-  const required = scale6Decimals(params.margin) + toContractAmount(params.maxAmt1In);
-  return withApproval(context, perpAddress, required, call);
+  return withApproval(context, perpAddress, scale6Decimals(params.margin), call);
 }

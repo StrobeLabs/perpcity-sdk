@@ -7,9 +7,11 @@ import type {
   PositionPreview,
   PositionRawData,
 } from "../types/entity-data";
-import { scale6Decimals, scaleFromX96 } from "../utils/conversions";
+import { scaleFromX96 } from "../utils/conversions";
 import { withErrorHandling } from "../utils/errors";
-import { adjustMaker, adjustTaker } from "./perp-actions";
+import { buildClosePositionCall } from "./calldata";
+import { makerConvertedFromReceipt } from "./perp-actions";
+import { sendCall } from "./send-call";
 
 export function getPositionPerpId(positionData: OpenPositionData): PerpAddress {
   return positionData.perpId;
@@ -28,8 +30,21 @@ export function getPositionIsMaker(positionData: OpenPositionData): boolean | un
 }
 
 /**
- * Fully close a position. A taker sells its whole inventory with
- * `reduceOnly: true` and needs `maxTotalFee`; a maker removes all liquidity.
+ * Close a position.
+ *
+ * Taker: trades out the whole inventory with `reduceOnly: true` and needs
+ * `maxTotalFee`. `amt1Limit` is the min USD received on a long close and the
+ * max USD paid on a short close, so `amt1Limit: 0` fails a short close
+ * (`MaxAmtExceeded`).
+ *
+ * Maker: removes all liquidity. With no perp inventory left the position
+ * closes. With perp inventory left the contract converts it to a taker
+ * (`MakerConverted`) and the result has `converted: true`; call
+ * `closePosition` again (with `maxTotalFee`) for the reduce-only taker close.
+ * The conversion reverts `MarginTooLow` or `MarginRatioTooLow` when the margin
+ * is too small for a taker. To add margin in the same transaction, call
+ * `adjustMaker` with a positive `marginDelta` and the full negative
+ * `liquidityDelta`.
  */
 export async function closePosition(
   context: PerpCityContext,
@@ -38,32 +53,9 @@ export async function closePosition(
   params: ClosePositionParams
 ): Promise<ClosePositionResult> {
   return withErrorHandling(async () => {
-    const rawData = await context.getPositionRawData(perpAddress, positionId);
-    const amount = (v: number | bigint | undefined) =>
-      v === undefined ? 0n : typeof v === "bigint" ? v : scale6Decimals(v);
-
-    if (rawData.makerDetails) {
-      return adjustMaker(context, perpAddress, {
-        posId: positionId,
-        marginDelta: 0n,
-        liquidityDelta: -rawData.makerDetails.liquidity,
-        amt0Limit: amount(params.amt0Limit),
-        amt1Limit: amount(params.amt1Limit),
-        deadline: params.deadline,
-      });
-    }
-    if (params.maxTotalFee === undefined) {
-      throw new Error("maxTotalFee is required to close a taker position");
-    }
-    return adjustTaker(context, perpAddress, {
-      posId: positionId,
-      marginDelta: 0n,
-      perpDelta: -rawData.perpDelta,
-      amt1Limit: amount(params.amt1Limit),
-      maxTotalFee: params.maxTotalFee,
-      reduceOnly: true,
-      deadline: params.deadline,
-    });
+    const call = await buildClosePositionCall(context, perpAddress, positionId, params);
+    const { txHash, receipt } = await sendCall(context, call);
+    return { txHash, converted: makerConvertedFromReceipt(receipt, perpAddress, positionId) };
   }, `closePosition for position ${positionId}`);
 }
 

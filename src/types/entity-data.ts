@@ -128,7 +128,10 @@ export type OpenMakerPositionParams = TxDeadline & {
   liquidity: bigint;
   /** Max perp atoms in (number = human units, bigint = raw). */
   maxAmt0In: number | bigint;
-  /** Max USDC in (number = human units, bigint = raw). */
+  /**
+   * Max USD leg of the deposit (number = human units, bigint = raw). This is
+   * a slippage limit on position accounting; v1 transfers only `margin`.
+   */
   maxAmt1In: number | bigint;
   holder?: Address;
 };
@@ -164,6 +167,12 @@ export type ClosePositionParams = TxDeadline & {
 
 export type ClosePositionResult = {
   txHash: Hex;
+  /**
+   * True when a maker close converted the position to a taker
+   * (`MakerConverted`): the position still exists. Close it with a second
+   * `closePosition` call (reduce-only taker close).
+   */
+  converted: boolean;
 };
 
 export type WithdrawalConfig = {

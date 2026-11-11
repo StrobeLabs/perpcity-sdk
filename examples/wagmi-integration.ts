@@ -198,7 +198,7 @@ export function OpenMakerButton({ perpId }: { perpId: PerpAddress }) {
         priceUpper: perpData.ammPrice * 1.1, // 10% above the pool price
         liquidity: 1_000_000_000n, // size with getAmountsForLiquidity for your budget
         maxAmt0In: 1_000_000, // Max perp the range takes in
-        maxAmt1In: 1_000_000, // Max USD the range takes in
+        maxAmt1In: 1_000_000, // Slippage limit on the USD leg (accounting only; v1 transfers only the margin)
       });
 
       console.log('Maker position opened:', position.positionId);

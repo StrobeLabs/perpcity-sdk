@@ -9,7 +9,8 @@ export async function closePosition(position: OpenPosition): Promise<void> {
   });
 
   console.log('Transaction Hash:', result.txHash);
-  console.log('Position Closed');
+  // A maker with perp inventory left becomes a taker; close it in a second call.
+  console.log(result.converted ? 'Maker converted to a taker: close it again' : 'Position Closed');
   console.log('Position ID:', position.positionId);
   console.log();
 }

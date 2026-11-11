@@ -23,7 +23,7 @@ SDK for perpcity-contracts `v1.0.0` (`0df4208`, `lib/beacons` `f762da1`) only. v
 - Trade fields: `deadline` on every write (`DEFAULT_DEADLINE_SECONDS`, `deadlineIn`),
   `maxTotalFee` on taker writes (`maxTotalFeeFor` bound helper), `reduceOnly` on
   `adjustTaker`. `moveMaker` / `buildMoveMakerCall(s)`. `positionIdFromReceipt`.
-- `ClosePositionResult.converted` and `makerConvertedFromReceipt`: a maker that removes all
+- `ClosePositionResult.converted`, `adjustMaker(...).converted` and `makerConvertedFromReceipt`: a maker that removes all
   liquidity with perp inventory left becomes a taker (`MakerConverted`); close it with a second
   reduce-only `closePosition`.
 - `getBeaconIndex` (v1 `index()` returns `(index, updatedAt)`).

@@ -53,7 +53,8 @@ export function positionIdFromReceipt(
 /**
  * True when `receipt` has the perp's `MakerConverted` log for `posId`: the
  * maker removed all its liquidity with perp inventory left, so the position
- * is now a taker. Close that taker with a reduce-only `adjustTaker`.
+ * is now a taker. Close that taker with a second `closePosition` (a
+ * reduce-only taker close).
  */
 export function makerConvertedFromReceipt(
   receipt: Pick<TransactionReceipt, "logs">,
@@ -217,16 +218,24 @@ export async function adjustTaker(
   }, `adjustTaker for position ${params.posId}`);
 }
 
+/**
+ * `Perp.adjustMaker`. `converted` is true when a full liquidity removal with
+ * perp inventory left turned the maker into a taker (see
+ * `makerConvertedFromReceipt`); close that taker with `closePosition`.
+ */
 export async function adjustMaker(
   context: PerpCityContext,
   perpAddress: PerpAddress,
   params: AdjustMakerParams
-): Promise<{ txHash: Hex }> {
+): Promise<{ txHash: Hex; converted: boolean }> {
   return withErrorHandling(async () => {
     const call = buildAdjustMakerCall(perpAddress, params);
     await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
-    const { txHash } = await sendCall(context, call);
-    return { txHash };
+    const { txHash, receipt } = await sendCall(context, call);
+    return {
+      txHash,
+      converted: makerConvertedFromReceipt(receipt, perpAddress, params.posId),
+    };
   }, `adjustMaker for position ${params.posId}`);
 }
 

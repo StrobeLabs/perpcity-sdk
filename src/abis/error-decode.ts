@@ -1,4 +1,16 @@
 import { keccak256, toBytes } from "viem";
+import { BEACON_ABI } from "./beacon";
+import { FEES_ABI } from "./fees";
+import { FUNDING_ABI } from "./funding";
+import { MARGIN_RATIOS_ABI } from "./margin-ratios";
+import { MODULE_REGISTRY_ABI } from "./module-registry";
+import { PERP_ABI } from "./perp";
+import { PERP_FACTORY_ABI } from "./perp-factory";
+import { PERP_GUARD_HOOK_ABI } from "./perp-guard-hook";
+import { PRICE_IMPACT_ABI } from "./price-impact";
+import { PRICING_ABI } from "./pricing";
+import { PROTOCOL_FEE_MANAGER_ABI } from "./protocol-fee-manager";
+import { WITHDRAWAL_CONTROLLER_ABI } from "./withdrawal-controller";
 
 /** Uniswap V4 PoolManager errors (lib/v4-core IPoolManager.sol). */
 export const POOL_MANAGER_ERROR_ABI = [
@@ -26,60 +38,60 @@ export const POOL_MANAGER_ERROR_NAMES: ReadonlySet<string> = new Set(
   POOL_MANAGER_ERROR_ABI.map((entry) => entry.name)
 );
 
-/**
- * Decode-only error ABI for reverts the call-site ABIs cannot decode.
- *
- * The deployed Perp reverts with errors that are not part of its own ABI
- * artifact: solady's SafeTransferLib errors bubble up when USDC pulls fail,
- * Uniswap V4 PoolManager errors surface through the unlock callback, and
- * markets still running the v0.0.1 contracts throw that generation's error
- * set (verified against perpcity-contracts tags v0.0.1 and lib/v4-core).
- *
- * This ABI exists solely as a fallback for `parseContractError` - it is NOT
- * part of the vendored PERP_ABI, which stays faithful to the deployed v0.1.0
- * artifact. Errors already decodable from PERP_ABI are deliberately absent.
- */
-export const EXTENDED_ERROR_DECODE_ABI = [
-  // solady SafeTransferLib (inlined into the deployed Perp; a USDC balance or
-  // allowance shortfall reverts with TransferFromFailed)
+/** solady SafeTransferLib errors: a USDC balance or allowance shortfall reverts TransferFromFailed. */
+const SAFE_TRANSFER_ERROR_ABI = [
   { type: "error", name: "TransferFromFailed", inputs: [] },
   { type: "error", name: "TransferFailed", inputs: [] },
   { type: "error", name: "ApproveFailed", inputs: [] },
-  ...POOL_MANAGER_ERROR_ABI,
-  // perpcity-contracts v0.0.1 error set (names absent from the v0.1.0 ABI)
-  { type: "error", name: "CouldNotFullyFill", inputs: [] },
-  { type: "error", name: "PerpDoesNotExist", inputs: [] },
-  { type: "error", name: "TransferNotAllowed", inputs: [] },
-  { type: "error", name: "ZeroNotional", inputs: [] },
-  { type: "error", name: "InvalidMarginDelta", inputs: [] },
-  { type: "error", name: "BeaconNotRegistered", inputs: [] },
-  { type: "error", name: "InvalidCaller", inputs: [] },
-  { type: "error", name: "InvalidMargin", inputs: [] },
-  { type: "error", name: "InvalidMarginRatio", inputs: [] },
-  { type: "error", name: "MakerNotAllowed", inputs: [] },
-  { type: "error", name: "MaximumAmountExceeded", inputs: [] },
-  { type: "error", name: "MinimumAmountInsufficient", inputs: [] },
-  { type: "error", name: "PositionLocked", inputs: [] },
-  { type: "error", name: "InvalidAction", inputs: [{ type: "uint8", name: "action" }] },
-  { type: "error", name: "ModuleNotRegistered", inputs: [{ type: "uint8", name: "moduleType" }] },
-  { type: "error", name: "StartingSqrtPriceTooHigh", inputs: [] },
-  { type: "error", name: "StartingSqrtPriceTooLow", inputs: [] },
-  { type: "error", name: "FeeTooLarge", inputs: [] },
 ] as const;
+
+type ErrorItem = { type: "error"; name: string; inputs: readonly { type: string }[] };
+
+const errorSignature = (entry: ErrorItem) =>
+  `${entry.name}(${entry.inputs.map((input) => input.type).join(",")})`;
+
+function errorsOf(...abis: readonly (readonly { type: string }[])[]): ErrorItem[] {
+  const seen = new Set<string>();
+  const out: ErrorItem[] = [];
+  for (const item of abis.flat()) {
+    if (item.type !== "error") continue;
+    const entry = item as ErrorItem;
+    const signature = errorSignature(entry);
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * Every error a v1.0.0 market path can revert with: the Perp and library set,
+ * the factory, hook, withdrawal controller, modules, beacon and verifier,
+ * Uniswap V4 PoolManager and solady SafeTransferLib. `parseContractError`
+ * falls back to it when the call-site ABI cannot decode a revert.
+ */
+export const EXTENDED_ERROR_DECODE_ABI = errorsOf(
+  PERP_ABI,
+  PERP_FACTORY_ABI,
+  PERP_GUARD_HOOK_ABI,
+  WITHDRAWAL_CONTROLLER_ABI,
+  PROTOCOL_FEE_MANAGER_ABI,
+  MODULE_REGISTRY_ABI,
+  FEES_ABI,
+  FUNDING_ABI,
+  MARGIN_RATIOS_ABI,
+  PRICE_IMPACT_ABI,
+  PRICING_ABI,
+  BEACON_ABI,
+  POOL_MANAGER_ERROR_ABI,
+  SAFE_TRANSFER_ERROR_ABI
+);
 
 function errorSelector(signature: string): `0x${string}` {
   return keccak256(toBytes(signature)).slice(0, 10) as `0x${string}`;
 }
 
-/**
- * 4-byte selectors for the decode ABI's errors plus the PERP_ABI errors that
- * raw-data probes match against (see utils/liquidity.ts). Derived from the
- * signatures at module load so they can never drift from the ABI entries.
- */
-export const ERROR_SELECTORS: Record<string, `0x${string}`> = Object.fromEntries([
-  ...EXTENDED_ERROR_DECODE_ABI.map((entry) => [
-    entry.name,
-    errorSelector(`${entry.name}(${entry.inputs.map((input) => input.type).join(",")})`),
-  ]),
-  ["MarginRatioTooLow", errorSelector("MarginRatioTooLow()")],
-]);
+/** 4-byte selector of every error in `EXTENDED_ERROR_DECODE_ABI`, by name. */
+export const ERROR_SELECTORS: Record<string, `0x${string}`> = Object.fromEntries(
+  EXTENDED_ERROR_DECODE_ABI.map((entry) => [entry.name, errorSelector(errorSignature(entry))])
+);

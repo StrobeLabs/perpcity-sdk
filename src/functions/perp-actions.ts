@@ -1,36 +1,80 @@
-import type { Address, Hex } from "viem";
-import { decodeAbiParameters, decodeEventLog, erc20Abi, keccak256, toBytes } from "viem";
+import type { Address, Hex, TransactionReceipt } from "viem";
+import { decodeEventLog, erc20Abi } from "viem";
 import { PERP_ABI } from "../abis/perp";
 import { PERP_FACTORY_ABI } from "../abis/perp-factory";
 import type { PerpCityContext } from "../context";
 import type { PerpAddress } from "../types";
 import type {
+  AdjustMakerParams,
+  AdjustTakerParams,
   CreatePerpParams,
   EstimateTakerAdjustResult,
   EstimateTakerPositionResult,
+  MoveMakerParams,
   OpenMakerPositionParams,
   OpenTakerPositionParams,
   PerpData,
 } from "../types/entity-data";
-import {
-  MAX_TICK,
-  MIN_TICK,
-  NUMBER_1E6,
-  priceToTick,
-  scale6Decimals,
-  simulateTakerSwap,
-} from "../utils";
 import { approveUsdc } from "../utils/approve";
+import { NUMBER_1E6 } from "../utils/constants";
+import { scale6Decimals } from "../utils/conversions";
 import { TransactionRevertedError, withErrorHandling } from "../utils/errors";
-import { totalTakerFeeRate, withFeeHeadroom } from "../utils/fees";
+import { withFeeHeadroom } from "../utils/fees";
+import { simulateTakerSwap } from "../utils/swap";
 import { type PoolTickMap, simulateTakerSwapExact } from "../utils/swapExact";
+import {
+  buildAdjustMakerCall,
+  buildAdjustTakerCall,
+  buildMoveMakerCall,
+  buildOpenMakerPositionCall,
+  buildOpenTakerPositionCall,
+} from "./calldata";
 import { OpenPosition } from "./open-position";
+import { sendCall } from "./send-call";
 
-const MAKER_OPENED_TOPIC = keccak256(toBytes("MakerOpened(uint256)"));
-const TAKER_OPENED_TOPIC = keccak256(
-  toBytes("TakerOpened(uint256,(int256,uint256,int256,uint256,uint256,uint256,uint256))")
-);
+export { calculateAlignedTicks } from "../utils/ticks";
 
+/** The `posId` of the first `eventName` log the perp emitted in `receipt`. */
+export function positionIdFromReceipt(
+  receipt: Pick<TransactionReceipt, "logs">,
+  perpAddress: PerpAddress,
+  eventName: "TakerOpened" | "MakerOpened"
+): bigint | null {
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== perpAddress.toLowerCase()) continue;
+    try {
+      const decoded = decodeEventLog({ abi: PERP_ABI, data: log.data, topics: log.topics });
+      if (decoded.eventName === eventName) return decoded.args.posId;
+    } catch (_notAPerpEvent) {}
+  }
+  return null;
+}
+
+/**
+ * True when `receipt` has the perp's `MakerConverted` log for `posId`: the
+ * maker removed all its liquidity with perp inventory left, so the position
+ * is now a taker. Close that taker with a second `closePosition` (a
+ * reduce-only taker close).
+ */
+export function makerConvertedFromReceipt(
+  receipt: Pick<TransactionReceipt, "logs">,
+  perpAddress: PerpAddress,
+  posId: bigint
+): boolean {
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== perpAddress.toLowerCase()) continue;
+    try {
+      const decoded = decodeEventLog({ abi: PERP_ABI, data: log.data, topics: log.topics });
+      if (decoded.eventName === "MakerConverted" && decoded.args.posId === posId) return true;
+    } catch (_notAPerpEvent) {}
+  }
+  return false;
+}
+
+/**
+ * `PerpFactory.createPerp` (v1 signature). The factory reads the beacon with
+ * the requested `latency`, so the beacon must have a fresh index first.
+ */
 export async function createPerp(
   context: PerpCityContext,
   params: CreatePerpParams
@@ -40,22 +84,12 @@ export async function createPerp(
     const perpFactory = deployments.perpFactory;
     if (!perpFactory) throw new Error("perpFactory deployment address is required");
 
-    const modules = {
-      beacon: params.beacon,
-      fees: params.fees ?? deployments.feesModule,
-      funding: params.funding ?? deployments.fundingModule,
-      marginRatios: params.marginRatios ?? deployments.marginRatiosModule,
-      priceImpact: params.priceImpact ?? deployments.priceImpactModule,
-      pricing: params.pricing ?? deployments.pricingModule,
-    };
-
-    if (
-      !modules.fees ||
-      !modules.funding ||
-      !modules.marginRatios ||
-      !modules.priceImpact ||
-      !modules.pricing
-    ) {
+    const fees = params.fees ?? deployments.feesModule;
+    const funding = params.funding ?? deployments.fundingModule;
+    const marginRatios = params.marginRatios ?? deployments.marginRatiosModule;
+    const priceImpact = params.priceImpact ?? deployments.priceImpactModule;
+    const pricing = params.pricing ?? deployments.pricingModule;
+    if (!fees || !funding || !marginRatios || !priceImpact || !pricing) {
       throw new Error("All module addresses must be provided in params or deployment config");
     }
 
@@ -65,19 +99,16 @@ export async function createPerp(
       functionName: "createPerp",
       args: [
         params.owner,
-        params.name,
-        params.symbol,
-        params.tokenUri,
-        modules as {
-          beacon: Address;
-          fees: Address;
-          funding: Address;
-          marginRatios: Address;
-          priceImpact: Address;
-          pricing: Address;
-        },
+        params.governor,
+        { beacon: params.beacon, fees, funding, marginRatios, priceImpact, pricing },
         params.emaWindow,
+        params.latency,
         params.salt,
+        {
+          capacity: params.withdrawalConfig.capacity,
+          refillPerSecond: params.withdrawalConfig.refillPerSecond,
+          challengeWindow: params.withdrawalConfig.challengeWindow,
+        },
       ],
       account: context.walletClient.account,
     });
@@ -89,8 +120,7 @@ export async function createPerp(
     if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
 
     for (const log of receipt.logs) {
-      // Only decode logs emitted by the factory we called, so a same-signature
-      // event from another contract can't be mistaken for PerpCreated.
+      // Only the factory we called: a same-signature event elsewhere is not ours.
       if (log.address.toLowerCase() !== perpFactory.toLowerCase()) continue;
       try {
         const decoded = decodeEventLog({
@@ -102,11 +132,11 @@ export async function createPerp(
         return decoded.args.perp as PerpAddress;
       } catch (_e) {}
     }
-
     throw new Error("PerpCreated event not found in transaction receipt");
   }, "createPerp");
 }
 
+/** Signed perp atoms for `margin * leverage` of notional at `price`. */
 export function derivePerpDelta(opts: {
   margin: number;
   leverage: number;
@@ -130,9 +160,9 @@ async function ensureUsdcAllowance(
   spender: Address,
   requiredAmount: bigint
 ): Promise<void> {
+  if (requiredAmount <= 0n) return;
   const account = context.walletClient.account?.address;
   if (!account) throw new Error("Wallet account is required");
-
   const currentAllowance = await context.publicClient.readContract({
     address: context.deployments().usdc,
     abi: erc20Abi,
@@ -151,98 +181,13 @@ export async function openTakerPosition(
   params: OpenTakerPositionParams
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
-    if (params.margin <= 0) throw new Error("Margin must be greater than 0");
-    if (params.perpDelta === 0n) throw new Error("perpDelta must be non-zero");
-
-    const marginScaled = scale6Decimals(params.margin);
-    await ensureUsdcAllowance(context, perpAddress, marginScaled);
-
-    const { request } = await context.publicClient.simulateContract({
-      address: perpAddress,
-      abi: PERP_ABI,
-      functionName: "openTaker",
-      args: [
-        {
-          holder: context.walletClient.account!.address,
-          margin: marginScaled,
-          perpDelta: params.perpDelta,
-          amt1Limit: params.amt1Limit,
-        },
-      ],
-      account: context.walletClient.account,
-    });
-
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-
-    for (const log of receipt.logs) {
-      try {
-        if (
-          log.address.toLowerCase() !== perpAddress.toLowerCase() ||
-          log.topics[0] !== TAKER_OPENED_TOPIC ||
-          log.data === "0x"
-        ) {
-          continue;
-        }
-        const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
-        return new OpenPosition(context, perpAddress, posId, params.perpDelta > 0n, false, txHash);
-      } catch (_e) {}
-    }
-    throw new Error(`TakerOpened event not found in transaction receipt. Hash: ${txHash}`);
+    const call = buildOpenTakerPositionCall(context, perpAddress, params);
+    await ensureUsdcAllowance(context, perpAddress, scale6Decimals(params.margin));
+    const { txHash, receipt } = await sendCall(context, call);
+    const posId = positionIdFromReceipt(receipt, perpAddress, "TakerOpened");
+    if (posId === null) throw new Error(`TakerOpened event not found. Hash: ${txHash}`);
+    return new OpenPosition(context, perpAddress, posId, params.perpDelta > 0n, false, txHash);
   }, "openTakerPosition");
-}
-
-function buildMakerContractParams(
-  context: PerpCityContext,
-  marginScaled: bigint,
-  params: OpenMakerPositionParams,
-  alignedTickLower: number,
-  alignedTickUpper: number,
-  maxAmt0In: bigint,
-  maxAmt1In: bigint
-) {
-  return {
-    holder: context.walletClient.account!.address,
-    margin: marginScaled,
-    tickLower: alignedTickLower,
-    tickUpper: alignedTickUpper,
-    liquidity: params.liquidity,
-    maxAmt0In,
-    maxAmt1In,
-  };
-}
-
-export function calculateAlignedTicks(
-  priceLower: number,
-  priceUpper: number,
-  tickSpacing: number
-): { alignedTickLower: number; alignedTickUpper: number } {
-  const tickLower = priceToTick(priceLower, true);
-  const tickUpper = priceToTick(priceUpper, false);
-
-  const alignedTickLower = Math.floor(tickLower / tickSpacing) * tickSpacing;
-  const alignedTickUpper = Math.ceil(tickUpper / tickSpacing) * tickSpacing;
-
-  if (alignedTickLower < MIN_TICK) {
-    throw new Error(
-      `Lower tick ${alignedTickLower} is below MIN_TICK (${MIN_TICK}). Increase priceLower.`
-    );
-  }
-  if (alignedTickUpper > MAX_TICK) {
-    throw new Error(
-      `Upper tick ${alignedTickUpper} exceeds MAX_TICK (${MAX_TICK}). Decrease priceUpper.`
-    );
-  }
-  if (alignedTickLower === alignedTickUpper) {
-    throw new Error(
-      "Price range too narrow: lower and upper ticks are equal after alignment. Widen the range."
-    );
-  }
-
-  return { alignedTickLower, alignedTickUpper };
 }
 
 export async function openMakerPosition(
@@ -251,109 +196,119 @@ export async function openMakerPosition(
   params: OpenMakerPositionParams
 ): Promise<OpenPosition> {
   return withErrorHandling(async () => {
-    if (params.margin <= 0) throw new Error("Margin must be greater than 0");
-    if (params.priceLower >= params.priceUpper)
-      throw new Error("priceLower must be less than priceUpper");
-
-    const marginScaled = scale6Decimals(params.margin);
-    const perpData = await context.getPerpData(perpAddress);
-    const { alignedTickLower, alignedTickUpper } = calculateAlignedTicks(
-      params.priceLower,
-      params.priceUpper,
-      perpData.tickSpacing
-    );
-
-    const maxAmt0In =
-      typeof params.maxAmt0In === "bigint" ? params.maxAmt0In : scale6Decimals(params.maxAmt0In);
-    const maxAmt1In =
-      typeof params.maxAmt1In === "bigint" ? params.maxAmt1In : scale6Decimals(params.maxAmt1In);
-
-    await ensureUsdcAllowance(context, perpAddress, marginScaled);
-
-    const contractParams = buildMakerContractParams(
-      context,
-      marginScaled,
-      params,
-      alignedTickLower,
-      alignedTickUpper,
-      maxAmt0In,
-      maxAmt1In
-    );
-
-    const { request } = await context.publicClient.simulateContract({
-      address: perpAddress,
-      abi: PERP_ABI,
-      functionName: "openMaker",
-      args: [contractParams],
-      account: context.walletClient.account,
-    });
-
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-
-    for (const log of receipt.logs) {
-      try {
-        if (
-          log.address.toLowerCase() !== perpAddress.toLowerCase() ||
-          log.topics[0] !== MAKER_OPENED_TOPIC ||
-          log.data === "0x"
-        ) {
-          continue;
-        }
-        const [posId] = decodeAbiParameters([{ type: "uint256" }], log.data);
-        return new OpenPosition(context, perpAddress, posId, undefined, true, txHash);
-      } catch (_e) {}
-    }
-    throw new Error(`MakerOpened event not found in transaction receipt. Hash: ${txHash}`);
+    const call = await buildOpenMakerPositionCall(context, perpAddress, params);
+    await ensureUsdcAllowance(context, perpAddress, scale6Decimals(params.margin));
+    const { txHash, receipt } = await sendCall(context, call);
+    const posId = positionIdFromReceipt(receipt, perpAddress, "MakerOpened");
+    if (posId === null) throw new Error(`MakerOpened event not found. Hash: ${txHash}`);
+    return new OpenPosition(context, perpAddress, posId, undefined, true, txHash);
   }, "openMakerPosition");
 }
 
-export async function estimateTakerPosition(
+export async function adjustTaker(
   context: PerpCityContext,
   perpAddress: PerpAddress,
-  params: {
-    isLong: boolean;
-    margin: number;
-    leverage: number;
-    /** Walk the real tick map (exact fill, crosses ticks) instead of one region. */
-    tickMap?: PoolTickMap;
-  }
-): Promise<EstimateTakerPositionResult> {
+  params: AdjustTakerParams
+): Promise<{ txHash: Hex }> {
   return withErrorHandling(async () => {
-    const perpData = await context.getPerpData(perpAddress);
-    // Size at the fair mark: the contract values the position (and checks
-    // margin) there, not at the pool spot.
-    const perpDelta = derivePerpDelta({
-      margin: params.margin,
-      leverage: params.leverage,
-      price: perpData.fairMark,
-      isLong: params.isLong,
-    });
-    return { perpDelta, ...quoteTakerSwap(perpData, perpDelta, params.tickMap) };
-  }, "estimateTakerPosition");
+    const call = buildAdjustTakerCall(perpAddress, params);
+    await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
+    const { txHash } = await sendCall(context, call);
+    return { txHash };
+  }, `adjustTaker for position ${params.posId}`);
 }
 
 /**
- * The swap leg of a taker quote. With a tick map the fill is exact (see
- * `simulateTakerSwapExact`); without one it is a single active-liquidity
- * region approximation (`simulateTakerSwap`). `feeRate` folds the total taker
- * fee into the `effective*` fields, while the raw `fillPrice`/`usdDelta` keep
- * price impact separable from fees.
+ * `Perp.adjustMaker`. `converted` is true when a full liquidity removal with
+ * perp inventory left turned the maker into a taker (see
+ * `makerConvertedFromReceipt`); close that taker with `closePosition`.
+ */
+export async function adjustMaker(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  params: AdjustMakerParams
+): Promise<{ txHash: Hex; converted: boolean }> {
+  return withErrorHandling(async () => {
+    const call = buildAdjustMakerCall(perpAddress, params);
+    await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
+    const { txHash, receipt } = await sendCall(context, call);
+    return {
+      txHash,
+      converted: makerConvertedFromReceipt(receipt, perpAddress, params.posId),
+    };
+  }, `adjustMaker for position ${params.posId}`);
+}
+
+export async function moveMaker(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  params: MoveMakerParams
+): Promise<{ txHash: Hex }> {
+  return withErrorHandling(async () => {
+    const call = buildMoveMakerCall(perpAddress, params);
+    await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
+    const { txHash } = await sendCall(context, call);
+    return { txHash };
+  }, `moveMaker for position ${params.posId}`);
+}
+
+/** Margin-only change: no swap, no liquidity change, so no fee and no slippage limit. */
+export async function adjustMargin(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  positionId: bigint,
+  marginDelta: bigint,
+  opts: { deadline?: bigint } = {}
+): Promise<{ txHash: Hex }> {
+  const rawData = await context.getPositionRawData(perpAddress, positionId);
+  if (rawData.makerDetails) {
+    return adjustMaker(context, perpAddress, {
+      posId: positionId,
+      marginDelta,
+      liquidityDelta: 0n,
+      amt0Limit: 0n,
+      amt1Limit: 0n,
+      deadline: opts.deadline,
+    });
+  }
+  return adjustTaker(context, perpAddress, {
+    posId: positionId,
+    marginDelta,
+    perpDelta: 0n,
+    amt1Limit: 0n,
+    maxTotalFee: 0n,
+    reduceOnly: true,
+    deadline: opts.deadline,
+  });
+}
+
+/**
+ * Conservative fee rate for a quote: the fees module's `maxSwapFee()` plus
+ * the cached protocol fee. The live v1 rate depends on segment liquidity and
+ * the EMAs, so the real fee is at most this.
+ */
+export function maxTakerFeeRate(perpData: Pick<PerpData, "fees">): number {
+  return perpData.fees.maxSwapFee + perpData.fees.protocolFee;
+}
+
+/**
+ * The swap leg of a taker quote on the Uniswap v4 pool. With a tick map the
+ * fill is exact (`simulateTakerSwapExact`); without one it is a one-region
+ * approximation. `effective*` fields fold in `feeRate` (default: the
+ * conservative `maxTakerFeeRate`).
  */
 function quoteTakerSwap(
   perpData: PerpData,
   perpDelta: bigint,
-  tickMap: PoolTickMap | undefined
+  tickMap: PoolTickMap | undefined,
+  feeRate: number
 ): EstimateTakerAdjustResult {
   const opts = {
     sqrtPriceX96: perpData.sqrtPriceX96,
     liquidity: perpData.liquidity,
     perpDelta,
-    markPrice: perpData.spotMark,
-    feeRate: totalTakerFeeRate(perpData.fees),
+    markPrice: perpData.ammPrice,
+    feeRate,
   };
   const exact = tickMap ? simulateTakerSwapExact({ ...opts, tickMap }) : null;
   const swap = exact ?? simulateTakerSwap(opts);
@@ -370,106 +325,44 @@ function quoteTakerSwap(
 }
 
 /**
- * Quote an arbitrary signed taker adjustment delta against current pool state.
- *
- * The `adjustTaker` companion to {@link estimateTakerPosition}: pass the exact
- * signed `perpDelta` the adjust call will submit (positive buys perp, negative
- * sells — an add for a long is positive, a reduce negative, a flip the full
- * signed total) and get the simulated USD leg, average fill price, and depth
- * flag. Pure client-side math — no eth_call, so it is safe on reactive quote
- * paths. Pass `tickMap` (from `fetchPoolTickMap`) for an exact multi-tick fill;
- * without it the quote uses the single-region model (`simulateTakerSwap`).
- * The total taker fee is folded into the `effective*` fields; the raw
- * `fillPrice`/`usdDelta` remain fee-exclusive price impact.
+ * Size a new taker at the cached mark (`rates().lastMark`) and quote its swap
+ * leg. An estimate: the contract checks margin at the live mark, so preflight
+ * the built call before sending.
  */
+export async function estimateTakerPosition(
+  context: PerpCityContext,
+  perpAddress: PerpAddress,
+  params: {
+    isLong: boolean;
+    margin: number;
+    leverage: number;
+    tickMap?: PoolTickMap;
+    feeRate?: number;
+  }
+): Promise<EstimateTakerPositionResult> {
+  return withErrorHandling(async () => {
+    const perpData = await context.getPerpData(perpAddress);
+    const perpDelta = derivePerpDelta({
+      margin: params.margin,
+      leverage: params.leverage,
+      price: perpData.lastMark,
+      isLong: params.isLong,
+    });
+    const feeRate = params.feeRate ?? maxTakerFeeRate(perpData);
+    return { perpDelta, ...quoteTakerSwap(perpData, perpDelta, params.tickMap, feeRate) };
+  }, "estimateTakerPosition");
+}
+
+/** Quote the swap leg of a signed taker adjustment on the current pool state. */
 export async function estimateTakerAdjust(
   context: PerpCityContext,
   perpAddress: PerpAddress,
-  params: { perpDelta: bigint; tickMap?: PoolTickMap }
+  params: { perpDelta: bigint; tickMap?: PoolTickMap; feeRate?: number }
 ): Promise<EstimateTakerAdjustResult> {
   return withErrorHandling(async () => {
     if (params.perpDelta === 0n) throw new Error("perpDelta must be non-zero");
     const perpData = await context.getPerpData(perpAddress);
-    return quoteTakerSwap(perpData, params.perpDelta, params.tickMap);
+    const feeRate = params.feeRate ?? maxTakerFeeRate(perpData);
+    return quoteTakerSwap(perpData, params.perpDelta, params.tickMap, feeRate);
   }, "estimateTakerAdjust");
-}
-
-export async function adjustTaker(
-  context: PerpCityContext,
-  perpAddress: PerpAddress,
-  params: { posId: bigint; marginDelta: bigint; perpDelta: bigint; amt1Limit: bigint }
-): Promise<{ txHash: Hex }> {
-  return withErrorHandling(async () => {
-    if (params.marginDelta > 0n)
-      await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
-
-    const { request } = await context.publicClient.simulateContract({
-      address: perpAddress,
-      abi: PERP_ABI,
-      functionName: "adjustTaker",
-      args: [params],
-      account: context.walletClient.account,
-    });
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-    return { txHash };
-  }, `adjustTaker for position ${params.posId}`);
-}
-
-export async function adjustMaker(
-  context: PerpCityContext,
-  perpAddress: PerpAddress,
-  params: {
-    posId: bigint;
-    marginDelta: bigint;
-    liquidityDelta: bigint;
-    amt0Limit: bigint;
-    amt1Limit: bigint;
-  }
-): Promise<{ txHash: Hex }> {
-  return withErrorHandling(async () => {
-    if (params.marginDelta > 0n)
-      await ensureUsdcAllowance(context, perpAddress, params.marginDelta);
-
-    const { request } = await context.publicClient.simulateContract({
-      address: perpAddress,
-      abi: PERP_ABI,
-      functionName: "adjustMaker",
-      args: [params],
-      account: context.walletClient.account,
-    });
-    const txHash = await context.walletClient.writeContract(
-      await withFeeHeadroom(context.publicClient, request)
-    );
-    const receipt = await context.publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "reverted") throw new TransactionRevertedError(txHash);
-    return { txHash };
-  }, `adjustMaker for position ${params.posId}`);
-}
-
-export async function adjustMargin(
-  context: PerpCityContext,
-  perpAddress: PerpAddress,
-  positionId: bigint,
-  marginDelta: bigint
-): Promise<{ txHash: Hex }> {
-  const rawData = await context.getPositionRawData(perpAddress, positionId);
-  if (rawData.makerDetails) {
-    return adjustMaker(context, perpAddress, {
-      posId: positionId,
-      marginDelta,
-      liquidityDelta: 0n,
-      amt0Limit: 0n,
-      amt1Limit: 0n,
-    });
-  }
-  return adjustTaker(context, perpAddress, {
-    posId: positionId,
-    marginDelta,
-    perpDelta: 0n,
-    amt1Limit: 0n,
-  });
 }

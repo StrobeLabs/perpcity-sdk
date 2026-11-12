@@ -1,24 +1,13 @@
 import { BEACON_ABI } from "../abis/beacon";
-import { PERP_ABI } from "../abis/perp";
 import type { PerpCityContext } from "../context";
-import { readStoredEmas } from "../math/pricing";
 import type { PerpAddress } from "../types";
 import type { PerpData } from "../types/entity-data";
 import { scaleFromX96 } from "../utils/conversions";
 import { withErrorHandling } from "../utils/errors";
-
-// Pure functions that operate on PerpData
-/** @deprecated The pool spot. Use `perpData.fairMark` (contract mark) or `perpData.spotMark`. */
-export function getPerpMark(perpData: PerpData): number {
-  return perpData.mark;
-}
+import { readRates } from "./views";
 
 export function getPerpBeacon(perpData: PerpData): string {
   return perpData.beacon;
-}
-
-export function getPerpBounds(perpData: PerpData) {
-  return perpData.bounds;
 }
 
 export function getPerpFees(perpData: PerpData) {
@@ -32,19 +21,15 @@ export function getPerpTickSpacing(perpData: PerpData): number {
 export type FundingRate = {
   /** Funding paid per 1 perp per day, in USD (longs pay when positive). */
   fundingPerDayUsd: number;
-  /** Funding per day as a fraction of the EMA mark (0.001 = 0.1%/day). */
+  /** Funding per day as a fraction of the cached mark (0.001 = 0.1%/day). */
   ratePerDay: number;
-  /** Price used to turn USD into a fraction: the stored EMA AMM price, or the
-   * pool spot when the EMA is still zero (a perp never touched). */
-  ratePriceBasis: "ema" | "spot";
-  /** Raw Rates.fundingPerDay: int88, USD per perp per day scaled by 1e18. */
+  /** Raw `Rates.fundingPerDay`: int88, USD per perp per day scaled by 1e18. */
   fundingPerDayRaw: bigint;
+  /** Unix time the cached rate started to apply (`Rates.lastTouch`). */
+  lastTouch: number;
 };
 
-/**
- * Pure conversion from the on-chain Rates.fundingPerDay (WAD, USD per perp
- * per day) to a funding rate per day as a fraction of `markPrice`.
- */
+/** Pure conversion from `Rates.fundingPerDay` (WAD) to a daily fraction of `markPrice`. */
 export function fundingRateFromRaw(
   fundingPerDayRaw: bigint,
   markPrice: number
@@ -57,54 +42,45 @@ export function fundingRateFromRaw(
 }
 
 /**
- * Read the perp's current funding rate.
- *
- * `fundingPerDayUsd` is USD per 1 perp per day and `ratePerDay` a fraction of
- * the stored EMA AMM price (`emas()` on 58b42b7, a storage read on v0.2.2).
+ * The perp's cached funding rate (`rates()`), as a fraction of the mark cached
+ * at the same touch (`rates().lastMark`). Both refresh on every market touch.
  */
 export async function getFundingRate(
   context: PerpCityContext,
   perpAddress: PerpAddress
 ): Promise<FundingRate> {
   return withErrorHandling(async () => {
-    const cfg = await context.getPerpConfig(perpAddress);
-    const [rates, emas, poolState] = await Promise.all([
-      context.publicClient.readContract({
-        address: perpAddress,
-        abi: PERP_ABI,
-        functionName: "rates",
-      }),
-      readStoredEmas(context, perpAddress, cfg.build),
-      context.publicClient.readContract({
-        address: perpAddress,
-        abi: PERP_ABI,
-        functionName: "poolState",
-      }),
-    ]);
-
-    const ratePriceBasis = emas.emaAmmX96 > 0n ? "ema" : "spot";
-    const markPrice = scaleFromX96(ratePriceBasis === "ema" ? emas.emaAmmX96 : poolState[2]);
-
+    const rates = await readRates(context.publicClient, perpAddress);
     return {
-      ...fundingRateFromRaw(rates[0], markPrice),
-      ratePriceBasis,
-      fundingPerDayRaw: rates[0],
+      ...fundingRateFromRaw(rates.fundingPerDay, scaleFromX96(rates.lastMark)),
+      fundingPerDayRaw: rates.fundingPerDay,
+      lastTouch: rates.lastTouch,
     };
   }, `getFundingRate for perp ${perpAddress}`);
 }
 
+/** The v1 beacon's `index()`: the Q96 index and its on-chain update time. */
+export async function getBeaconIndex(
+  context: PerpCityContext,
+  perpAddress: PerpAddress
+): Promise<{ indexX96: bigint; updatedAt: bigint }> {
+  return withErrorHandling(async () => {
+    const { beacon } = await context.getPerpConfig(perpAddress);
+    const [indexX96, updatedAt] = await context.publicClient.readContract({
+      address: beacon,
+      abi: BEACON_ABI,
+      functionName: "index",
+    });
+    return { indexX96, updatedAt };
+  }, `getBeaconIndex for perp ${perpAddress}`);
+}
+
+/** The Q96 beacon index (`getBeaconIndex(...).indexX96`). */
 export async function getIndexValue(
   context: PerpCityContext,
   perpAddress: PerpAddress
 ): Promise<bigint> {
-  return withErrorHandling(async () => {
-    const perpData = await context.getPerpData(perpAddress);
-    return (await context.publicClient.readContract({
-      address: perpData.beacon,
-      abi: BEACON_ABI,
-      functionName: "index",
-    })) as bigint;
-  }, `getIndexValue for perp ${perpAddress}`);
+  return (await getBeaconIndex(context, perpAddress)).indexX96;
 }
 
 export async function getIndexTWAP(
@@ -113,12 +89,12 @@ export async function getIndexTWAP(
   secondsAgo: number
 ): Promise<bigint> {
   return withErrorHandling(async () => {
-    const perpData = await context.getPerpData(perpAddress);
-    return (await context.publicClient.readContract({
-      address: perpData.beacon,
+    const { beacon } = await context.getPerpConfig(perpAddress);
+    return context.publicClient.readContract({
+      address: beacon,
       abi: BEACON_ABI,
       functionName: "twAvg",
       args: [secondsAgo],
-    })) as bigint;
+    });
   }, `getIndexTWAP for perp ${perpAddress}`);
 }

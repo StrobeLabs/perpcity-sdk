@@ -1,9 +1,11 @@
 import { BaseError, ContractFunctionRevertedError, keccak256, toBytes } from "viem";
 import { describe, expect, it } from "vitest";
 import { ERROR_SELECTORS, EXTENDED_ERROR_DECODE_ABI } from "../abis/error-decode";
+import { PERP_ABI } from "../abis/perp";
 import {
   ContractError,
   codeForErrorName,
+  contractErrorFromRevertData,
   ErrorCategory,
   ErrorSource,
   InsufficientFundsError,
@@ -82,91 +84,6 @@ describe("parseContractError", () => {
     expect(result.message).toBe("String error");
   });
 
-  it("should parse ContractFunctionRevertedError for PriceImpactTooHigh", () => {
-    // Create a mock ContractFunctionRevertedError instance
-    const mockRevertError = new ContractFunctionRevertedError({
-      abi: [],
-      functionName: "test",
-    } as any);
-    // Manually set the data property
-    (mockRevertError as any).data = {
-      errorName: "PriceImpactTooHigh",
-      args: [1000n, 900n, 1100n],
-    };
-
-    // Create a proper BaseError instance
-    const mockError = new BaseError("Contract execution reverted", {
-      cause: mockRevertError,
-    });
-    // Override walk to return our mock revert error
-    (mockError as any).walk = (fn: (err: any) => any) => {
-      if (fn(mockRevertError)) return mockRevertError;
-      return null;
-    };
-
-    const result = parseContractError(mockError);
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("PriceImpactTooHigh");
-    expect((result as ContractError).args).toEqual([1000n, 900n, 1100n]);
-    expect(result.message).toContain("Price impact too high");
-    expect(result.message).toContain("1000");
-    expect(result.message).toContain("900");
-    expect(result.message).toContain("1100");
-  });
-
-  it("should parse ContractFunctionRevertedError for InvalidLevX96", () => {
-    const mockRevertError = new ContractFunctionRevertedError({
-      abi: [],
-      functionName: "test",
-    } as any);
-    (mockRevertError as any).data = {
-      errorName: "InvalidLevX96",
-      args: [15n, 10n],
-    };
-
-    const mockError = new BaseError("Contract execution reverted", {
-      cause: mockRevertError,
-    });
-    (mockError as any).walk = (fn: (err: any) => any) => {
-      if (fn(mockRevertError)) return mockRevertError;
-      return null;
-    };
-
-    const result = parseContractError(mockError);
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("InvalidLevX96");
-    expect((result as ContractError).args).toEqual([15n, 10n]);
-    expect(result.message).toContain("Invalid leverage");
-    expect(result.message).toContain("15");
-    expect(result.message).toContain("10");
-  });
-
-  it("should parse ContractFunctionRevertedError for SwapReverted", () => {
-    const mockRevertError = new ContractFunctionRevertedError({
-      abi: [],
-      functionName: "test",
-    } as any);
-    (mockRevertError as any).data = {
-      errorName: "SwapReverted",
-      args: [],
-    };
-
-    const mockError = new BaseError("Contract execution reverted", {
-      cause: mockRevertError,
-    });
-    (mockError as any).walk = (fn: (err: any) => any) => {
-      if (fn(mockRevertError)) return mockRevertError;
-      return null;
-    };
-
-    const result = parseContractError(mockError);
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("SwapReverted");
-    expect((result as ContractError).args).toEqual([]);
-    expect(result.message).toContain("Swap failed");
-    expect(result.message).toContain("insufficient liquidity or slippage");
-  });
-
   it('should parse BaseError with "User rejected the request" as TransactionRejectedError', () => {
     const mockError = new BaseError("User rejected the request");
     (mockError as any).walk = () => null;
@@ -230,588 +147,6 @@ function createMockContractError(errorName: string, args: readonly unknown[] = [
   return mockError;
 }
 
-describe("Uniswap V4 PoolManager Errors", () => {
-  it("should parse CurrencyNotSettled with retry guidance", () => {
-    const mockError = createMockContractError("CurrencyNotSettled");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("CurrencyNotSettled");
-    expect(result.message).toContain("Currency balance not settled");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
-    expect((result as ContractError).debug?.retryGuidance).toContain("try again");
-  });
-
-  it("should parse PoolNotInitialized", () => {
-    const mockError = createMockContractError("PoolNotInitialized");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("PoolNotInitialized");
-    expect(result.message).toContain("Pool does not exist");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
-  });
-
-  it("should parse AlreadyUnlocked with retry guidance", () => {
-    const mockError = createMockContractError("AlreadyUnlocked");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("AlreadyUnlocked");
-    expect(result.message).toContain("already unlocked");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
-    expect((result as ContractError).debug?.canRetry).toBe(true);
-  });
-
-  it("should parse ManagerLocked with retry guidance", () => {
-    const mockError = createMockContractError("ManagerLocked");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("ManagerLocked");
-    expect(result.message).toContain("Pool Manager is currently locked");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
-    expect((result as ContractError).debug?.canRetry).toBe(true);
-    expect((result as ContractError).debug?.retryGuidance).toContain("retry");
-  });
-
-  it("should parse TickSpacingTooLarge with args", () => {
-    const mockError = createMockContractError("TickSpacingTooLarge", [1000]);
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TickSpacingTooLarge");
-    expect(result.message).toContain("Tick spacing");
-    expect(result.message).toContain("1000");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse TickSpacingTooSmall with args", () => {
-    const mockError = createMockContractError("TickSpacingTooSmall", [1]);
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TickSpacingTooSmall");
-    expect(result.message).toContain("Tick spacing");
-    expect(result.message).toContain("1");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse CurrenciesOutOfOrderOrEqual with currency addresses", () => {
-    const mockError = createMockContractError("CurrenciesOutOfOrderOrEqual", [
-      "0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6",
-      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    ]);
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("CurrenciesOutOfOrderOrEqual");
-    expect(result.message).toContain("Currencies must be ordered");
-    expect(result.message).toContain("0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse UnauthorizedDynamicLPFeeUpdate", () => {
-    const mockError = createMockContractError("UnauthorizedDynamicLPFeeUpdate");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("UnauthorizedDynamicLPFeeUpdate");
-    expect(result.message).toContain("Unauthorized attempt");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse SwapAmountCannotBeZero", () => {
-    const mockError = createMockContractError("SwapAmountCannotBeZero");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("SwapAmountCannotBeZero");
-    expect(result.message).toContain("cannot be zero");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse NonzeroNativeValue", () => {
-    const mockError = createMockContractError("NonzeroNativeValue");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("NonzeroNativeValue");
-    expect(result.message).toContain("Native ETH was sent");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse MustClearExactPositiveDelta", () => {
-    const mockError = createMockContractError("MustClearExactPositiveDelta");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("MustClearExactPositiveDelta");
-    expect(result.message).toContain("exact positive delta");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.POOL_MANAGER);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
-  });
-});
-
-describe("Perp ERC721/Ownership Errors", () => {
-  it("should parse AccountBalanceOverflow", () => {
-    const mockError = createMockContractError("AccountBalanceOverflow");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("AccountBalanceOverflow");
-    expect(result.message).toContain("balance overflow");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
-  });
-
-  it("should parse BalanceQueryForZeroAddress", () => {
-    const mockError = createMockContractError("BalanceQueryForZeroAddress");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("BalanceQueryForZeroAddress");
-    expect(result.message).toContain("zero address");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse NotOwnerNorApproved", () => {
-    const mockError = createMockContractError("NotOwnerNorApproved");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("NotOwnerNorApproved");
-    expect(result.message).toContain("not the owner or an approved operator");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse TokenAlreadyExists", () => {
-    const mockError = createMockContractError("TokenAlreadyExists");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TokenAlreadyExists");
-    expect(result.message).toContain("already exists");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
-  });
-
-  it("should parse TokenDoesNotExist", () => {
-    const mockError = createMockContractError("TokenDoesNotExist");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TokenDoesNotExist");
-    expect(result.message).toContain("does not exist");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse TransferFromIncorrectOwner", () => {
-    const mockError = createMockContractError("TransferFromIncorrectOwner");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TransferFromIncorrectOwner");
-    expect(result.message).toContain("incorrect owner");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse TransferToNonERC721ReceiverImplementer", () => {
-    const mockError = createMockContractError("TransferToNonERC721ReceiverImplementer");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TransferToNonERC721ReceiverImplementer");
-    expect(result.message).toContain("does not implement ERC721 receiver");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse TransferToZeroAddress", () => {
-    const mockError = createMockContractError("TransferToZeroAddress");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TransferToZeroAddress");
-    expect(result.message).toContain("zero address");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse NewOwnerIsZeroAddress", () => {
-    const mockError = createMockContractError("NewOwnerIsZeroAddress");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("NewOwnerIsZeroAddress");
-    expect(result.message).toContain("zero address");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse NoHandoverRequest", () => {
-    const mockError = createMockContractError("NoHandoverRequest");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("NoHandoverRequest");
-    expect(result.message).toContain("No pending ownership handover");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
-  });
-
-  it("should parse Unauthorized", () => {
-    const mockError = createMockContractError("Unauthorized");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("Unauthorized");
-    expect(result.message).toContain("Unauthorized access");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-});
-
-describe("Perp Transfer/Approval Errors", () => {
-  it("should parse TransferFromFailed", () => {
-    const mockError = createMockContractError("TransferFromFailed");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TransferFromFailed");
-    expect(result.message).toContain("transferFrom operation failed");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse TransferFailed", () => {
-    const mockError = createMockContractError("TransferFailed");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("TransferFailed");
-    expect(result.message).toContain("transfer operation failed");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
-  });
-
-  it("should parse ApproveFailed", () => {
-    const mockError = createMockContractError("ApproveFailed");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("ApproveFailed");
-    expect(result.message).toContain("approve operation failed");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
-  });
-});
-
-describe("Perp Module Config Errors", () => {
-  it("should parse AlreadyInitialized", () => {
-    const mockError = createMockContractError("AlreadyInitialized");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("AlreadyInitialized");
-    expect(result.message).toContain("already been initialized");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse FeesNotRegistered", () => {
-    const mockError = createMockContractError("FeesNotRegistered");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("FeesNotRegistered");
-    expect(result.message).toContain("Fees module has not been registered");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse FeeTooLarge", () => {
-    const mockError = createMockContractError("FeeTooLarge");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("FeeTooLarge");
-    expect(result.message).toContain("fee exceeds");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse MarginRatiosNotRegistered", () => {
-    const mockError = createMockContractError("MarginRatiosNotRegistered");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("MarginRatiosNotRegistered");
-    expect(result.message).toContain("Margin ratios module");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse LockupPeriodNotRegistered", () => {
-    const mockError = createMockContractError("LockupPeriodNotRegistered");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("LockupPeriodNotRegistered");
-    expect(result.message).toContain("Lockup period module");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse SqrtPriceImpactLimitNotRegistered", () => {
-    const mockError = createMockContractError("SqrtPriceImpactLimitNotRegistered");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("SqrtPriceImpactLimitNotRegistered");
-    expect(result.message).toContain("Sqrt price impact limit module");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-
-  it("should parse ModuleAlreadyRegistered", () => {
-    const mockError = createMockContractError("ModuleAlreadyRegistered");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("ModuleAlreadyRegistered");
-    expect(result.message).toContain("already been registered");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.CONFIG_ERROR);
-  });
-});
-
-describe("Perp Position/Trading Errors", () => {
-  it("should parse InvalidAction with args", () => {
-    const mockError = createMockContractError("InvalidAction", [5]);
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("InvalidAction");
-    expect(result.message).toContain("Invalid action type");
-    expect(result.message).toContain("5");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse InvalidMarginRatio with args", () => {
-    const mockError = createMockContractError("InvalidMarginRatio", [150]);
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("InvalidMarginRatio");
-    expect(result.message).toContain("Invalid margin ratio");
-    expect(result.message).toContain("150");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse MakerNotAllowed", () => {
-    const mockError = createMockContractError("MakerNotAllowed");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("MakerNotAllowed");
-    expect(result.message).toContain("Maker positions are not allowed");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("should parse PositionLocked", () => {
-    const mockError = createMockContractError("PositionLocked");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("PositionLocked");
-    expect(result.message).toContain("currently locked");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
-  });
-
-  it("should parse ZeroDelta", () => {
-    const mockError = createMockContractError("ZeroDelta");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("ZeroDelta");
-    expect(result.message).toContain("zero size");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
-  });
-
-  it("should parse NotPoolManager", () => {
-    const mockError = createMockContractError("NotPoolManager");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("NotPoolManager");
-    expect(result.message).toContain("Only the Uniswap V4 Pool Manager");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.SYSTEM_ERROR);
-  });
-
-  it("should parse NoLiquidityToReceiveFees", () => {
-    const mockError = createMockContractError("NoLiquidityToReceiveFees");
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("NoLiquidityToReceiveFees");
-    expect(result.message).toContain("No liquidity available");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
-  });
-
-  it("should return a user-friendly slippage message for MinimumAmountInsufficient without args", () => {
-    const mockError = createMockContractError("MinimumAmountInsufficient", []);
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("MinimumAmountInsufficient");
-    expect(result.message).toContain("Slippage tolerance exceeded");
-    expect(result.message).not.toContain("undefined");
-    expect((result as ContractError).debug?.source).toBe(ErrorSource.PERP);
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-});
-
-// The deployed contracts' Errors.sol error set. Every entry must be decodable
-// from PERP_ABI, or reverts surface as ContractError "Unknown" in the app
-// (this is exactly how InsufficientLiquidityToFill reached production
-// undecoded as selector 0xed126f97).
-describe("PERP_ABI covers the contracts' Errors.sol", () => {
-  const ERRORS_SOL = [
-    "Abdicated",
-    "ZeroDelta",
-    "MinAmtUnmet",
-    "MarginTooLow",
-    "NoSystemFunds",
-    "ZeroLiquidity",
-    "MaxAmtExceeded",
-    "NegativeEquity",
-    "NegativeMargin",
-    "NotPoolManager",
-    "NotLiquidatable",
-    "NonMakerPosition",
-    "NonTakerPosition",
-    "TicksOutOfBounds",
-    "DataNotTimelocked",
-    "MarginRatioTooLow",
-    "DataAlreadyPending",
-    "PriceImpactTooHigh",
-    "TimelockNotExpired",
-    "UnauthorizedCaller",
-    "PositionDoesNotExist",
-    "LongUtilizationExceeded",
-    "ShortUtilizationExceeded",
-    "InsufficientLiquidityToFill",
-    // v0.2.2-upgradeable (Perp.sol: skim, UUPS proxy, guard hook, solady ERC-721)
-    "NoSurplus",
-    "ZeroAddress",
-    "UnauthorizedPoolAction",
-    "ERC1967NonPayable",
-    "UUPSUnauthorizedCallContext",
-    "InvalidInitialization",
-    "TokenDoesNotExist",
-  ];
-
-  it.each(ERRORS_SOL)("decodes %s from its selector", async (name) => {
-    const { decodeErrorResult, keccak256, toBytes } = await import("viem");
-    const { PERP_ABI } = await import("../abis/perp");
-    const selector = keccak256(toBytes(`${name}()`)).slice(0, 10) as `0x${string}`;
-    const decoded = decodeErrorResult({ abi: PERP_ABI, data: selector });
-    expect(decoded.errorName).toBe(name);
-  });
-
-  it.each([
-    "InvalidPerpImplementation",
-    "NotProtocolOwner",
-  ])("decodes factory error %s from PERP_FACTORY_ABI", async (name) => {
-    const { decodeErrorResult, keccak256, toBytes } = await import("viem");
-    const { PERP_FACTORY_ABI } = await import("../abis/perp-factory");
-    const selector = keccak256(toBytes(`${name}()`)).slice(0, 10) as `0x${string}`;
-    const decoded = decodeErrorResult({ abi: PERP_FACTORY_ABI, data: selector });
-    expect(decoded.errorName).toBe(name);
-  });
-
-  it("decodes the v0.2.2 liquidate overloads and close events by full signature", async () => {
-    const { toFunctionSelector, toEventSelector, getAbiItem } = await import("viem");
-    const { PERP_ABI } = await import("../abis/perp");
-    const selectors = PERP_ABI.filter(
-      (item) => item.type === "function" && item.name === "liquidateTaker"
-    ).map((item) => toFunctionSelector(item as never));
-    expect(selectors).toEqual(["0xeac41906", "0xbfb4b1c7"]);
-    const closes = PERP_ABI.filter(
-      (item) => item.type === "event" && item.name === "TakerClosed"
-    ).map((item) => toEventSelector(item as never));
-    expect(closes).toHaveLength(2);
-    expect(new Set(closes).size).toBe(2);
-    // Name lookups keep resolving to the build 58b42b7 shape (first entry).
-    const byName = getAbiItem({ abi: PERP_ABI, name: "liquidateTaker" }) as {
-      inputs: readonly unknown[];
-    };
-    expect(byName.inputs).toHaveLength(2);
-    expect(toEventSelector("TakerLiquidated(uint256,uint128,uint256)")).toBe(
-      "0x2347417853c438a233b6d4d0630048d196587db0d521d33f5a4705721e1a91cf"
-    );
-  });
-
-  it("maps InsufficientLiquidityToFill to a liquidity message", () => {
-    const mockError = createMockContractError("InsufficientLiquidityToFill", []);
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("InsufficientLiquidityToFill");
-    expect(result.message).toContain("Not enough liquidity");
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
-  });
-
-  it("maps MarginTooLow to the contract minimum", () => {
-    const mockError = createMockContractError("MarginTooLow", []);
-    const result = parseContractError(mockError);
-
-    expect(result).toBeInstanceOf(ContractError);
-    expect(result.message).toContain("$5");
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.USER_ERROR);
-  });
-
-  it("maps no-arg PriceImpactTooHigh without printing undefined", () => {
-    const mockError = createMockContractError("PriceImpactTooHigh", []);
-    const result = parseContractError(mockError);
-
-    expect(result.message).not.toContain("undefined");
-    expect(result.message).toContain("move the price too much");
-  });
-
-  it("maps partial-arg PriceImpactTooHigh without printing undefined", () => {
-    const mockError = createMockContractError("PriceImpactTooHigh", [1000n]);
-    const result = parseContractError(mockError);
-
-    expect(result.message).not.toContain("undefined");
-    expect(result.message).toContain("move the price too much");
-  });
-});
-
-// A revert whose selector viem could not decode against the call's ABI:
-// data is undefined but the raw revert bytes and 4-byte signature are present.
 function createMockRawRevertError(raw: `0x${string}`) {
   const mockRevertError = new ContractFunctionRevertedError({
     abi: [],
@@ -858,26 +193,29 @@ describe("machine-readable error codes", () => {
     ["TransferFromFailed", "INSUFFICIENT_USDC_BALANCE"],
     ["MarginTooLow", "MARGIN_BELOW_MINIMUM"],
     ["MarginRatioTooLow", "MARGIN_RATIO_TOO_LOW"],
+    ["HealthNotImproved", "MARGIN_RATIO_TOO_LOW"],
     ["MinAmtUnmet", "SLIPPAGE_EXCEEDED"],
     ["MaxAmtExceeded", "SLIPPAGE_EXCEEDED"],
-    ["MinimumAmountInsufficient", "SLIPPAGE_EXCEEDED"],
-    ["MaximumAmountExceeded", "SLIPPAGE_EXCEEDED"],
+    ["MaxTotalFeeExceeded", "FEE_CAP_EXCEEDED"],
+    ["DeadlineExpired", "DEADLINE_EXPIRED"],
+    ["ReduceOnlyViolated", "REDUCE_ONLY_VIOLATED"],
+    ["LongCloseCapacityExceeded", "CLOSE_CAPACITY_EXCEEDED"],
+    ["ShortCloseCapacityExceeded", "CLOSE_CAPACITY_EXCEEDED"],
+    ["StaleBeaconIndex", "STALE_INDEX"],
+    ["BeaconIndexUnreadable", "STALE_INDEX"],
     ["PriceImpactTooHigh", "PRICE_IMPACT_TOO_HIGH"],
-    ["LongUtilizationExceeded", "UTILIZATION_EXCEEDED"],
-    ["ShortUtilizationExceeded", "UTILIZATION_EXCEEDED"],
     ["InsufficientLiquidityToFill", "INSUFFICIENT_LIQUIDITY"],
-    ["CouldNotFullyFill", "INSUFFICIENT_LIQUIDITY"],
     ["PositionDoesNotExist", "POSITION_NOT_FOUND"],
-    ["TokenDoesNotExist", "POSITION_NOT_FOUND"],
     ["NonMakerPosition", "WRONG_POSITION_KIND"],
     ["NonTakerPosition", "WRONG_POSITION_KIND"],
     ["NotLiquidatable", "NOT_LIQUIDATABLE"],
     ["Abdicated", "MARKET_ABDICATED"],
-    ["PositionLocked", "POSITION_LOCKED"],
-    ["MakerPositionLocked", "POSITION_LOCKED"],
+    ["TvlCapExceeded", "TVL_CAP_EXCEEDED"],
+    ["ClaimNotReady", "WITHDRAWAL_NOT_READY"],
+    ["ReleasesArePaused", "WITHDRAWAL_PAUSED"],
     ["Unauthorized", "UNAUTHORIZED"],
     ["UnauthorizedCaller", "UNAUTHORIZED"],
-    ["NotOwnerNorApproved", "UNAUTHORIZED"],
+    ["NotGovernor", "UNAUTHORIZED"],
     ["NegativeMargin", "CONTRACT_REVERT"],
     ["ZeroDelta", "CONTRACT_REVERT"],
     ["ManagerLocked", "CONTRACT_REVERT"],
@@ -911,12 +249,14 @@ describe("raw revert data decode fallback", () => {
     expect((result as ContractError).debug?.rawData).toBe("0x7939f424");
   });
 
-  it("decodes legacy v0.0.1 CouldNotFullyFill from raw bytes", () => {
-    const result = parseContractError(createMockRawRevertError(selectorFor("CouldNotFullyFill()")));
+  it("decodes v1 MaxTotalFeeExceeded from raw bytes", () => {
+    const result = parseContractError(
+      createMockRawRevertError(selectorFor("MaxTotalFeeExceeded()"))
+    );
 
     expect(result).toBeInstanceOf(ContractError);
-    expect((result as ContractError).errorName).toBe("CouldNotFullyFill");
-    expect(result.code).toBe("INSUFFICIENT_LIQUIDITY");
+    expect((result as ContractError).errorName).toBe("MaxTotalFeeExceeded");
+    expect(result.code).toBe("FEE_CAP_EXCEEDED");
   });
 
   it("decodes V4 ManagerLocked from raw bytes with retry guidance", () => {
@@ -1013,31 +353,48 @@ describe("TransactionRevertedError", () => {
   });
 });
 
-describe("newly mapped Errors.sol names", () => {
-  const NEWLY_MAPPED = [
-    "Abdicated",
-    "DataAlreadyPending",
-    "DataNotTimelocked",
-    "TimelockNotExpired",
-  ];
+describe("v1.0.0 error table", () => {
+  const perpErrors = PERP_ABI.filter((item) => item.type === "error");
 
-  it.each(NEWLY_MAPPED)("gives %s a real message, not the generic fallback", (name) => {
-    const result = parseContractError(createMockContractError(name, []));
-    expect(result).toBeInstanceOf(ContractError);
-    expect(result.message).not.toContain("Contract error:");
-    expect(result.message).not.toContain("undefined");
+  it("PERP_ABI carries every Errors.sol error, including library reverts", () => {
+    const names = new Set<string>(perpErrors.map((e) => e.name));
+    for (const name of [
+      "MarginRatioTooLow",
+      "MaxTotalFeeExceeded",
+      "MinAmtUnmet",
+      "MaxAmtExceeded",
+      "DeadlineExpired",
+      "ReduceOnlyViolated",
+      "LongCloseCapacityExceeded",
+      "ShortCloseCapacityExceeded",
+      "StaleBeaconIndex",
+      "TvlCapExceeded",
+      "UnauthorizedPoolAction",
+    ]) {
+      expect(names.has(name), name).toBe(true);
+    }
+    expect(perpErrors.length).toBeGreaterThanOrEqual(51);
   });
 
-  it("maps Abdicated as a dead-market state error", () => {
-    const result = parseContractError(createMockContractError("Abdicated", []));
-    expect(result.code).toBe("MARKET_ABDICATED");
-    expect((result as ContractError).debug?.category).toBe(ErrorCategory.STATE_ERROR);
+  it.each(
+    perpErrors.map((e) => [e.name, e] as const)
+  )("%s decodes from its raw selector to a mapped message", (_name, entry) => {
+    const signature = `${entry.name}(${entry.inputs.map((i) => i.type).join(",")})`;
+    // Zero words for each (static) argument.
+    const data = `${selectorFor(signature)}${"00".repeat(32 * entry.inputs.length)}` as const;
+    const error = contractErrorFromRevertData(data);
+    expect(error.errorName).toBe(entry.name);
+    expect(error.message).not.toContain("Contract error:");
   });
 
-  it("does not print undefined for zero-arg legacy InvalidCaller and InvalidMargin", () => {
-    for (const name of ["InvalidCaller", "InvalidMargin"]) {
-      const result = parseContractError(createMockContractError(name, []));
-      expect(result.message, name).not.toContain("undefined");
+  it("no v0 error name is left in the table", () => {
+    for (const name of [
+      "LongUtilizationExceeded",
+      "InvalidLevX96",
+      "SwapReverted",
+      "PositionLocked",
+    ]) {
+      expect(codeForErrorName(name as never), name).toBe("CONTRACT_REVERT");
     }
   });
 });

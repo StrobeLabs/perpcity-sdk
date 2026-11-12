@@ -1,32 +1,16 @@
-import { toHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { PerpCityContext } from "../../context";
 import { fundingRateFromRaw, getFundingRate } from "../../functions/perp";
-import type { Fees } from "../../types/entity-data";
-import { totalTakerFeeRate } from "../../utils/fees";
+import { maxTakerFeeRate } from "../../functions/perp-actions";
 
 const PERP = "0x6d4051ffb71f391a5b4d8643a29ec6f66f67df50";
 const Q96 = 2n ** 96n;
 
-describe("totalTakerFeeRate", () => {
-  const fees: Fees = {
-    creatorFee: 0.001,
-    insuranceFee: 0.0005,
-    lpFee: 0.0096,
-    liquidationFee: 0.01,
-    protocolFee: 0,
-  };
-
-  it("sums creator, insurance, and LP fees", () => {
-    expect(totalTakerFeeRate(fees)).toBeCloseTo(0.0111, 10);
-  });
-
-  it("includes the protocol fee", () => {
-    expect(totalTakerFeeRate({ ...fees, protocolFee: 0.0002 })).toBeCloseTo(0.0113, 10);
-  });
-
-  it("excludes the liquidation fee", () => {
-    expect(totalTakerFeeRate({ ...fees, liquidationFee: 0.5 })).toBeCloseTo(0.0111, 10);
+describe("maxTakerFeeRate", () => {
+  it("sums the module's max swap fee and the protocol fee, not the liquidation fee", () => {
+    expect(
+      maxTakerFeeRate({ fees: { maxSwapFee: 0.0111, protocolFee: 0.0002, liquidationFee: 0.5 } })
+    ).toBeCloseTo(0.0113, 10);
   });
 });
 
@@ -48,37 +32,23 @@ describe("fundingRateFromRaw", () => {
 });
 
 describe("getFundingRate", () => {
-  function contextWith(build: "58b42b7" | "v0.2.2", emas: readonly [bigint, bigint]) {
+  it("divides the cached fundingPerDay by the mark cached at the same touch", async () => {
     const readContract = vi.fn(async ({ functionName }: { functionName: string }) => {
-      if (functionName === "rates") return [5n * 10n ** 16n, 0n, 0n, 0] as const;
-      if (functionName === "poolState") return [0, 0n, 20n * Q96, 0n] as const;
-      if (functionName === "emas" && build === "58b42b7") return emas;
+      if (functionName === "rates")
+        return {
+          fundingPerDay: 5n * 10n ** 16n,
+          longUtilFeePerDay: 0n,
+          shortUtilFeePerDay: 0n,
+          lastTouch: 1_700_000_000,
+          lastMark: 25n * Q96,
+        };
       throw new Error(`unexpected ${functionName}`);
     });
-    const getStorageAt = vi.fn(async () => toHex((emas[1] << 128n) | emas[0], { size: 32 }));
-    return {
-      publicClient: { readContract, getStorageAt },
-      getPerpConfig: async () => ({ build }),
-    } as unknown as PerpCityContext;
-  }
-
-  it("uses the EMA AMM price from emas() on 58b42b7", async () => {
-    const rate = await getFundingRate(contextWith("58b42b7", [25n * Q96, 24n * Q96]), PERP);
+    const context = { publicClient: { readContract } } as unknown as PerpCityContext;
+    const rate = await getFundingRate(context, PERP);
     expect(rate.fundingPerDayUsd).toBeCloseTo(0.05, 12);
     expect(rate.ratePerDay).toBeCloseTo(0.002, 12);
-    expect(rate.ratePriceBasis).toBe("ema");
     expect(rate.fundingPerDayRaw).toBe(5n * 10n ** 16n);
-  });
-
-  it("reads the EMA AMM price from storage on v0.2.2", async () => {
-    const rate = await getFundingRate(contextWith("v0.2.2", [25n * Q96, 24n * Q96]), PERP);
-    expect(rate.ratePerDay).toBeCloseTo(0.002, 12);
-    expect(rate.ratePriceBasis).toBe("ema");
-  });
-
-  it("falls back to the spot price while the EMA is zero", async () => {
-    const rate = await getFundingRate(contextWith("v0.2.2", [0n, 0n]), PERP);
-    expect(rate.ratePerDay).toBeCloseTo(0.0025, 12);
-    expect(rate.ratePriceBasis).toBe("spot");
+    expect(rate.lastTouch).toBe(1_700_000_000);
   });
 });

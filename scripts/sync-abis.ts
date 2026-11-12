@@ -1,0 +1,147 @@
+/**
+ * Regenerate src/abis/*.ts from a perpcity-contracts build at tag v1.0.0.
+ *
+ *   git -C ../perpcity-contracts checkout v1.0.0 && forge build --skip test --skip script
+ *   pnpm sync:abis ../perpcity-contracts
+ *
+ * The script refuses a checkout that is not the pinned commit, so the vendored
+ * ABIs always name the exact source they came from.
+ */
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const CONTRACTS_TAG = "v1.0.0";
+const CONTRACTS_COMMIT = "0df42087852ba2447956bbed8ce81ee062863454";
+const BEACONS_COMMIT = "f762da13438d086463f62bede9e248860f5a97b0";
+
+type AbiItem = { type: string; name?: string; inputs?: { type: string }[] };
+
+const contractsDir = resolve(process.argv[2] ?? "../perpcity-contracts");
+const outDir = join(contractsDir, "out");
+const abisDir = resolve(import.meta.dirname, "../src/abis");
+
+function git(dir: string, ...args: string[]): string {
+  return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
+}
+
+const head = git(contractsDir, "rev-parse", "HEAD");
+const beaconsHead = git(join(contractsDir, "lib/beacons"), "rev-parse", "HEAD");
+if (head !== CONTRACTS_COMMIT || beaconsHead !== BEACONS_COMMIT) {
+  throw new Error(
+    `Expected perpcity-contracts ${CONTRACTS_COMMIT} with lib/beacons ${BEACONS_COMMIT}, ` +
+      `got ${head} with lib/beacons ${beaconsHead}`
+  );
+}
+
+function artifact(file: string, contract = file.replace(/\.sol$/, "")): AbiItem[] {
+  return JSON.parse(readFileSync(join(outDir, file, `${contract}.json`), "utf8")).abi;
+}
+
+const signature = (item: AbiItem) =>
+  `${item.type} ${item.name}(${(item.inputs ?? []).map((input) => input.type).join(",")})`;
+
+/** Drop constructors and append `extra` items whose signature is not present yet. */
+function merge(base: AbiItem[], ...extra: AbiItem[][]): AbiItem[] {
+  const out = base.filter((item) => item.type !== "constructor");
+  const seen = new Set(out.map(signature));
+  for (const item of extra.flat()) {
+    if (item.type === "constructor" || seen.has(signature(item))) continue;
+    seen.add(signature(item));
+    out.push(item);
+  }
+  return out;
+}
+
+const errorsOnly = (abi: AbiItem[]) => abi.filter((item) => item.type === "error");
+
+// Perp's own artifact lacks the errors its external libraries revert with
+// (MarginRatioTooLow, MaxTotalFeeExceeded, ...), so the library error set is
+// merged in: viem decodes a revert only with the ABI passed to the call.
+const libraryErrors = errorsOnly(artifact("Errors.sol"));
+
+const targets: Array<{ file: string; name: string; abi: AbiItem[]; doc: string }> = [
+  {
+    file: "perp.ts",
+    name: "PERP_ABI",
+    abi: merge(
+      artifact("Perp.sol"),
+      libraryErrors,
+      errorsOnly(artifact("PerpGuardHook.sol")),
+      errorsOnly(artifact("WithdrawalController.sol"))
+    ),
+    doc: "Perp (implementation behind each market proxy) plus the library error set.",
+  },
+  {
+    file: "perp-factory.ts",
+    name: "PERP_FACTORY_ABI",
+    abi: merge(artifact("PerpFactory.sol"), libraryErrors),
+    doc: "PerpFactory.",
+  },
+  {
+    file: "perp-guard-hook.ts",
+    name: "PERP_GUARD_HOOK_ABI",
+    abi: merge(artifact("PerpGuardHook.sol")),
+    doc: "PerpGuardHook (pool hook; `perps(poolId)` is the market membership check).",
+  },
+  {
+    file: "protocol-fee-manager.ts",
+    name: "PROTOCOL_FEE_MANAGER_ABI",
+    abi: merge(artifact("ProtocolFeeManager.sol")),
+    doc: "ProtocolFeeManager.",
+  },
+  {
+    file: "module-registry.ts",
+    name: "MODULE_REGISTRY_ABI",
+    abi: merge(artifact("ModuleRegistry.sol")),
+    doc: "ModuleRegistry.",
+  },
+  {
+    file: "withdrawal-controller.ts",
+    name: "WITHDRAWAL_CONTROLLER_ABI",
+    abi: merge(artifact("WithdrawalController.sol"), libraryErrors),
+    doc: "WithdrawalController (per-market payout rate limit and claim escrow).",
+  },
+  { file: "fees.ts", name: "FEES_ABI", abi: merge(artifact("Fees.sol")), doc: "Fees module." },
+  {
+    file: "funding.ts",
+    name: "FUNDING_ABI",
+    abi: merge(artifact("Funding.sol")),
+    doc: "Funding module.",
+  },
+  {
+    file: "margin-ratios.ts",
+    name: "MARGIN_RATIOS_ABI",
+    abi: merge(artifact("MarginRatios.sol")),
+    doc: "MarginRatios module.",
+  },
+  {
+    file: "price-impact.ts",
+    name: "PRICE_IMPACT_ABI",
+    abi: merge(artifact("PriceImpact.sol")),
+    doc: "PriceImpact module.",
+  },
+  {
+    file: "pricing.ts",
+    name: "PRICING_ABI",
+    abi: merge(artifact("Pricing.sol")),
+    doc: "Pricing module.",
+  },
+  {
+    file: "beacon.ts",
+    name: "BEACON_ABI",
+    abi: merge(artifact("IdentityBeacon.sol"), errorsOnly(artifact("ECDSAVerifier.sol"))),
+    doc: "v1 identity beacon (`index()` returns `(index, updatedAt)`) and its ECDSA verifier errors.",
+  },
+];
+
+for (const target of targets) {
+  const body = JSON.stringify(target.abi, null, 2);
+  writeFileSync(
+    join(abisDir, target.file),
+    `// Generated by scripts/sync-abis.ts from perpcity-contracts ${CONTRACTS_TAG} ` +
+      `(${CONTRACTS_COMMIT.slice(0, 7)}, lib/beacons ${BEACONS_COMMIT.slice(0, 7)}). Do not edit.\n` +
+      `/** ${target.doc} */\nexport const ${target.name} = ${body} as const;\n`
+  );
+  console.log(`${target.file}: ${target.abi.length} items`);
+}

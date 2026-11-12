@@ -45,13 +45,11 @@ export const PERPCITY_ERROR_CODES = [
   "MARGIN_RATIO_TOO_LOW",
   "SLIPPAGE_EXCEEDED",
   "PRICE_IMPACT_TOO_HIGH",
-  "UTILIZATION_EXCEEDED",
   "INSUFFICIENT_LIQUIDITY",
   "POSITION_NOT_FOUND",
   "WRONG_POSITION_KIND",
   "NOT_LIQUIDATABLE",
   "MARKET_ABDICATED",
-  "POSITION_LOCKED",
   "UNAUTHORIZED",
   "USER_REJECTED",
   "TX_REVERTED_ONCHAIN",
@@ -59,6 +57,15 @@ export const PERPCITY_ERROR_CODES = [
   "RPC_ERROR",
   "VALIDATION_ERROR",
   "UNKNOWN",
+  "DEADLINE_EXPIRED",
+  "FEE_CAP_EXCEEDED",
+  "REDUCE_ONLY_VIOLATED",
+  "CLOSE_CAPACITY_EXCEEDED",
+  "STALE_INDEX",
+  "WITHDRAWAL_NOT_READY",
+  "WITHDRAWAL_PAUSED",
+  "WITHDRAWAL_NOT_PENDING",
+  "TVL_CAP_EXCEEDED",
 ] as const;
 
 export type PerpCityErrorCode = (typeof PERPCITY_ERROR_CODES)[number];
@@ -210,9 +217,8 @@ export function parseContractError(error: unknown): PerpCityError {
       let args: readonly unknown[] = revertError.data?.args ?? [];
       const raw = revertError.raw;
 
-      // The call-site ABI could not decode the revert. The deployed contracts
-      // also throw solady, Uniswap V4 PoolManager, and v0.0.1-generation
-      // errors that are not in PERP_ABI - try those before giving up.
+      // The call-site ABI could not decode the revert (for example a module
+      // ABI, or a Uniswap V4 / solady error): try the full v1 error set.
       if (!errorName && raw) {
         try {
           const decoded = decodeErrorResult({ abi: EXTENDED_ERROR_DECODE_ABI, data: raw });
@@ -301,8 +307,7 @@ type ContractErrorSpec = {
   category: ErrorCategory;
   canRetry?: boolean;
   retryGuidance?: string;
-  /** Static message, or a formatter that must tolerate missing args (the
-   * v0.1.x ABI declares every error zero-arg, so args are often empty). */
+  /** Static message, or a formatter that must tolerate missing args. */
   message: string | ((args: readonly unknown[]) => string);
 };
 
@@ -312,127 +317,76 @@ type ContractErrorSpec = {
  * record surface via the generic fallback in `formatContractError`.
  */
 const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
-  // Legacy config errors (v0.0.1-generation factory/market setup)
-  InvalidBeaconAddress: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0 ? `Invalid beacon address: ${args[0]}` : "Invalid beacon address.",
+  // perpcity-contracts v1.0.0 src/libraries/Errors.sol: trading and position errors
+  Abdicated: {
+    code: "MARKET_ABDICATED",
+    category: ErrorCategory.STATE_ERROR,
+    message: "This market has permanently disabled this operation.",
   },
-  InvalidTradingFeeSplits: {
+  AggregateSwapFeesTooHigh: {
     category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Invalid trading fee splits. Insurance split: ${args[0]}, Creator split: ${args[1]}`
-        : "Invalid trading fee splits.",
+    message: "The market's swap fees add up to more than 100%.",
   },
-  InvalidMaxOpeningLev: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0
-        ? `Invalid maximum opening leverage: ${args[0]}`
-        : "Invalid maximum opening leverage.",
+  BeaconIndexUnreadable: {
+    code: "STALE_INDEX",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: true,
+    message: "The market's index oracle could not be read. Try again in a moment.",
   },
-  InvalidLiquidationLev: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Invalid liquidation leverage: ${args[0]}. Must be less than max opening leverage: ${args[1]}`
-        : "Invalid liquidation leverage.",
-  },
-  InvalidLiquidationFee: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0 ? `Invalid liquidation fee: ${args[0]}` : "Invalid liquidation fee.",
-  },
-  InvalidLiquidatorFeeSplit: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0
-        ? `Invalid liquidator fee split: ${args[0]}`
-        : "Invalid liquidator fee split.",
-  },
-  InvalidClose: {
+  DeadlineExpired: {
+    code: "DEADLINE_EXPIRED",
     category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length >= 3
-        ? `Cannot close position. Caller: ${args[0]}, Holder: ${args[1]}, Is Liquidated: ${args[2]}`
-        : "Cannot close this position.",
+    canRetry: true,
+    message: "The transaction deadline passed before it was mined. Submit it again.",
   },
-  InvalidCaller: {
+  DonationsRestricted: {
     code: "UNAUTHORIZED",
     category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Invalid caller. Expected: ${args[1]}, Got: ${args[0]}`
-        : "Invalid caller for this operation.",
+    message: "Only the market owner can donate to this market.",
   },
-  InvalidLiquidity: {
-    category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length > 0 ? `Invalid liquidity amount: ${args[0]}` : "Invalid liquidity amount.",
+  EmaWindowTooLow: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The EMA window must be greater than zero.",
   },
-  InvalidMargin: {
-    category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length > 0 ? `Invalid margin amount: ${args[0]}` : "Invalid margin amount.",
-  },
-  InvalidLevX96: {
+  HealthNotImproved: {
     code: "MARGIN_RATIO_TOO_LOW",
     category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Invalid leverage: ${args[0]}. Maximum allowed: ${args[1]}`
-        : "Invalid leverage.",
+    message: "This change must improve the position's health, and it does not.",
   },
-  MakerPositionLocked: {
-    code: "POSITION_LOCKED",
-    category: ErrorCategory.STATE_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Maker position is locked until ${new Date(Number(args[1]) * 1000).toISOString()}. Current time: ${new Date(Number(args[0]) * 1000).toISOString()}`
-        : "Maker position is locked until the lockup period ends.",
-  },
-  MaximumAmountExceeded: {
-    code: "SLIPPAGE_EXCEEDED",
+  IdenticalTicks: {
     category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Maximum amount exceeded. Maximum: ${args[0]}, Requested: ${args[1]}`
-        : "Execution would cost more than your slippage limit allows. Try again or increase your slippage tolerance.",
+    message: "The new price range is the same as the current one.",
   },
-  MinimumAmountInsufficient: {
-    code: "SLIPPAGE_EXCEEDED",
-    category: ErrorCategory.USER_ERROR,
-    message:
-      "Slippage tolerance exceeded. The position's value moved unfavorably during execution. Try increasing your slippage tolerance.",
-  },
-  PriceImpactTooHigh: {
-    code: "PRICE_IMPACT_TOO_HIGH",
-    category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length >= 3
-        ? `Price impact too high. Current price: ${args[0]}, Min acceptable: ${args[1]}, Max acceptable: ${args[2]}`
-        : "This order would move the price too much. Try a smaller size or wait for more liquidity.",
-  },
-
-  // Current Errors.sol (perp contracts v0.1.x) trading errors
   InsufficientLiquidityToFill: {
     code: "INSUFFICIENT_LIQUIDITY",
     category: ErrorCategory.STATE_ERROR,
     message:
       "Not enough liquidity in this market to fill the order. Try a smaller size or wait for more liquidity.",
   },
+  InvalidCallbackAction: {
+    category: ErrorCategory.SYSTEM_ERROR,
+    message: "The market received an unknown pool callback action.",
+  },
+  LongCloseCapacityExceeded: {
+    code: "CLOSE_CAPACITY_EXCEEDED",
+    category: ErrorCategory.STATE_ERROR,
+    message:
+      "The pool has too little depth to close this much long exposure. Try a smaller size or wait for more liquidity.",
+  },
+  MarginRatioTooLow: {
+    code: "MARGIN_RATIO_TOO_LOW",
+    category: ErrorCategory.USER_ERROR,
+    message:
+      "This position would be too close to liquidation. Increase your margin or reduce leverage.",
+  },
+  MarginTooHigh: {
+    category: ErrorCategory.USER_ERROR,
+    message: "The margin amount is too large.",
+  },
   MarginTooLow: {
     code: "MARGIN_BELOW_MINIMUM",
     category: ErrorCategory.USER_ERROR,
     message: `Margin is below the market minimum of $${MIN_OPENING_MARGIN_USD}.`,
-  },
-  MinAmtUnmet: {
-    code: "SLIPPAGE_EXCEEDED",
-    category: ErrorCategory.USER_ERROR,
-    canRetry: true,
-    message:
-      "Execution moved beyond your slippage limit. Try again or increase your slippage tolerance.",
   },
   MaxAmtExceeded: {
     code: "SLIPPAGE_EXCEEDED",
@@ -441,44 +395,26 @@ const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
     message:
       "Execution would cost more than your slippage limit allows. Try again or increase your slippage tolerance.",
   },
-  MarginRatioTooLow: {
-    code: "MARGIN_RATIO_TOO_LOW",
+  MaxTotalFeeExceeded: {
+    code: "FEE_CAP_EXCEEDED",
     category: ErrorCategory.USER_ERROR,
-    message:
-      "This position would be too close to liquidation. Increase your margin or reduce leverage.",
+    canRetry: true,
+    message: "The trading fee is above your fee limit. Try again or raise the fee limit.",
   },
-  LongUtilizationExceeded: {
-    code: "UTILIZATION_EXCEEDED",
-    category: ErrorCategory.STATE_ERROR,
+  MinAmtUnmet: {
+    code: "SLIPPAGE_EXCEEDED",
+    category: ErrorCategory.USER_ERROR,
+    canRetry: true,
     message:
-      "The market's long capacity is fully utilized. Try a smaller size or wait for more liquidity.",
-  },
-  ShortUtilizationExceeded: {
-    code: "UTILIZATION_EXCEEDED",
-    category: ErrorCategory.STATE_ERROR,
-    message:
-      "The market's short capacity is fully utilized. Try a smaller size or wait for more liquidity.",
+      "Execution moved beyond your slippage limit. Try again or increase your slippage tolerance.",
   },
   NegativeEquity: {
     category: ErrorCategory.USER_ERROR,
-    message: "The position's equity would be negative after this action.",
+    message: "This position has negative equity and cannot be closed voluntarily.",
   },
   NegativeMargin: {
     category: ErrorCategory.USER_ERROR,
     message: "The resulting margin would be negative. Reduce the amount being withdrawn.",
-  },
-  NotLiquidatable: {
-    code: "NOT_LIQUIDATABLE",
-    category: ErrorCategory.STATE_ERROR,
-    message: "This position is healthy and cannot be liquidated.",
-  },
-  ZeroLiquidity: {
-    category: ErrorCategory.USER_ERROR,
-    message: "Liquidity must be greater than zero.",
-  },
-  TicksOutOfBounds: {
-    category: ErrorCategory.USER_ERROR,
-    message: "The selected price range is outside the allowed bounds.",
   },
   NonMakerPosition: {
     code: "WRONG_POSITION_KIND",
@@ -490,209 +426,226 @@ const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
     category: ErrorCategory.USER_ERROR,
     message: "This action only applies to trading positions.",
   },
+  NoSurplus: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "The market holds no USDC above its liabilities.",
+  },
+  NoSystemFunds: {
+    category: ErrorCategory.SYSTEM_ERROR,
+    message: "The market has no collateral available to pay this claim.",
+  },
+  NotLiquidatable: {
+    code: "NOT_LIQUIDATABLE",
+    category: ErrorCategory.STATE_ERROR,
+    message: "This position is healthy and cannot be liquidated.",
+  },
+  NotPoolManager: {
+    category: ErrorCategory.SYSTEM_ERROR,
+    message: "Only the Uniswap V4 Pool Manager can call this function.",
+  },
   PositionDoesNotExist: {
     code: "POSITION_NOT_FOUND",
     category: ErrorCategory.STATE_ERROR,
     message: "This position no longer exists. It may have been closed or liquidated.",
+  },
+  PriceImpactTooHigh: {
+    code: "PRICE_IMPACT_TOO_HIGH",
+    category: ErrorCategory.USER_ERROR,
+    message: "This order would move the price too much. Try a smaller size.",
+  },
+  PriceOutsideRange: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "The market's index is outside the allowed price range.",
+  },
+  ReduceOnlyViolated: {
+    code: "REDUCE_ONLY_VIOLATED",
+    category: ErrorCategory.USER_ERROR,
+    message:
+      "This reduce-only order would increase or flip the position. Refresh the position size and try again.",
+  },
+  ShortCloseCapacityExceeded: {
+    code: "CLOSE_CAPACITY_EXCEEDED",
+    category: ErrorCategory.STATE_ERROR,
+    message:
+      "The pool has too little depth to close this much short exposure. Try a smaller size or wait for more liquidity.",
+  },
+  StaleBeaconIndex: {
+    code: "STALE_INDEX",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: true,
+    retryGuidance: "The market resumes when its oracle publishes a new index.",
+    message:
+      "The market's index is out of date, so the market is paused. Try again after the next index update.",
+  },
+  TicksOutOfBounds: {
+    category: ErrorCategory.USER_ERROR,
+    message: "The selected price range is outside the allowed bounds.",
   },
   UnauthorizedCaller: {
     code: "UNAUTHORIZED",
     category: ErrorCategory.USER_ERROR,
     message: "Your wallet is not authorized to perform this action.",
   },
-  NoSystemFunds: {
-    category: ErrorCategory.SYSTEM_ERROR,
-    message: "The protocol has no system funds available for this operation.",
-  },
-  SwapReverted: {
-    code: "INSUFFICIENT_LIQUIDITY",
-    category: ErrorCategory.STATE_ERROR,
-    message: "Swap failed. This may be due to insufficient liquidity or slippage tolerance.",
-  },
-  ZeroSizePosition: {
+  ZeroAddress: {
     category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Cannot create zero-size position. Perp delta: ${args[0]}, USD delta: ${args[1]}`
-        : "Cannot create a zero-size position.",
+    message: "The zero address is not allowed here.",
   },
-  InvalidFundingInterval: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0 ? `Invalid funding interval: ${args[0]}` : "Invalid funding interval.",
+  ZeroAmount: {
+    category: ErrorCategory.USER_ERROR,
+    message: "The amount must be greater than zero.",
   },
-  InvalidPriceImpactBand: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0 ? `Invalid price impact band: ${args[0]}` : "Invalid price impact band.",
+  ZeroCapacity: {
+    category: ErrorCategory.USER_ERROR,
+    message: "This liquidity is too small to back any trading. Add more liquidity.",
   },
-  InvalidMarketDeathThreshold: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0
-        ? `Invalid market death threshold: ${args[0]}`
-        : "Invalid market death threshold.",
+  ZeroDelta: {
+    category: ErrorCategory.USER_ERROR,
+    message: "The trade size must be greater than zero.",
   },
-  InvalidTickRange: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Invalid tick range. Lower: ${args[0]}, Upper: ${args[1]}`
-        : "Invalid tick range.",
-  },
-  MarketNotKillable: {
-    category: ErrorCategory.STATE_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Market health (${args[0]}) is above death threshold (${args[1]}). Market cannot be killed yet.`
-        : "Market cannot be killed yet.",
-  },
-  InvalidStartingSqrtPriceX96: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0 ? `Invalid starting sqrt price: ${args[0]}` : "Invalid starting sqrt price.",
+  ZeroLiquidity: {
+    category: ErrorCategory.USER_ERROR,
+    message: "Liquidity must be greater than zero.",
   },
 
-  // Current Errors.sol governance/timelock errors
-  Abdicated: {
-    code: "MARKET_ABDICATED",
-    category: ErrorCategory.STATE_ERROR,
-    message: "This market has been abdicated and no longer accepts this operation.",
+  // Errors.sol: withdrawal controller and accounting token
+  AlreadyInitialized: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "This contract is already initialized.",
   },
-  DataAlreadyPending: {
-    category: ErrorCategory.STATE_ERROR,
-    message: "A timelocked update is already pending for this market.",
+  AmountNotDecreased: {
+    category: ErrorCategory.USER_ERROR,
+    message: "This update must decrease the value.",
   },
-  DataNotTimelocked: {
+  ClaimNotReady: {
+    code: "WITHDRAWAL_NOT_READY",
     category: ErrorCategory.STATE_ERROR,
-    message: "No timelocked update exists for this data.",
+    canRetry: false,
+    message: "This claim is still in its challenge window. Refresh its current release time.",
   },
-  TimelockNotExpired: {
+  ClaimNotPending: {
+    code: "WITHDRAWAL_NOT_PENDING",
     category: ErrorCategory.STATE_ERROR,
-    message: "The timelock for this update has not expired yet.",
+    canRetry: false,
+    message: "This claim is no longer pending or does not exist. Refresh its status.",
+  },
+  ReleasesArePaused: {
+    code: "WITHDRAWAL_PAUSED",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: false,
+    message: "Withdrawals are paused. Closing positions can still queue payouts.",
+  },
+  ClaimIsPaused: {
+    code: "WITHDRAWAL_PAUSED",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: false,
+    message: "This claim is paused. Refresh its status before trying again.",
+  },
+  ClaimNotPaused: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "This claim is not paused.",
+  },
+  TvlCapExceeded: {
+    code: "TVL_CAP_EXCEEDED",
+    category: ErrorCategory.STATE_ERROR,
+    canRetry: false,
+    message: "This deposit exceeds the market TVL cap. Reduce the amount or wait for capacity.",
+  },
+  NotGovernor: {
+    code: "UNAUTHORIZED",
+    category: ErrorCategory.USER_ERROR,
+    message: "Only the market governor can perform this action.",
+  },
+  NotGuardian: {
+    code: "UNAUTHORIZED",
+    category: ErrorCategory.USER_ERROR,
+    message: "Only the market owner can perform this action.",
+  },
+  NotPerp: {
+    code: "UNAUTHORIZED",
+    category: ErrorCategory.USER_ERROR,
+    message: "Only the bound market can request this payout.",
+  },
+  WindowNotIncreased: {
+    category: ErrorCategory.USER_ERROR,
+    message: "The new challenge window must be longer than the current one.",
+  },
+  ZeroWindow: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The challenge window must be greater than zero.",
+  },
+  TransferNotAllowed: {
+    category: ErrorCategory.USER_ERROR,
+    message: "Market accounting tokens cannot be transferred.",
   },
 
-  // PerpFactory / ProtocolFeeManager configuration errors
-  EmaWindowTooLow: {
+  // Factory, hook and protocol fee manager
+  InvalidPerpImplementation: {
     category: ErrorCategory.CONFIG_ERROR,
-    message: "The EMA window is below the minimum allowed value.",
+    message: "The market implementation address is not valid.",
+  },
+  NotAContract: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The address is not a contract.",
+  },
+  NotProtocolOwner: {
+    code: "UNAUTHORIZED",
+    category: ErrorCategory.USER_ERROR,
+    message: "Only the protocol owner can perform this action.",
   },
   ProtocolFeeTooHigh: {
     category: ErrorCategory.CONFIG_ERROR,
     message: "The protocol fee exceeds the maximum cap.",
   },
-  StartingPriceTooHigh: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: "The market's starting price is above the allowed maximum.",
-  },
-  StartingPriceTooLow: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: "The market's starting price is below the allowed minimum.",
-  },
-
-  // Uniswap V4 PoolManager errors
-  CurrencyNotSettled: {
-    category: ErrorCategory.SYSTEM_ERROR,
-    retryGuidance: "This indicates an issue with the transaction flow. Please try again.",
-    message:
-      "Currency balance not settled after operation. The pool manager requires all currency deltas to be settled before unlocking.",
-  },
-  PoolNotInitialized: {
-    category: ErrorCategory.STATE_ERROR,
-    message:
-      "Pool does not exist or has not been initialized. Ensure the pool has been created before attempting to interact with it.",
-  },
-  AlreadyUnlocked: {
-    category: ErrorCategory.SYSTEM_ERROR,
-    canRetry: true,
-    retryGuidance: "This is a temporary state. Please retry your transaction.",
-    message: "Pool manager is already unlocked. This indicates a potential reentrancy issue.",
-  },
-  ManagerLocked: {
-    category: ErrorCategory.STATE_ERROR,
-    canRetry: true,
-    retryGuidance: "Please retry your transaction in a moment.",
-    message:
-      "Uniswap V4 Pool Manager is currently locked. This is a temporary state during transaction processing.",
-  },
-  TickSpacingTooLarge: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0
-        ? `Tick spacing (${args[0]}) exceeds the maximum allowed value. Please use a smaller tick spacing.`
-        : "Tick spacing exceeds the maximum allowed value.",
-  },
-  TickSpacingTooSmall: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0
-        ? `Tick spacing (${args[0]}) is below the minimum allowed value. Please use a larger tick spacing.`
-        : "Tick spacing is below the minimum allowed value.",
-  },
-  CurrenciesOutOfOrderOrEqual: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length >= 2
-        ? `Currencies must be ordered (currency0 < currency1) and not equal. Got currency0: ${args[0]}, currency1: ${args[1]}`
-        : "Currencies must be ordered (currency0 < currency1) and not equal.",
-  },
-  UnauthorizedDynamicLPFeeUpdate: {
+  UnauthorizedPoolAction: {
     code: "UNAUTHORIZED",
     category: ErrorCategory.USER_ERROR,
     message:
-      "Unauthorized attempt to update dynamic LP fee. Only authorized addresses can modify fees.",
-  },
-  SwapAmountCannotBeZero: {
-    category: ErrorCategory.USER_ERROR,
-    message: "Swap amount cannot be zero. Please specify a valid swap amount.",
-  },
-  NonzeroNativeValue: {
-    category: ErrorCategory.USER_ERROR,
-    message:
-      "Native ETH was sent with the transaction when none was expected. Do not send ETH with this operation.",
-  },
-  MustClearExactPositiveDelta: {
-    category: ErrorCategory.SYSTEM_ERROR,
-    message:
-      "Must clear exact positive delta. The transaction must settle the exact amount owed to the pool.",
+      "This pool only accepts swaps and liquidity changes from its own market contract. Trade through the market, not the Pool Manager.",
   },
 
-  // ERC721/Ownership errors
-  AccountBalanceOverflow: {
-    category: ErrorCategory.SYSTEM_ERROR,
-    message:
-      "Account balance overflow detected. This is a critical error that should not occur under normal conditions.",
+  // v1 beacon and ECDSA verifier (lib/beacons f762da1)
+  InvalidNonce: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "The beacon update nonce is not the next sequential nonce.",
   },
-  BalanceQueryForZeroAddress: {
-    category: ErrorCategory.USER_ERROR,
-    message: "Cannot query balance for the zero address.",
-  },
-  NotOwnerNorApproved: {
+  InvalidSigner: {
     code: "UNAUTHORIZED",
     category: ErrorCategory.USER_ERROR,
-    message: "Caller is not the owner or an approved operator for this position.",
+    message: "The beacon update is not signed by the beacon's signer.",
   },
-  TokenAlreadyExists: {
+  ProofReuse: {
     category: ErrorCategory.STATE_ERROR,
-    message: "A position with this ID already exists.",
+    message: "This beacon update proof was already used.",
   },
-  TokenDoesNotExist: {
-    code: "POSITION_NOT_FOUND",
-    category: ErrorCategory.USER_ERROR,
-    message: "The specified position does not exist.",
+  AlreadyBound: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "This verifier is already bound to a beacon.",
   },
-  TransferFromIncorrectOwner: {
-    category: ErrorCategory.USER_ERROR,
-    message: "Attempting to transfer position from incorrect owner.",
+
+  // Module owner errors (Fees, Funding, MarginRatios, PriceImpact, Pricing)
+  InvalidMarginRatios: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The margin ratios must satisfy backstop < liquidation < initial.",
   },
-  TransferToNonERC721ReceiverImplementer: {
-    category: ErrorCategory.USER_ERROR,
-    message:
-      "Cannot transfer position to a contract that does not implement ERC721 receiver interface.",
+  UpdateAlreadyPending: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "A delayed margin ratio update is already pending.",
   },
-  TransferToZeroAddress: {
-    category: ErrorCategory.USER_ERROR,
-    message: "Cannot transfer position to the zero address.",
+  UpdateNotReady: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "The delayed margin ratio update is not ready yet.",
+  },
+  NoPendingUpdate: {
+    category: ErrorCategory.STATE_ERROR,
+    message: "No margin ratio update is pending.",
+  },
+  LiqFeeTooHigh: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The liquidation fee is above the module maximum.",
+  },
+  SwapFeesTooHigh: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The swap fees are above the module maximum.",
   },
   NewOwnerIsZeroAddress: {
     category: ErrorCategory.USER_ERROR,
@@ -705,127 +658,88 @@ const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
   Unauthorized: {
     code: "UNAUTHORIZED",
     category: ErrorCategory.USER_ERROR,
-    message: "Unauthorized access. Caller does not have permission to perform this operation.",
+    message: "Caller does not have permission to perform this operation.",
   },
 
-  // solady SafeTransferLib errors (USDC pulls/pushes)
-  TransferFromFailed: {
-    code: "INSUFFICIENT_USDC_BALANCE",
-    category: ErrorCategory.USER_ERROR,
-    message:
-      "ERC20 transferFrom operation failed. Ensure you have approved sufficient tokens and have enough balance.",
-  },
-  TransferFailed: {
-    category: ErrorCategory.SYSTEM_ERROR,
-    message:
-      "ERC20 transfer operation failed. This may indicate insufficient balance or a token contract issue.",
-  },
-  ApproveFailed: {
-    category: ErrorCategory.SYSTEM_ERROR,
-    message: "ERC20 approve operation failed. Please check the token contract.",
-  },
-
-  // Module configuration errors
-  AlreadyInitialized: {
+  FundingRateMultiplierTooHigh: {
     category: ErrorCategory.CONFIG_ERROR,
-    message: "Contract has already been initialized. Initialization can only occur once.",
+    message: "The funding rate multiplier is above the module maximum.",
   },
-  FeesNotRegistered: {
+  MaxFundingPerDayPercentTooHigh: {
     category: ErrorCategory.CONFIG_ERROR,
-    message:
-      "Fees module has not been registered for this pool. Please register the fees module before proceeding.",
+    message: "The maximum daily funding is above the module maximum.",
   },
-  FeeTooLarge: {
+  MaxPremiumRatioTooHigh: {
     category: ErrorCategory.CONFIG_ERROR,
-    message: "The specified fee exceeds the maximum allowed value.",
+    message: "The maximum premium ratio must be below 100%.",
   },
-  MarginRatiosNotRegistered: {
+  PriceImpactBoundTooHigh: {
     category: ErrorCategory.CONFIG_ERROR,
-    message:
-      "Margin ratios module has not been registered for this pool. Please register the module before proceeding.",
+    message: "The price impact bound is above the module maximum.",
   },
-  LockupPeriodNotRegistered: {
+  InvalidTargetUtilization: {
     category: ErrorCategory.CONFIG_ERROR,
-    message:
-      "Lockup period module has not been registered for this pool. Please register the module before proceeding.",
+    message: "The target utilization is not valid.",
   },
-  SqrtPriceImpactLimitNotRegistered: {
+  LiquidityDecayZero: {
     category: ErrorCategory.CONFIG_ERROR,
-    message:
-      "Sqrt price impact limit module has not been registered for this pool. Please register the module before proceeding.",
+    message: "The LP fee liquidity decay must be greater than zero.",
   },
-  ModuleAlreadyRegistered: {
+  MaxFeeMultiplierTooLow: {
     category: ErrorCategory.CONFIG_ERROR,
-    message: "This module has already been registered and cannot be registered again.",
+    message: "The LP fee maximum multiplier is too low.",
   },
-
-  // Position/Trading errors
-  InvalidAction: {
-    category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length > 0
-        ? `Invalid action type: ${args[0]}. Please specify a valid action.`
-        : "Invalid action type. Please specify a valid action.",
+  MaxUtilFeeTooHigh: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The utilization fee curve is above the module maximum.",
   },
-  InvalidMarginRatio: {
-    code: "MARGIN_RATIO_TOO_LOW",
-    category: ErrorCategory.USER_ERROR,
-    message: (args) =>
-      args.length > 0
-        ? `Invalid margin ratio: ${args[0]}. The margin ratio must be within acceptable bounds.`
-        : "Invalid margin ratio. The margin ratio must be within acceptable bounds.",
+  PostTargetSlopeTooLow: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The utilization fee slope after the target must not be lower than before it.",
   },
-  MakerNotAllowed: {
-    code: "WRONG_POSITION_KIND",
-    category: ErrorCategory.USER_ERROR,
-    message: "Maker positions are not allowed for this operation.",
+  TargetFeeAboveStartFee: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The LP fee target is above its start fee.",
   },
-  PositionLocked: {
-    code: "POSITION_LOCKED",
-    category: ErrorCategory.STATE_ERROR,
-    message:
-      "This position is currently locked. Maker positions have a time-based lockup period to ensure liquidity stability.",
+  ZeroDelay: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The margin ratio update delay must be greater than zero.",
   },
-  ZeroDelta: {
-    category: ErrorCategory.STATE_ERROR,
-    message: "Position has zero size. Cannot perform operation on a position with no open size.",
+  InvalidAuthorizedCaller: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The verifier caller address is not valid.",
   },
-  NotPoolManager: {
-    category: ErrorCategory.SYSTEM_ERROR,
-    message:
-      "Only the Uniswap V4 Pool Manager can call this function. This indicates an architectural issue.",
+  InvalidBinder: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The verifier binder address is not valid.",
   },
-  NoLiquidityToReceiveFees: {
-    category: ErrorCategory.STATE_ERROR,
-    message:
-      "No liquidity available to receive fees. Ensure there is sufficient liquidity in the pool.",
+  InvalidDataLength: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The beacon update must carry exactly one measurement.",
   },
-
-  // v0.2.2-upgradeable (perpcity-contracts 198559a): skim, UUPS proxy, guard
-  // hook, factory implementation gate
-  NoSurplus: {
-    category: ErrorCategory.STATE_ERROR,
-    message: "The market holds no surplus above its liabilities; nothing to skim.",
+  TrackedValTooLarge: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The beacon value is too large to track.",
   },
-  ZeroAddress: {
-    category: ErrorCategory.USER_ERROR,
-    message: "The zero address is not a valid recipient.",
+  AddressEmptyCode: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The target address has no contract code.",
   },
-  UnauthorizedPoolAction: {
+  FailedCall: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "A low-level call failed.",
+  },
+  NotInitializing: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "The contract is not initializing.",
+  },
+  UnauthorizedBinder: {
     code: "UNAUTHORIZED",
     category: ErrorCategory.USER_ERROR,
-    message:
-      "This pool only accepts swaps and liquidity changes from its own market contract. Trade through the market, not the Pool Manager.",
+    message: "Only the verifier's binder can bind it.",
   },
-  InvalidPerpImplementation: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: "The market implementation address is not valid.",
-  },
-  NotProtocolOwner: {
-    code: "UNAUTHORIZED",
-    category: ErrorCategory.USER_ERROR,
-    message: "Only the protocol owner can perform this action.",
-  },
+
+  // UUPS proxy (OpenZeppelin)
   ERC1967InvalidImplementation: {
     category: ErrorCategory.CONFIG_ERROR,
     message: (args) =>
@@ -848,47 +762,69 @@ const CONTRACT_ERROR_SPECS: Record<string, ContractErrorSpec> = {
     message: "The market is already initialized.",
   },
 
-  // perpcity-contracts v0.0.1 error set (older deployed markets)
-  CouldNotFullyFill: {
-    code: "INSUFFICIENT_LIQUIDITY",
+  // Uniswap V4 PoolManager errors
+  CurrencyNotSettled: {
+    category: ErrorCategory.SYSTEM_ERROR,
+    retryGuidance: "This indicates an issue with the transaction flow. Please try again.",
+    message: "Currency balance not settled after operation.",
+  },
+  PoolNotInitialized: {
     category: ErrorCategory.STATE_ERROR,
-    message:
-      "Not enough liquidity to fully fill the order. Try a smaller size or wait for more liquidity.",
+    message: "Pool does not exist or has not been initialized.",
   },
-  PerpDoesNotExist: {
+  AlreadyUnlocked: {
+    category: ErrorCategory.SYSTEM_ERROR,
+    canRetry: true,
+    message: "Pool manager is already unlocked.",
+  },
+  ManagerLocked: {
     category: ErrorCategory.STATE_ERROR,
-    message: "This market does not exist.",
+    canRetry: true,
+    message: "Uniswap V4 Pool Manager is currently locked.",
   },
-  TransferNotAllowed: {
+  TickSpacingTooLarge: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "Tick spacing exceeds the maximum allowed value.",
+  },
+  TickSpacingTooSmall: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "Tick spacing is below the minimum allowed value.",
+  },
+  CurrenciesOutOfOrderOrEqual: {
+    category: ErrorCategory.CONFIG_ERROR,
+    message: "Currencies must be ordered (currency0 < currency1) and not equal.",
+  },
+  UnauthorizedDynamicLPFeeUpdate: {
+    code: "UNAUTHORIZED",
     category: ErrorCategory.USER_ERROR,
-    message: "Position NFTs on this market cannot be transferred.",
+    message: "Unauthorized attempt to update the dynamic LP fee.",
   },
-  ZeroNotional: {
+  SwapAmountCannotBeZero: {
     category: ErrorCategory.USER_ERROR,
-    message: "The resulting position would have zero notional value.",
+    message: "Swap amount cannot be zero.",
   },
-  InvalidMarginDelta: {
+  NonzeroNativeValue: {
     category: ErrorCategory.USER_ERROR,
-    message: "Invalid margin delta for this adjustment.",
+    message: "Do not send ETH with this operation.",
   },
-  BeaconNotRegistered: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: "The market's beacon is not registered.",
+  MustClearExactPositiveDelta: {
+    category: ErrorCategory.SYSTEM_ERROR,
+    message: "The transaction must settle the exact amount owed to the pool.",
   },
-  ModuleNotRegistered: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: (args) =>
-      args.length > 0
-        ? `Module not registered: ${args[0]}`
-        : "A required module is not registered for this market.",
+
+  // solady SafeTransferLib errors (USDC pulls/pushes)
+  TransferFromFailed: {
+    code: "INSUFFICIENT_USDC_BALANCE",
+    category: ErrorCategory.USER_ERROR,
+    message: "USDC transfer failed. Make sure you approved enough USDC and have enough balance.",
   },
-  StartingSqrtPriceTooHigh: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: "The market's starting price is above the allowed maximum.",
+  TransferFailed: {
+    category: ErrorCategory.SYSTEM_ERROR,
+    message: "USDC transfer out of the market failed.",
   },
-  StartingSqrtPriceTooLow: {
-    category: ErrorCategory.CONFIG_ERROR,
-    message: "The market's starting price is below the allowed minimum.",
+  ApproveFailed: {
+    category: ErrorCategory.SYSTEM_ERROR,
+    message: "USDC approve failed.",
   },
 };
 

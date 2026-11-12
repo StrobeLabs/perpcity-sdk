@@ -1,9 +1,20 @@
-import { decodeFunctionData, erc20Abi, getAddress } from "viem";
+import {
+  decodeFunctionData,
+  encodeAbiParameters,
+  encodeEventTopics,
+  erc20Abi,
+  getAddress,
+  type Hex,
+} from "viem";
 import { describe, expect, it } from "vitest";
 import { PERP_ABI } from "../../abis/perp";
 import type { PerpCityContext } from "../../context";
-import { buildAdjustMakerCalls, buildAdjustTakerCalls } from "../../functions/calldata";
-import { estimateTakerAdjust } from "../../functions/perp-actions";
+import {
+  buildAdjustMakerCalls,
+  buildAdjustTakerCalls,
+  buildMoveMakerCalls,
+} from "../../functions/calldata";
+import { estimateTakerAdjust, makerConvertedFromReceipt } from "../../functions/perp-actions";
 import type { PerpAddress } from "../../types";
 import { Q96 } from "../../utils/constants";
 
@@ -15,13 +26,12 @@ const PERP = getAddress("0x3333333333333333333333333333333333333333") as PerpAdd
 const perpData = {
   sqrtPriceX96: 10n * Q96,
   liquidity: 10n ** 18n,
-  mark: 100,
+  ammPrice: 100,
   fees: {
-    creatorFee: 0.001,
-    insuranceFee: 0.0005,
-    lpFee: 0.0015,
+    // maxSwapFee + protocolFee = 30 bps: the conservative default fee rate.
+    maxSwapFee: 0.0025,
     liquidationFee: 0.01,
-    protocolFee: 0,
+    protocolFee: 0.0005,
   },
 };
 
@@ -45,7 +55,7 @@ describe("estimateTakerAdjust", () => {
     expect(quote.fillPrice).toBeGreaterThan(99.9);
     expect(quote.fillPrice).toBeLessThan(100.1);
     expect(quote.exceedsLiquidity).toBe(false);
-    // Total taker fee = 0.001 + 0.0005 + 0.0015 = 0.003 (30 bps). A buy pays
+    // Default fee rate = maxSwapFee + protocolFee = 0.003 (30 bps). A buy pays
     // more, so the effective fill is higher and the effective USD out is larger.
     expect(quote.feeRate).toBeCloseTo(0.003, 12);
     expect(quote.effectiveFillPrice).toBeCloseTo(quote.fillPrice * 1.003, 9);
@@ -66,6 +76,14 @@ describe("estimateTakerAdjust", () => {
     expect(quote.effectiveUsdDelta).toBeLessThan(quote.usdDelta);
   });
 
+  it("uses an explicit fee rate when given", async () => {
+    const quote = await estimateTakerAdjust(makeContext(), PERP, {
+      perpDelta: 1_000_000n,
+      feeRate: 0.001,
+    });
+    expect(quote.feeRate).toBeCloseTo(0.001, 12);
+  });
+
   it("rejects a zero delta", async () => {
     await expect(estimateTakerAdjust(makeContext(), PERP, { perpDelta: 0n })).rejects.toThrow(
       /non-zero/
@@ -74,7 +92,14 @@ describe("estimateTakerAdjust", () => {
 });
 
 describe("buildAdjustTakerCalls", () => {
-  const params = { posId: 7n, marginDelta: 5_000_000n, perpDelta: 1_000_000n, amt1Limit: 123n };
+  const params = {
+    posId: 7n,
+    marginDelta: 5_000_000n,
+    perpDelta: 1_000_000n,
+    amt1Limit: 123n,
+    maxTotalFee: 1n,
+    reduceOnly: false,
+  };
 
   it("prepends a USDC approve when margin is added and allowance is short", async () => {
     const calls = await buildAdjustTakerCalls(makeContext({ allowance: 0n }), PERP, params);
@@ -109,6 +134,8 @@ describe("buildAdjustTakerCalls", () => {
       marginDelta: 0n,
       perpDelta: -1_000_000n,
       amt1Limit: 90n,
+      maxTotalFee: 1n,
+      reduceOnly: true,
     });
     expect(calls).toHaveLength(1);
     const adjust = decodeFunctionData({ abi: PERP_ABI, data: calls[0].data });
@@ -117,7 +144,7 @@ describe("buildAdjustTakerCalls", () => {
 });
 
 describe("buildAdjustMakerCalls", () => {
-  it("approval covers margin plus the USD leg when adding liquidity", async () => {
+  it("approval covers only the margin when adding liquidity (v1 pulls only margin)", async () => {
     const calls = await buildAdjustMakerCalls(makeContext({ allowance: 0n }), PERP, {
       posId: 9n,
       marginDelta: 5_000_000n,
@@ -127,9 +154,20 @@ describe("buildAdjustMakerCalls", () => {
     });
     expect(calls).toHaveLength(2);
     const approve = decodeFunctionData({ abi: erc20Abi, data: calls[0].data });
-    expect(approve.args).toEqual([PERP, 7_000_000n]); // margin + amt1Limit
+    expect(approve.args).toEqual([PERP, 5_000_000n]);
     const adjust = decodeFunctionData({ abi: PERP_ABI, data: calls[1].data });
     expect(adjust.functionName).toBe("adjustMaker");
+  });
+
+  it("no approve when adding liquidity with no margin in", async () => {
+    const calls = await buildAdjustMakerCalls(makeContext({ allowance: 0n }), PERP, {
+      posId: 9n,
+      marginDelta: 0n,
+      liquidityDelta: 1_000n,
+      amt0Limit: 0n,
+      amt1Limit: 2_000_000n,
+    });
+    expect(calls).toHaveLength(1);
   });
 
   it("no approve when removing liquidity and withdrawing margin", async () => {
@@ -147,5 +185,69 @@ describe("buildAdjustMakerCalls", () => {
     expect(calls).toHaveLength(1);
     const adjust = decodeFunctionData({ abi: PERP_ABI, data: calls[0].data });
     expect(adjust.functionName).toBe("adjustMaker");
+  });
+});
+
+describe("buildMoveMakerCalls", () => {
+  it("approval covers only the margin, not addAmt1Max", async () => {
+    const calls = await buildMoveMakerCalls(makeContext({ allowance: 0n }), PERP, {
+      posId: 9n,
+      tickLower: -60,
+      tickUpper: 60,
+      liquidity: 1_000n,
+      removeAmt0Min: 0n,
+      removeAmt1Min: 0n,
+      addAmt0Max: 1_000_000n,
+      addAmt1Max: 2_000_000n,
+      marginDelta: 3_000_000n,
+    });
+    expect(calls).toHaveLength(2);
+    const approve = decodeFunctionData({ abi: erc20Abi, data: calls[0].data });
+    expect(approve.args).toEqual([PERP, 3_000_000n]);
+  });
+});
+
+describe("makerConvertedFromReceipt", () => {
+  const positionLog = (eventName: "MakerConverted" | "MakerClosed", posId: bigint) => {
+    const event = PERP_ABI.find((item) => item.type === "event" && item.name === eventName);
+    if (!event || event.type !== "event") throw new Error(`${eventName} not in PERP_ABI`);
+    const dataInputs = event.inputs.filter((input) => !input.indexed);
+    const zero = (type: string): unknown => (type === "tuple" ? undefined : 0n);
+    const values = dataInputs.map((input) =>
+      "components" in input && input.components
+        ? Object.fromEntries(input.components.map((c) => [c.name, zero(c.type)]))
+        : zero(input.type)
+    );
+    return {
+      address: PERP,
+      topics: encodeEventTopics({
+        abi: PERP_ABI,
+        eventName,
+        args: { posId, owner: HOLDER },
+      } as Parameters<typeof encodeEventTopics>[0]) as [Hex, ...Hex[]],
+      data: encodeAbiParameters(dataInputs, values),
+    };
+  };
+
+  it("finds the MakerConverted log for the position", () => {
+    const receipt = { logs: [positionLog("MakerConverted", 9n)] };
+    expect(makerConvertedFromReceipt(receipt as never, PERP, 9n)).toBe(true);
+  });
+
+  it("ignores a full MakerClosed, another position, and another contract", () => {
+    const otherPerp = getAddress("0x4444444444444444444444444444444444444444");
+    expect(
+      makerConvertedFromReceipt({ logs: [positionLog("MakerClosed", 9n)] } as never, PERP, 9n)
+    ).toBe(false);
+    expect(
+      makerConvertedFromReceipt({ logs: [positionLog("MakerConverted", 8n)] } as never, PERP, 9n)
+    ).toBe(false);
+    expect(
+      makerConvertedFromReceipt(
+        { logs: [{ ...positionLog("MakerConverted", 9n), address: otherPerp }] } as never,
+        PERP,
+        9n
+      )
+    ).toBe(false);
   });
 });
